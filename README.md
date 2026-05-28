@@ -1,6 +1,6 @@
-# 🤖 agents-skills-custom
+# 🤖 agent-brains
 
-Central repository for AI agent configurations, skills, and project templates.
+Centralized repository for AI agent configurations, skills, and project templates. Share cognitive abilities across projects and bootstrap AI-native context structures.
 
 ## Structure
 
