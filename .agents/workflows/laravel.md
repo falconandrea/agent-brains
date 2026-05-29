@@ -84,7 +84,13 @@ Nel 90% dei casi lo sviluppo sarà guidato da un file di specifica in formato Ma
 3. Mantieni aggiornato il file di progresso (es. `.ai/memory/progress.md` o il file di tracciamento dei task della feature) ad ogni milestone completata.
 
 ### Fase 3: REVIEW MODE (Revisione & Testing)
-1. Esamina attentamente il codice scritto per individuare query N+1, falle di validazione, mancanza di tipi di ritorno o violazioni delle convenzioni Laravel.
-2. Esegui o scrivi i test per verificare il corretto funzionamento.
-3. Se hai appreso nuove lezioni o risolto bug insidiosi del framework, aggiorna `.ai/memory/lessons.md`.
+1. **Analisi Statica & Formattazione (Obbligatorio)**:
+   - Esegui sempre `vendor/bin/pint` per formattare automaticamente il codice secondo le convenzioni del progetto.
+   - Esegui `vendor/bin/phpstan` (o il comando equivalente configurato per Larastan, es. `php artisan code:analyse`) per intercettare errori di tipizzazione o incongruenze logiche.
+   - **Se vengono rilevati errori da Pint o Larastan, analizzali e correggi il codice immediatamente** fino a quando gli strumenti non restituiscono un report pulito (zero errori).
+2. **Esecuzione e Scrittura dei Test**:
+   - Scrivi o aggiorna i test di feature/unitari (prediligendo Pest se presente).
+   - Esegui la suite di test per assicurarti che tutto passi correttamente (`php artisan test` o `vendor/bin/pest`).
+3. **Documentazione**:
+   - Se hai dovuto risolvere errori di Larastan complessi o bug insidiosi del framework, documenta la soluzione in `.ai/memory/lessons.md` per evitare che l'agente ripeta lo stesso errore in futuro.
 
