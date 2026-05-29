@@ -140,9 +140,15 @@ After writing all tasks, check:
 2. **Type consistency** — Do names, signatures, and properties match across tasks? A method called `clearLayers()` in Task 3 but `clearFullLayers()` in Task 7 is a bug.
 3. **Placeholder scan** — Search for any of the anti-patterns above. Fix them.
 
-Get explicit user approval on the task list before proceeding.
+Get explicit user approval on the task list.
+
+**Proponi l'Handoff all'Agente Verticale:**
+Spiega all'utente che una volta approvata la specifica dei task ha due opzioni:
+1. Chiedere a te di procedere con l'implementazione (sarà un'implementazione più generica).
+2. Passare a un agente specializzato (es. `/laravel` per Laravel, `/nextjs` per Next.js, `/astro` per Astro) indicando la path del file dei task (`tasks-[feature-name].md`). L'agente verticale implementerà la feature con la massima aderenza alle convenzioni e agli strumenti specifici del framework.
 
 ---
+
 
 ### 6. ACTING MODE — Implementation
 
