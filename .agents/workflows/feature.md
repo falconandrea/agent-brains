@@ -23,11 +23,13 @@ Read these files to understand the project before asking anything:
 
 - `.ai/context/TECH_STACK.md` — stack and conventions
 - `.ai/context/APP_FLOW.md` — architecture and user flows
+- `.ai/context/DESIGN_SYSTEM.md` — **mandatory before any UI work**: colors, typography, spacing, components
 - `.ai/memory/lessons.md` — past mistakes to avoid
 - `.ai/memory/progress.md` — current project status
 - `AGENTS.md` — project-level directives
 
-Explore the existing codebase (files, structure, patterns) relevant to the feature area.
+> **UI Rule**: If the feature involves any frontend (Blade, JSX, Vue, CSS), activate the `designer` skill (`.agents/skills/designer.md`) and any relevant UI skills (e.g., `tailwindcss-development`, `ui-ux-pro-max`) before writing code.
+
 
 ---
 

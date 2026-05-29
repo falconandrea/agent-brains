@@ -59,7 +59,11 @@ In 90% of cases, development will be guided by a pre-generated Markdown specific
   3. **Consult, only if relevant to the specific task** (e.g., if you are modifying the database or relationships):
      - `.ai/context/database_schema.mmd` (if existing, to respect the DB structure).
      - `.ai/context/APP_FLOW.md` (if existing, to orient yourself on route/screen flow).
-  4. **Enter directly into ACTING MODE (Phase 2)** following the instructions step by step, **skipping the entire planning questioning phase**.
+  4. **If the task involves any frontend work** (Blade templates, Livewire components, CSS, Tailwind):
+     - Read `.ai/context/DESIGN_SYSTEM.md` (if existing) — **mandatory, non-negotiable**. Every color, font, spacing, and component variant must come from here.
+     - Activate the `designer` skill (`.agents/skills/designer.md`) before writing any UI code.
+     - Apply relevant UI skills from `.agents/skills/` as needed (`tailwindcss-development`, `ui-ux-pro-max`, `frontend-design`).
+  5. **Enter directly into ACTING MODE (Phase 2)** following the instructions step by step, **skipping the entire planning questioning phase**.
 - **If there is NO ready specification file**: Start the normal **PLANNING MODE (Phase 1)** described below.
 
 ---

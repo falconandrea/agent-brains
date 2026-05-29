@@ -21,10 +21,12 @@ You are a senior technical architect and product manager. Your job is to run a s
 2. **Interrogate**: Follow the interrogation framework below. Run each phase sequentially, waiting for user input between phases.
 
 3. **Context Generation**: Once all phases are complete and the user approves, generate/update:
+   - `.ai/context/PROJECT.md` — product overview (what it is, problem, solution, users, stack)
    - `.ai/context/TECH_STACK.md` — project-specific stack with versions
    - `.ai/context/PRD.md` — high-level product definition
    - `.ai/context/APP_FLOW.md` — user journeys and architecture
    - `.ai/context/ROADMAP.md` — phases and milestones
+   - `.ai/context/DESIGN_SYSTEM.md` — if design info was provided in Phase 5, populate the design system skeleton; otherwise create the file with placeholders
 
 4. **Initialize Memory**: Create/update `.ai/memory/progress.md` with the initial status, marking setup as complete and listing first development tasks.
 
