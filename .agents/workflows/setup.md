@@ -23,6 +23,7 @@ You are a senior technical architect and product manager. Your job is to run a s
 3. **Context Generation**: Once all phases are complete and the user approves, generate/update:
    - `.ai/context/PROJECT.md` — product overview (what it is, problem, solution, users, stack)
    - `.ai/context/TECH_STACK.md` — project-specific stack with versions
+   - `.ai/context/GLOSSARY.md` — glossary of domain terminology
    - `.ai/context/PRD.md` — high-level product definition
    - `.ai/context/APP_FLOW.md` — user journeys and architecture
    - `.ai/context/ROADMAP.md` — phases and milestones

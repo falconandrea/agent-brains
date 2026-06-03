@@ -7,7 +7,7 @@
 #   ./scaffold.sh /path/to/your-project
 #
 # This will create:
-#   .ai/context/    — PRD, APP_FLOW, TECH_STACK, ROADMAP, database_schema
+#   .ai/context/    — PRD, APP_FLOW, GLOSSARY, TECH_STACK, ROADMAP, database_schema
 #   .ai/features/   — Feature tracking with template
 #   .ai/memory/     — lessons.md, progress.md
 #
@@ -62,6 +62,7 @@ copy_if_missing "$SCRIPT_DIR/templates/AGENTS.md"             "$TARGET_DIR/AGENT
 echo "   📂 context/"
 copy_if_missing "$TEMPLATE_DIR/context/PRD.md"              "$AI_DIR/context/PRD.md"
 copy_if_missing "$TEMPLATE_DIR/context/APP_FLOW.md"          "$AI_DIR/context/APP_FLOW.md"
+copy_if_missing "$TEMPLATE_DIR/context/GLOSSARY.md"          "$AI_DIR/context/GLOSSARY.md"
 copy_if_missing "$TEMPLATE_DIR/context/TECH_STACK.md"        "$AI_DIR/context/TECH_STACK.md"
 copy_if_missing "$TEMPLATE_DIR/context/ROADMAP.md"           "$AI_DIR/context/ROADMAP.md"
 copy_if_missing "$TEMPLATE_DIR/context/database_schema.mmd"  "$AI_DIR/context/database_schema.mmd"
