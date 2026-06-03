@@ -33,7 +33,7 @@ install_skill() {
 
 # 1. Base AI Skills
 install_skill "obra/superpowers" \
-  "--skill systematic-debugging --skill test-driven-development --skill verification-before-completion"
+  "--skill verification-before-completion"
 
 install_skill "anthropics/skills" \
   "--skill webapp-testing --skill frontend-design"
