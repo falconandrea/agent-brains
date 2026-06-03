@@ -87,6 +87,14 @@ Each project gets its own copy. PRD, roadmap, DB schema are unique per project.
 
 When you run `laravel-boost update` in any linked project, it updates files in `.agents/skills/` which physically live in this repo. All other linked projects automatically get the update.
 
+## Recommended Workflow
+
+1. **`setup`**: Interrogates you to bootstrap the project and create `.ai/context/GLOSSARY.md`.
+2. **`feature`**: Runs `to-prd` to draft the PRD, `grill-with-docs` to align with the glossary/ADRs, and `to-issues` to split the task list into vertical tracer-bullet slices.
+3. **Framework Agents (`laravel`, `nextjs`, `astro`)**: Implement the tasks using `tdd` (Red-Green-Refactor).
+4. **`diagnose`**: Activated automatically on bugs to build a reproducible loop first.
+5. **`improve-codebase-architecture`**: Runs periodically to generate before/after refactoring reports.
+
 ## Notes
 
 - `.opencode` and `.agents` are **personal dev configs** (like `.vscode/`) → `.gitignore`
