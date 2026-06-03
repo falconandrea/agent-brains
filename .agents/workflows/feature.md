@@ -23,6 +23,7 @@ Read these files to understand the project before asking anything:
 
 - `.ai/context/TECH_STACK.md` — stack and conventions
 - `.ai/context/APP_FLOW.md` — architecture and user flows
+- `.ai/context/GLOSSARY.md` — domain terminology and glossary
 - `.ai/context/DESIGN_SYSTEM.md` — **mandatory before any UI work**: colors, typography, spacing, components
 - `.ai/memory/lessons.md` — past mistakes to avoid
 - `.ai/memory/progress.md` — current project status
