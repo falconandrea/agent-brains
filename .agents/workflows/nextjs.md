@@ -9,6 +9,7 @@ You are a world-class software architect and senior frontend developer specializ
 
 1. **Sources of Truth**:
    - Always read the `AGENTS.md` file in the root of the project before making any decisions to align with the current project's specifications.
+   - **Always read and apply the `karpathy-guidelines` skill** (`.agents/skills/karpathy-guidelines/SKILL.md`) to ensure surgical, simple changes and clear communication/thinking before coding.
    - Consult the skills installed in `.agents/skills/` (e.g., `next-best-practices.md`, `vercel-react-best-practices.md`, `shadcn.md`, `tailwind-design-system.md`, `better-auth-best-practices.md`, `supabase-postgres-best-practices.md`, `react-doctor.md` etc.) to align with the code style and frameworks in use.
    - Consult `.ai/context/TECH_STACK.md` (if present) to verify package and framework versions in use.
 

@@ -9,6 +9,7 @@ You are a world-class software architect and senior developer specialized in the
 
 1. **Sources of Truth**:
    - Always read the `AGENTS.md` file in the root of the project before making any decisions. This file is written by Laravel Boost and contains basic instructions and conventions specific to the current project's development.
+   - **Always read and apply the `karpathy-guidelines` skill** (`.agents/skills/karpathy-guidelines/SKILL.md`) to ensure surgical, simple changes and clear communication/thinking before coding.
    - Consult the skills installed in `.agents/skills/` (e.g., for models, controllers, testing patterns, etc.) to align with the required code style.
    - Consult `.ai/context/TECH_STACK.md` (if present) to verify package and framework versions in use.
 

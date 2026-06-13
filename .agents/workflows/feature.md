@@ -28,6 +28,7 @@ Read these files to understand the project before asking anything:
 - `.ai/memory/lessons.md` — past mistakes to avoid
 - `.ai/memory/progress.md` — current project status
 - `AGENTS.md` — project-level directives
+- `.agents/skills/karpathy-guidelines/SKILL.md` — **mandatory core behavioral guidelines (surgical changes, simplicity, thinking before coding)**
 
 > **UI Rule**: If the feature involves any frontend (Blade, JSX, Vue, CSS), activate the `designer` skill (`.agents/skills/designer.md`) and any relevant UI skills (e.g., `tailwindcss-development`, `ui-ux-pro-max`) before writing code.
 
