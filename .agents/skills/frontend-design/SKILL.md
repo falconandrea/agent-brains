@@ -1,6 +1,6 @@
 ---
 name: frontend-design
-description: Create distinctive, production-grade frontend interfaces with high design quality. Use this skill when the user asks to build web components, pages, artifacts, posters, or applications (examples include websites, landing pages, dashboards, React components, HTML/CSS layouts, or when styling/beautifying any web UI). Generates creative, polished code and UI design that avoids generic AI aesthetics.
+description: "Use when building distinctive, production-grade frontend interfaces with a BOLD aesthetic direction that avoids generic 'AI slop'. Best for landing pages, marketing sites, hero sections, concept UI, posters, artifacts, portfolios, and any UI where standing out visually is the goal. Picks an intentional aesthetic (brutalist, editorial, retro-futuristic, organic, etc.) rather than defaults. For product UI structures, design systems, dashboards, palette/font databases, use ui-ux-pro-max. For animations and motion, use emil-design-eng."
 license: Complete terms in LICENSE.txt
 ---
 
