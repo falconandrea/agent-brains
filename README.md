@@ -108,6 +108,24 @@ When you run `laravel-boost update` in any linked project, it updates files in `
 6. **`improve-codebase-architecture`**: runs periodically to produce before/after refactoring reports.
 7. **`/handoff`**: when a chat becomes too long (deep context, many back-and-forths), compact the conversation into a doc the next agent can pick up in a fresh chat. Saved to `$TMPDIR` by default; `--keep` to persist it in `docs/handoffs/`.
 
+### Frontend & Motion
+
+The frontend skills are split by **intent**, not by "frontend" in general. Triggering the wrong one is the most common cause of generic AI-slop output — each owns a specific job and points to its siblings when the request is out of scope.
+
+| Intent | Skill |
+| --- | --- |
+| Bold, distinctive aesthetics — landing pages, marketing, hero sections, concept UI, posters, portfolios. Anti-AI-slop. | `frontend-design` |
+| Product UI structure & design systems — dashboards, admin panels, SaaS, charts. Database of 161 color palettes, 57 font pairings, 25 chart types. | `ui-ux-pro-max` |
+| Animations, transitions, easing curves, spring physics, micro-interactions, gestures, polish/feel. Emil Kowalski (Sonner/Vaul). | `emil-design-eng` |
+| shadcn/ui components (add, fix, style, compose). | `shadcn` |
+| Tailwind utility classes, responsive layouts, dark mode. | `tailwindcss-development` |
+| Scalable design systems with Tailwind v4 (tokens, component libraries). | `tailwind-design-system` |
+| View Transition API — page transitions, shared-element animations, directional navigation. | `vercel-react-view-transitions` |
+| React composition patterns (compound components, render props, context). | `vercel-composition-patterns` |
+| React/Next.js performance (RSC, data fetching, bundle size). | `vercel-react-best-practices` |
+| **Review** UI against Vercel Web Interface Guidelines. | `web-design-guidelines` |
+| **Review** animation/motion code (slash command, brutal craft bar). | `/review-animations` |
+
 ### Anti-patterns
 
 - Going straight to a framework agent (`/laravel`, `/nextjs`, …) without a PRD/task list → use `/feature` first.

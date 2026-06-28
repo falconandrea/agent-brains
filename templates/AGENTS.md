@@ -45,6 +45,22 @@ Follow this lifecycle for any non-trivial feature work. The phases are enforced 
 
 - **`/handoff`** — when the conversation grows too long (deep context, many back-and-forths, multiple tasks done), invoke `/handoff` to compact it into a document the next agent can pick up in a fresh chat. Do not duplicate content already in PRDs/task lists/issues/ADRs — reference them by path.
 
+### Frontend & Motion
+
+Pick a frontend skill by **intent**, not by "frontend" in general. Triggering the wrong one is the most common cause of generic AI-slop output.
+
+- **`frontend-design`** — bold/distinctive aesthetics, landing pages, marketing, hero sections, concept UI, posters. Anti-AI-slop. Picks an intentional aesthetic.
+- **`ui-ux-pro-max`** — product UI structure & design systems: dashboards, admin panels, SaaS, charts. Database of 161 color palettes, 57 font pairings, 25 chart types.
+- **`emil-design-eng`** — animations, transitions, easing curves, spring physics, micro-interactions, gestures, polish/feel. Sonner/Vaul author's motion philosophy.
+- **`shadcn`** — shadcn/ui components (add, fix, style, compose).
+- **`tailwindcss-development`** — Tailwind utility classes, responsive layouts, dark mode.
+- **`tailwind-design-system`** — scalable design systems with Tailwind v4 (tokens, component libraries).
+- **`vercel-react-view-transitions`** — View Transition API (page transitions, shared-element animations).
+- **`vercel-composition-patterns`** — React composition (compound components, render props, context).
+- **`vercel-react-best-practices`** — React/Next.js performance (RSC, data fetching, bundle size).
+- **`web-design-guidelines`** — review UI against Vercel Web Interface Guidelines.
+- **`/review-animations`** — slash command. Review animation/motion code against a brutal craft bar.
+
 ## Coding Conventions
 
 <!-- Customize per project -->
