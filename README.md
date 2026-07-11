@@ -48,7 +48,7 @@ Centralized repository for AI agent configurations, skills, and project template
 Available profiles: `laravel`, `nextjs`, `astro`, `nodejs`, `full` (all skills).
 Default (no arg) is `full`. See [Profiles](#profiles) below.
 
-### 2. Link agents only / opencode only
+### 2. Link .opencode only (no .agents)
 
 ```bash
 ./setup.sh /path/to/your-project opencode   # link .opencode only (no .agents)
@@ -63,9 +63,9 @@ If your target project already has a physical `.agents` or `.opencode` directory
    ```bash
    rm -rf /path/to/your-project/.agents
    ```
-3. **Run the link script**:
+3. **Run the link script** (with a profile, or `full` for everything):
    ```bash
-   ./setup.sh /path/to/your-project
+   ./setup.sh /path/to/your-project laravel   # or: nextjs | astro | nodejs | full
    ```
 
 ### 4. Unlink
@@ -76,20 +76,28 @@ If your target project already has a physical `.agents` or `.opencode` directory
 
 ## How It Works
 
-### Canonical skill store → single source of truth (Option A)
+### Canonical skill store → single source of truth
 
-`.agents/skills/` in **this repo** is the only place where skills are installed
-and updated. Third-party tools (`laravel-boost`, `npx skills`) must run **here**,
-not in the target project:
+`.agents/skills/` in **this repo** is the only place where skills live. Projects
+never install or update skills directly — they consume via symlinks (see Profiles).
+How you update depends on the tool:
 
-```bash
-# from this repo:
-npx skills add <skill>
-laravel-boost update
-```
+- **`npx skills`** (mattpocock, anthropics, vercel, …) runs **here**, in this repo —
+  it downloads from GitHub and needs no project context:
+  ```bash
+  npx skills@latest add <source>
+  npx skills update
+  ```
+- **`php artisan boost:update`** (`laravel/boost`) must run **inside a Laravel project** —
+  it reads the project's composer/packages to generate project-relevant skills. Run it
+  in any Laravel project whose `.agents/skills/` links back here; the write flows through
+  the symlinks into this canonical store, so every other Laravel project sees it:
+  ```bash
+  cd /path/to/laravel-project
+  php artisan boost:update
+  ```
 
-Projects are **read-only consumers**: they never install or update skills directly.
-This avoids fragmentation and keeps one canonical version shared across all projects.
+This keeps one canonical version shared across all projects.
 
 ### Profiles → curated subset per project
 
@@ -122,11 +130,24 @@ Each project gets its own copy. PRD, roadmap, DB schema are unique per project.
 
 ### Laravel Boost Skills
 
-Run `laravel-boost update` **in this repo** (not in the project). It updates
-files in `.agents/skills/` here, and every project whose profile includes the
-updated skill sees the change immediately. If a brand-new skill is installed,
-add it to the relevant `profiles/<name>.list` and re-run `./setup.sh /path <profile>`
-on each project that should expose it.
+`php artisan boost:update` runs **in a Laravel project** (not in this repo — it
+needs Laravel context to detect packages and generate project-relevant skills).
+Run it in any Laravel project whose `.agents/skills/` is linked here; the write
+flows through the symlinks into the canonical store, and every other Laravel
+project whose profile includes those skills sees the update immediately.
+
+**Verify symlinks survive each `boost:update`** — boost may replace a symlink
+with a real folder when it reinstalls a skill:
+
+```bash
+# in the Laravel project, after boost:update:
+ls -la .agents/skills/ | grep laravel     # must show "->" (symlink)
+# if a skill shows as a real folder (no arrow), restore the link:
+cd /path/to/agent-brains && ./setup.sh /path/to/laravel-project laravel
+```
+
+If boost installs a brand-new skill, add it to `profiles/laravel.list` (or the
+relevant profile) and re-run `./setup.sh /path/to/project laravel`.
 
 ## Profiles
 
