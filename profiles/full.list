@@ -1,0 +1,19 @@
+# Everything — escape hatch. NOTE: the `full` profile is special-cased in
+# setup.sh to symlink the whole .agents/skills dir, so this manifest is only
+# a reference of what "everything" currently contains. It is NOT used by
+# setup.sh for the full profile. Keep it in sync for documentation.
+@include frontend
+astro
+better-auth-best-practices
+laravel-best-practices
+laravel-permission-development
+livewire-development
+next-best-practices
+pest-testing
+react-doctor
+shadcn
+supabase-postgres-best-practices
+vercel-composition-patterns
+vercel-react-best-practices
+vercel-react-view-transitions
+volt-development

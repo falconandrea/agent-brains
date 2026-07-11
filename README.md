@@ -9,9 +9,18 @@ Centralized repository for AI agent configurations, skills, and project template
 │   ├── agents/             #   Agent definitions (markdown)
 │   └── skills/             #   Skill definitions (markdown)
 │
-├── .agents/                # → Symlinked to projects (Antigravity/Gemini)
+├── .agents/                # → Canonical skill store (DO NOT edit per-project)
 │   ├── workflows/          #   Workflow agent definitions (markdown)
-│   └── skills/             #   Skills (including Laravel Boost)
+│   └── skills/             #   Skills (managed by laravel-boost / npx skills / hand-written)
+│
+├── profiles/               # → Curated skill selections per tech stack
+│   ├── common.list         #   Generic skills inherited by every profile
+│   ├── frontend.list       #   UI skills (includes common)
+│   ├── laravel.list        #   Laravel profile (includes frontend)
+│   ├── nextjs.list         #   Next.js / React profile (includes frontend)
+│   ├── astro.list          #   Astro profile (includes frontend)
+│   ├── nodejs.list         #   Node.js backend profile (includes common, NO frontend)
+│   └── full.list           #   Reference of "everything" (full is special-cased in setup.sh)
 │
 ├── templates/              # → Copied to projects (project-specific context)
 │   └── .ai/
@@ -19,7 +28,7 @@ Centralized repository for AI agent configurations, skills, and project template
 │       ├── features/       #   Feature tracking template
 │       └── memory/         #   lessons.md, progress.md
 │
-├── setup.sh                # Create agent/skill symlinks
+├── setup.sh                # Create agent/skill symlinks (profile-aware)
 ├── scaffold.sh             # Copy .ai templates to a project
 └── unlink.sh               # Remove symlinks
 ```
@@ -29,17 +38,20 @@ Centralized repository for AI agent configurations, skills, and project template
 ### 1. New project — full setup
 
 ```bash
-# Link agents & skills (symlink — shared, always up to date)
-./setup.sh /path/to/your-project
+# Link agents & skills with a PROFILE (curated subset per tech stack)
+./setup.sh /path/to/your-project laravel     # or: nextjs | astro | nodejs | full
 
 # Scaffold .ai context structure (copy — project-specific)
 ./scaffold.sh /path/to/your-project
 ```
 
-### 2. Link agents only
+Available profiles: `laravel`, `nextjs`, `astro`, `nodejs`, `full` (all skills).
+Default (no arg) is `full`. See [Profiles](#profiles) below.
+
+### 2. Link agents only / opencode only
 
 ```bash
-./setup.sh /path/to/your-project opencode   # or "agents"
+./setup.sh /path/to/your-project opencode   # link .opencode only (no .agents)
 ```
 
 ### 3. Existing project (with local configurations)
@@ -64,15 +76,40 @@ If your target project already has a physical `.agents` or `.opencode` directory
 
 ## How It Works
 
-### Agents & Skills → Symlink (shared)
+### Canonical skill store → single source of truth (Option A)
+
+`.agents/skills/` in **this repo** is the only place where skills are installed
+and updated. Third-party tools (`laravel-boost`, `npx skills`) must run **here**,
+not in the target project:
+
+```bash
+# from this repo:
+npx skills add <skill>
+laravel-boost update
+```
+
+Projects are **read-only consumers**: they never install or update skills directly.
+This avoids fragmentation and keeps one canonical version shared across all projects.
+
+### Profiles → curated subset per project
+
+A project does **not** get every skill. It gets only the skills listed in its
+profile manifest. `.opencode` is still symlinked whole (agents are opt-in by
+invocation, no always-on cost); only `.agents/skills/` is curated.
 
 ```
-project-a/.opencode  →  symlink  →  this-repo/.opencode
-project-b/.opencode  →  symlink  →  this-repo/.opencode
-project-c/.agents    →  symlink  →  this-repo/.agents
+# full profile (escape hatch):
+project-a/.agents        →  symlink  →  this-repo/.agents            (all skills)
+
+# profiled mode (e.g. laravel):
+project-b/.agents/       →  real dir
+project-b/.agents/skills/  →  real dir of per-skill symlinks → this-repo/.agents/skills/<name>
 ```
 
-Edit a file here → change is immediately available in **every linked project**.
+Each symlink points into the canonical store, so an edit/install here is
+immediately visible in every project whose profile includes that skill. Re-running
+`./setup.sh /path laravel` refreshes the symlinks (useful after editing a manifest
+or installing a new skill and adding it to a profile).
 
 ### Project Context (.ai) → Copy (project-specific)
 
@@ -85,7 +122,45 @@ Each project gets its own copy. PRD, roadmap, DB schema are unique per project.
 
 ### Laravel Boost Skills
 
-When you run `laravel-boost update` in any linked project, it updates files in `.agents/skills/` which physically live in this repo. All other linked projects automatically get the update.
+Run `laravel-boost update` **in this repo** (not in the project). It updates
+files in `.agents/skills/` here, and every project whose profile includes the
+updated skill sees the change immediately. If a brand-new skill is installed,
+add it to the relevant `profiles/<name>.list` and re-run `./setup.sh /path <profile>`
+on each project that should expose it.
+
+## Profiles
+
+A profile is a plain-text manifest in `profiles/<name>.list` — one skill name
+per line (matching the folder/file name in `.agents/skills/`). A manifest can
+pull in another with `@include <name>`, so common skills are defined once.
+
+```
+# profiles/laravel.list
+@include frontend        # pulls in frontend.list, which pulls in common.list
+laravel-best-practices
+laravel-permission-development
+livewire-development
+volt-development
+pest-testing
+```
+
+| Profile   | Includes            | Use for                                  |
+| --------- | ------------------- | ---------------------------------------- |
+| `laravel` | frontend → common   | PHP full-stack (Blade + backend)         |
+| `nextjs`  | frontend → common   | Next.js / React                          |
+| `astro`   | frontend → common   | Astro content/static sites               |
+| `nodejs`  | common              | Node.js backend APIs (no UI skills)      |
+| `full`    | (whole-dir symlink) | Escape hatch — every skill, zero curation |
+
+### Adding / editing a profile
+
+1. Edit `profiles/<name>.list` (create it for a new profile).
+2. Re-run `./setup.sh /path/to/project <name>` to refresh the project's symlinks.
+
+### Making a skill available everywhere
+
+Add it to `profiles/common.list` — every profile that `@include common` (all of
+them) will pick it up on the next `./setup.sh`.
 
 ## Recommended Workflow
 

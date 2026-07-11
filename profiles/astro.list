@@ -1,0 +1,3 @@
+# Astro profile — content/static sites with islands architecture.
+@include frontend
+astro

@@ -1,0 +1,9 @@
+# Next.js / React profile.
+@include frontend
+next-best-practices
+react-doctor
+shadcn
+vercel-composition-patterns
+vercel-react-best-practices
+vercel-react-view-transitions
+better-auth-best-practices

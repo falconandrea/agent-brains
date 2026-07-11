@@ -1,0 +1,13 @@
+# Frontend/UI skills — shared by web profiles (laravel, nextjs, astro).
+# NOT inherited by nodejs (pure backend / API profile).
+@include common
+tailwindcss-development
+tailwind-design-system
+emil-design-eng
+frontend-design
+ui-ux-pro-max
+review-animations
+web-design-guidelines
+pagespeed-optimizer
+webapp-testing
+designer.md

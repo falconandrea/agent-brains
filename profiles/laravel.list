@@ -1,0 +1,7 @@
+# Laravel profile — PHP full-stack (Blade + backend).
+@include frontend
+laravel-best-practices
+laravel-permission-development
+livewire-development
+volt-development
+pest-testing
