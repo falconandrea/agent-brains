@@ -64,10 +64,10 @@ End the document with a `## Suggested skills` section listing which skills the n
 - Mid-design, spec not yet approved → `brainstorming`
 - Spec approved, no implementation plan yet → `writing-plans`
 - Plan exists, mid-implementation → `tdd`
-- Debugging a regression → `diagnose`
+- Debugging a regression → `diagnosing-bugs`
 - Spec needs validation against domain language → `grill-with-docs`
-- Plan needs to be split into tracker issues → `to-issues`
-- Wrapping up, need a formal product doc → `to-prd`
+- Plan needs to be split into tracker issues → `to-tickets`
+- Wrapping up, need a formal product doc → `to-spec`
 - About to claim work is done → `verification-before-completion`
 
 Pick only the relevant ones — don't list all of them. One line each explaining *why* that skill is relevant to the next step.

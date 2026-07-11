@@ -30,8 +30,8 @@ Follow this lifecycle for any non-trivial feature work. The phases are enforced 
 ### During implementation
 
 - **Framework agents** (`/laravel`, `/nextjs`, `/astro`) — switch to a fresh chat and reference the task file path. They implement the task list using **`tdd`** (red-green-refactor, one test → one implementation → repeat).
-- **`to-issues`** (optional) — if the task list needs to be tracked, publish each task as a tracer-bullet vertical slice on the issue tracker.
-- **`to-prd`** (optional) — if a formal, shareable PRD is needed for the team, synthesize from the existing context.
+- **`to-tickets`** (optional) — if the task list needs to be tracked, publish each task as a tracer-bullet vertical slice on the issue tracker.
+- **`to-spec`** (optional) — if a formal, shareable PRD is needed for the team, synthesize from the existing context.
 
 ### Before claiming work is done
 
@@ -39,7 +39,7 @@ Follow this lifecycle for any non-trivial feature work. The phases are enforced 
 
 ### On bugs
 
-- **`diagnose`** — auto-activates on bugs. Build a reproducible case first, minimize it, then fix. Never guess at a fix without a repro.
+- **`diagnosing-bugs`** — auto-activates on bugs. Build a reproducible case first, minimize it, then fix. Never guess at a fix without a repro.
 
 ### When a chat becomes too long
 

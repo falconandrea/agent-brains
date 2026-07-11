@@ -173,13 +173,13 @@ them) will pick it up on the next `./setup.sh`.
 2. **`feature`**: collaborative design with a HARD-GATE — no code until a PRD is presented and approved. Produces a PRD at `.ai/features/[name]/prd-*.md` and a TDD task list at `.ai/features/[name]/tasks-*.md`.
    - optional: **`grill-with-docs`** to stress-test the PRD against the glossary/ADRs.
 3. **Framework agents** (`/laravel`, `/nextjs`, `/astro`): implement the task list task-by-task using **`tdd`** (red-green-refactor). Switch to a fresh chat and reference the task file path.
-   - optional: **`to-issues`** to publish each task as a tracer-bullet issue on the tracker.
-   - optional: **`to-prd`** if a formal, shareable PRD is needed on the tracker.
+   - optional: **`to-tickets`** to publish each task as a tracer-bullet issue on the tracker.
+   - optional: **`to-spec`** if a formal, shareable PRD is needed on the tracker.
 4. **`verification-before-completion`**: before claiming "done", run the actual lint/typecheck/test commands and confirm the output.
 
 ### Cross-cutting
 
-5. **`diagnose`**: auto-activates on bugs — build a reproducible case first, then fix.
+5. **`diagnosing-bugs`**: auto-activates on bugs — build a reproducible case first, then fix.
 6. **`improve-codebase-architecture`**: runs periodically to produce before/after refactoring reports.
 7. **`/handoff`**: when a chat becomes too long (deep context, many back-and-forths), compact the conversation into a doc the next agent can pick up in a fresh chat. Saved to `$TMPDIR` by default; `--keep` to persist it in `docs/handoffs/`.
 

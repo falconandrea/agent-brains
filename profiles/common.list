@@ -1,13 +1,16 @@
 # Generic skills — inherited by EVERY profile.
 # Engineering process & workflow skills that apply to any stack.
 # Add a skill here to make it available to all profiles that @include common.
-diagnose
+diagnosing-bugs
+code-review
 grill-with-docs
+grilling
 handoff
 improve-codebase-architecture
 karpathy-guidelines
+research
 tdd
-to-issues
-to-prd
+to-tickets
+to-spec
 verification-before-completion
 product-thinking.md
