@@ -41,6 +41,21 @@ Read these files to understand the project before asking anything:
 
 > **UI Rule**: If the feature involves any frontend (Blade, JSX, Vue, CSS), activate the `designer` skill (`.agents/skills/designer.md`) and any relevant UI skills (e.g., `tailwindcss-development`, `ui-ux-pro-max`) before writing code.
 
+---
+
+### 1.5 UNKNOWNS ASSESSMENT — Proactive Techniques (Optional)
+
+After loading context, evaluate which "unknowns reduction" techniques would be worth offering. **Don't apply them all** — only offer the ones that fit the situation, and in 1-2 sentences:
+
+| Technique | Offer when... |
+|---|---|
+| **Blind spot pass** — scan codebase for unknown unknowns | You're unfamiliar with the area being touched, or expressed uncertainty about the domain |
+| **Brainstorm/prototype** — explore directions visually | Requirements are fuzzy, visual/aesthetic, or "I'll know it when I see it" |
+| **Interview** — agent asks one question at a time about ambiguities | Many architectural unknowns, feature touches multiple subsystems, or unclear tradeoffs |
+| **Reference** — point at existing code as a behavior spec | User mentions wanting behavior similar to existing code/lib, or a crate/npm package does exactly what's needed |
+| **Implementation plan review** — review data model / interfaces before coding | Already covered by Steps 3-5 (approaches + PRD + tasks) |
+
+Offer like: "From the context, it looks like [reason]. Want me to do a quick [technique] first? (Should be ~X min of work.)" — don't just launch into it. If nothing clearly fits, skip this step silently.
 
 ---
 
@@ -186,6 +201,8 @@ Once approved, start implementation following the task list step by step.
 - Update `.ai/memory/progress.md` as tasks are completed
 - If you discover issues that require significant changes to the plan, **stop and discuss** before continuing
 
+**Implementation notes:** Maintain `.ai/features/[feature-name]/implementation-notes.md`. If you deviate from the plan due to an edge case or unexpected constraint, log it as a one-liner under `## Deviations`. If no deviations, leave the file empty or skip creation — don't write "no deviations" noise.
+
 ---
 
 ### 6.5 CLEAN PASS — Code Cleanup
@@ -207,6 +224,12 @@ After implementation, review the code for:
 - Missing error handling or edge cases
 - Performance concerns (N+1 queries, missing indexes, etc.)
 - Security issues
+
+---
+
+### 7.5 POST-IMPLEMENTATION QUIZ (Optional)
+
+If the change is complex, touches many files, or modified control flow the user should understand before merging, offer a brief quiz. Say something like: "I made a few non-obvious decisions — want me to quiz you on the changes before we merge?" Keep it to 3-5 questions max.
 
 ---
 
