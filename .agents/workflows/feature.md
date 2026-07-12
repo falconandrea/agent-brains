@@ -120,22 +120,33 @@ Before writing tasks, list every file that will be created or modified and what 
 - `routes/web.php` — add routes
 ```
 
-#### Task Granularity
+#### Stable U-ID & WHAT-over-HOW Rules
 
-Each step must be **one action (2-5 minutes)**. Follow TDD where applicable:
+1. **WHAT over HOW**: Tasks must define *what* decisions/specifications need to be satisfied, the files affected, and the specific test scenarios. **DO NOT** write pseudocode, exact method signatures, or implementation choreography inside tasks. Let the executing agent determine the how based on the live workspace.
+2. **Stable U-IDs**: Identify tasks using stable numbers (`U1`, `U2`, `U3`).
+   - **Never renumber tasks** when reordering or deleting.
+   - If U2 is deleted, leave it empty or deleted without shifting U3.
+   - If a task is inserted, name it `U4` or a sub-ID like `U2.1` (use sub-IDs sparingly; they indicate poor initial decomposition).
+
+#### Task Granularity & Format
+
+Each task must be a clear unit of work. Follow TDD where applicable:
 
 ```markdown
-### Task 1: User Model Relationship
+### U1. User Model Relationship
 
 **Files:**
 - Modify: `app/Models/User.php`
 - Create: `tests/Unit/UserRelationshipTest.php`
 
+**Scenarios:**
+- Happy path: User has active subscription relationship.
+- Edge case: User without subscription returns empty relationship.
+
 - [ ] Write the failing test
 - [ ] Run it — expected: FAIL
-- [ ] Implement the minimal code to pass
+- [ ] Implement code to pass (defer choreography to live execution)
 - [ ] Run tests — expected: PASS
-- [ ] Commit: `feat: add subscription relationship to User`
 ```
 
 #### No Placeholders Rule
@@ -177,6 +188,16 @@ Once approved, start implementation following the task list step by step.
 
 ---
 
+### 6.5 CLEAN PASS — Code Cleanup
+
+Before launching a full code review, run the `/simplify` skill (or perform a manual cleanup):
+- Run linting and code formatting tools (e.g., `pint`, `eslint --fix`, `typescript` formatter).
+- Remove dead code, unused imports, unused local variables/methods, and debug statements.
+- Prune redundant AI comments explaining WHAT code does; keep only WHY comments.
+- Run tests to verify the cleanup keeps everything functional. Do not weaken assertions.
+
+---
+
 ### 7. REVIEW MODE — Code Review
 
 After implementation, review the code for:
@@ -191,7 +212,10 @@ After implementation, review the code for:
 
 ### 8. Lessons Learned
 
-If a bug was fixed, a new pattern was discovered, or a gotcha was encountered, update `.ai/memory/lessons.md` so future agents don't repeat the same mistakes.
+If a bug was fixed, a new pattern was discovered, or a gotcha was encountered, update `.ai/memory/lessons.md` following the **single-line git-log style format**:
+`- [YYYY-MM-DD] [[Category]] [One-line summary of mistake and fix]. Refs: [PR #ID] or [ADR path]`
+
+Do not write multiple paragraphs. Let details live in the PR, issue, or ADRs.
 
 ---
 

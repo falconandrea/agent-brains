@@ -6,38 +6,20 @@
 
 ---
 
-## Format for Each Entry
+## Entry Format
 
-```markdown
-### [DATE] - [CATEGORY] - [Short Title]
-**What went wrong**: [Description of the problem]
-**Root cause**: [Why it happened]
-**Impact**: [What broke or how it affected the project]
-**Solution**: [How we fixed it]
-**Prevention**: [How to avoid this in the future]
-**Files involved**: [List of files]
-```
+Each entry must be exactly **one line** following a git-log style format. Do not write multiple paragraphs or blocks. Keep details of the fix or decisions inside PRs, Task files, or Architectural Decision Records (ADRs), and link to them.
+
+Format:
+`- [YYYY-MM-DD] [[Category]] [One-line summary of mistake and fix]. Refs: [file-name](relative/path/to/file), [PR #ID], or [ADR-name](relative/path/to/adr)`
+
+Example:
+`- [2026-07-12] [Laravel] Eager load 'profile' to prevent N+1 query in user index. Refs: [tasks-user.md](.ai/features/user/tasks-user.md), [PR #45]`
+
 
 ---
 
 ## 📚 Lessons Log
 
-_No lessons logged yet. Add entries as mistakes are discovered during development._
+_No lessons logged yet. Add single-line entries here as mistakes are resolved during development._
 
----
-
-## 📊 Lesson Categories
-
-Keep track of lesson types to identify patterns:
-
-- **API Design**: 0
-- **State Management**: 0
-- **Database**: 0
-- **TypeScript**: 0
-- **Security**: 0
-- **Performance**: 0
-- **Deployment**: 0
-
----
-
-**Remember**: When AI makes a mistake, ALWAYS document it here!
