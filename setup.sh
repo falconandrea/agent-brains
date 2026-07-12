@@ -192,7 +192,12 @@ elif [ -f "$PROFILES_DIR/$PROFILE.list" ]; then
     echo "   Profile: $PROFILE (curated)"
     echo ""
     link_opencode
+    if [ -L "$TARGET_DIR/.agents" ]; then
+        echo "   ℹ️  Removing old .agents whole-dir symlink to prepare curated profile..."
+        rm "$TARGET_DIR/.agents"
+    fi
     link_agents_profiled "$PROFILE"
+
 else
     echo "❌ Unknown profile: $PROFILE"
     echo ""
