@@ -183,6 +183,31 @@ pest-testing
 Add it to `profiles/common.list` — every profile that `@include common` (all of
 them) will pick it up on the next `./setup.sh`.
 
+### Adding a new skill — canonical workflow
+
+When you create a new skill folder under `.agents/skills/<name>/`, target
+projects will **not** see it until you do both steps below. Do not create
+symlinks manually inside project `.agents/skills/` directories — `setup.sh`
+deletes and regenerates symlinks from the manifests (line 121 of `setup.sh`),
+so any hand-crafted symlink is wiped on the next run.
+
+1. **Author the skill** in `.agents/skills/<name>/SKILL.md` (this repo).
+2. **Register it in the manifest(s)**:
+   - Generic / cross-stack skill → `profiles/common.list` (inherits to every profile)
+   - Frontend / motion / UI skill → `profiles/frontend.list` (laravel, nextjs, astro, full — not nodejs)
+   - Stack-specific skill → the relevant `profiles/<stack>.list`
+   - For documentation only, also add a line to `profiles/full.list` (the `full` profile is special-cased in `setup.sh` to symlink the whole dir, but `full.list` is kept as a reference of what "everything" contains).
+3. **Re-run setup.sh on each project** that should pick it up, with its profile:
+   ```bash
+   ./setup.sh /path/to/project laravel   # or nextjs | astro | nodejs | full
+   ```
+   Idempotent: wipes and recreates only symlinks, never touches real files.
+
+To re-sync many projects at once, see the fingerprint trick: resolve each
+profile with `resolve_manifest` (defined in `setup.sh`) and match against the
+sorted list of symlinks present in `project/.agents/skills/` — that recovers
+which profile each project uses without a registry.
+
 ## Recommended Workflow
 
 ### Project setup
