@@ -5,9 +5,11 @@
 @include frontend
 astro
 better-auth-best-practices
+improve-animations
 laravel-best-practices
 laravel-permission-development
 livewire-development
+long-horizon-brief
 next-best-practices
 pest-testing
 react-doctor
