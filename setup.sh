@@ -7,7 +7,8 @@
 #   ./setup.sh /path/to/project laravel       # Laravel profile (curated skills)
 #   ./setup.sh /path/to/project nextjs        # Next.js / React profile
 #   ./setup.sh /path/to/project astro         # Astro profile
-#   ./setup.sh /path/to/project nodejs        # Node.js backend profile
+#   ./setup.sh /path/to/project nodejs        # Generic Node.js backend profile
+#   ./setup.sh /path/to/project nodejs-ai-backend # Node.js/TypeScript AI backend profile
 #   ./setup.sh /path/to/project full          # all skills (escape hatch)
 #   ./setup.sh /path/to/project opencode      # link .opencode only (no .agents)
 #

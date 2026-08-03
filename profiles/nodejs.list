@@ -2,5 +2,5 @@
 # No frontend skills — use this for pure API projects.
 # If the project also serves a UI, prefer nextjs or add frontend skills manually.
 @include common
-better-auth-best-practices
-supabase-postgres-best-practices
+nodejs-backend-patterns
+nodejs-best-practices
