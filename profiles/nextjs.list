@@ -1,5 +1,10 @@
-# Next.js / React profile.
-@include frontend
+# Next.js / React profile — frontend-heavy SaaS. core + design + qa.
+# Add @include frontend-motion if the project does meaningful animation work.
+@include common
+@include frontend-core
+@include frontend-design
+@include frontend-qa
+nextjs
 next-best-practices
 react-doctor
 shadcn

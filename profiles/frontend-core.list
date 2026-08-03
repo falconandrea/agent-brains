@@ -1,0 +1,5 @@
+# Frontend core — base UI skills for any project that builds a UI.
+# Included by laravel / nextjs / astro profiles. Does NOT include common.
+tailwindcss-development
+web-design-guidelines
+designer.md

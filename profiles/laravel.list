@@ -1,5 +1,8 @@
-# Laravel profile — PHP full-stack (Blade + backend).
-@include frontend
+# Laravel profile — PHP full-stack (Blade + backend). UI = core only; opt into
+# frontend-design / frontend-motion / frontend-qa per project if needed.
+@include common
+@include frontend-core
+laravel
 laravel-best-practices
 laravel-permission-development
 livewire-development

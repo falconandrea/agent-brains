@@ -4,17 +4,25 @@
 # setup.sh for the full profile. Keep it in sync for documentation.
 @include frontend
 astro
+astro-framework
 better-auth-best-practices
 improve-animations
 laravel-best-practices
 laravel-permission-development
 livewire-development
 long-horizon-brief
+api-designer
+nodejs-backend-patterns
+nodejs-best-practices
 next-best-practices
 pest-testing
 react-doctor
+security-reviewer
 shadcn
+sql-pro
+test-master
 supabase-postgres-best-practices
+typescript-expert
 vercel-composition-patterns
 vercel-react-best-practices
 vercel-react-view-transitions

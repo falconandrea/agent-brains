@@ -1,14 +1,8 @@
-# Frontend/UI skills — shared by web profiles (laravel, nextjs, astro).
+# Frontend (alias — everything UI). For finer control, profiles can @include the
+# subgroups directly: frontend-core / frontend-design / frontend-motion / frontend-qa.
 # NOT inherited by nodejs (pure backend / API profile).
 @include common
-tailwindcss-development
-tailwind-design-system
-emil-design-eng
-frontend-design
-ui-ux-pro-max
-review-animations
-improve-animations
-web-design-guidelines
-pagespeed-optimizer
-webapp-testing
-designer.md
+@include frontend-core
+@include frontend-design
+@include frontend-motion
+@include frontend-qa

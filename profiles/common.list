@@ -1,8 +1,17 @@
 # Generic skills — inherited by EVERY profile.
 # Engineering process & workflow skills that apply to any stack.
 # Add a skill here to make it available to all profiles that @include common.
+
+# Workflow skills (process / persona) — invoked explicitly via /name (opencode)
+# or $name (Codex). feature & setup are allow_implicit_invocation:false.
+start
+feature
+setup
+
+# Engineering-process & knowledge skills.
 diagnosing-bugs
 code-review
+lessons-gardener
 grill-with-docs
 grilling
 handoff

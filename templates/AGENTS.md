@@ -18,13 +18,42 @@
 - Also apply relevant UI skills from `.agents/skills/` (e.g., `tailwindcss-development`, `ui-ux-pro-max`, `frontend-design`) when touching visual components.
 - Color palette, typography, spacing scale, and component variants defined in the design system are **non-negotiable**. Any deviation must be explicitly approved by the user.
 
+## Context Routing
+
+Load context **by area**, not "everything upfront". Read the file only if the task touches that area.
+
+| Task area | Read / activate |
+|---|---|
+| General orientation | `AGENTS.md`, `.ai/context/TECH_STACK.md`, `.ai/memory/progress.md`, `.ai/memory/lessons.md` |
+| Laravel backend | Boost-generated `AGENTS.md` + `laravel-best-practices` skill |
+| Livewire / Volt | Add `livewire-development` or `volt-development` |
+| Pest / test code | Add `pest-testing` |
+| UI / Tailwind / Blade / JSX | `.ai/context/DESIGN_SYSTEM.md` (mandatory) + `designer` + the one relevant UI skill |
+| Hard bug / regression | `diagnosing-bugs` |
+| Completion claim | `verification-before-completion` only when the user asked for verification |
+
+`.ai/context/APP_FLOW.md`, `GLOSSARY.md`, `database_schema.mmd` are read **only** when the requested area needs them. Do not preload.
+
+## Verification Policy
+
+**Default — minimal and proportional:**
+- For a behavior change, run only the **smallest** verification that proves it (one targeted test, the affected route, a typecheck on the touched file).
+- **Never** run the full suite, lint everything, or rebuild unless the user asks or the change clearly requires it.
+- No "while I'm here" extra checks — they add cost without value.
+
+**Manual mode** — when the user says "verifica manuale" / "manual verify" / "don't run anything":
+- Do **not** run tests, lint, typecheck, build, or browser checks.
+- Output the exact commands the user should run, and wait for them to paste failures before touching code again.
+- Still explain what each command verifies and what success looks like.
+
 ## Development Workflow
 
 Follow this lifecycle for any non-trivial feature work. The phases are enforced by skills — do not skip them.
 
 ### Before writing code
 
-- **`/feature`** — for any new feature, modification of behavior, or fuzzy idea. Runs a HARD-GATE design phase (Discovery → Approaches → PRD → Tasks) and produces a PRD + task list under `.ai/features/[name]/`. Do not write code, scaffold, or invoke implementation skills until the user approves the PRD.
+- **Fast path** — typo, config tweak, one-line fix, isolated refactor: do **not** invoke `/feature`. Use `AGENTS.md` + the relevant framework/domain skill and make the change directly. No PRD unless the user asks for one.
+- **`/feature`** — for any new feature, modification of behavior, or fuzzy idea that is **not** a fast path. Runs a HARD-GATE design phase (Discovery → Approaches → PRD → Tasks) and produces a PRD + task list under `.ai/features/[name]/`. Do not write code, scaffold, or invoke implementation skills until the user approves the PRD.
 - **`grill-with-docs`** (optional) — if the project has `.ai/context/GLOSSARY.md` or ADRs, use it to stress-test the PRD against the project's documented language and decisions before moving to tasks.
 
 ### During implementation
@@ -35,7 +64,8 @@ Follow this lifecycle for any non-trivial feature work. The phases are enforced 
 
 ### Before claiming work is done
 
-- **`verification-before-completion`** — run the actual lint, typecheck, and test commands and confirm the output before claiming anything is fixed, complete, or passing.
+- Run verification per the **Verification Policy** above (minimal by default; manual mode if requested).
+- **`verification-before-completion`** — only when the user explicitly asked for verification. Run the actual lint, typecheck, and test commands and confirm the output before claiming anything is fixed, complete, or passing.
 
 ### On bugs
 

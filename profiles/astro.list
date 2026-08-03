@@ -1,3 +1,6 @@
-# Astro profile — content/static sites with islands architecture.
-@include frontend
+# Astro profile — content/static sites with islands architecture. core + design.
+@include common
+@include frontend-core
+@include frontend-design
 astro
+astro-framework

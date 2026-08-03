@@ -15,18 +15,27 @@ Centralized repository for AI agent configurations, skills, and project template
 │
 ├── profiles/               # → Curated skill selections per tech stack
 │   ├── common.list         #   Generic skills inherited by every profile
-│   ├── frontend.list       #   UI skills (includes common)
-│   ├── laravel.list        #   Laravel profile (includes frontend)
-│   ├── nextjs.list         #   Next.js / React profile (includes frontend)
-│   ├── astro.list          #   Astro profile (includes frontend)
-│   ├── nodejs.list         #   Node.js backend profile (includes common, NO frontend)
+│   ├── frontend.list       #   All frontend skills (alias; includes common)
+│   ├── frontend-core.list  #   Base UI and accessibility skills
+│   ├── frontend-design.list  #   Design-system and visual-design skills
+│   ├── frontend-motion.list  #   Animation and motion skills
+│   ├── frontend-qa.list    #   Browser testing and performance skills
+│   ├── laravel.list        #   Laravel profile (common + frontend core)
+│   ├── nextjs.list         #   Next.js / React profile (core + design + QA)
+│   ├── astro.list          #   Astro profile (core + design)
+│   ├── nodejs.list         #   Generic Node.js backend profile (includes common, NO frontend)
+│   ├── nodejs-ai-backend.list # Node.js/TypeScript backend with API, DB & security skills
 │   └── full.list           #   Reference of "everything" (full is special-cased in setup.sh)
 │
 ├── templates/              # → Copied to projects (project-specific context)
+│   ├── AGENTS.md            #   Project-level agent guidance
 │   └── .ai/
 │       ├── context/        #   PRD, APP_FLOW, TECH_STACK, ROADMAP, DB schema
 │       ├── features/       #   Feature tracking template
 │       └── memory/         #   lessons.md, progress.md
+│
+├── extra/                  # Optional/manual extras, not linked by profiles
+│   └── skills/             # Tool-specific skills for manual use
 │
 ├── setup.sh                # Create agent/skill symlinks (profile-aware)
 ├── scaffold.sh             # Copy .ai templates to a project
@@ -41,11 +50,11 @@ Centralized repository for AI agent configurations, skills, and project template
 # Link agents & skills with a PROFILE (curated subset per tech stack)
 ./setup.sh /path/to/your-project laravel     # or: nextjs | astro | nodejs | full
 
-# Scaffold .ai context structure (copy — project-specific)
+# Scaffold AGENTS.md and .ai context structure (copy — project-specific)
 ./scaffold.sh /path/to/your-project
 ```
 
-Available profiles: `laravel`, `nextjs`, `astro`, `nodejs`, `full` (all skills).
+Available profiles: `frontend`, `laravel`, `nextjs`, `astro`, `nodejs`, `nodejs-ai-backend`, `full` (all skills).
 Default (no arg) is `full`. See [Profiles](#profiles) below.
 
 ### 2. Link .opencode only (no .agents)
@@ -74,12 +83,37 @@ If your target project already has a physical `.agents` or `.opencode` directory
 ./unlink.sh /path/to/your-project
 ```
 
+## Workflow agents → Codex + OpenCode
+
+The six workflow agents (`start`, `setup`, `feature`, `laravel`, `nextjs`, `astro`)
+live as native skills in `.agents/skills/<name>/SKILL.md` and are invoked the same
+way in both tools:
+
+| Tool | Syntax | Example |
+|---|---|---|
+| OpenCode | slash command | `/feature` |
+| Codex (CLI / IDE) | `$` mention or `/skills` | `$feature` |
+
+Profile membership: `start` / `feature` / `setup` are in `common.list` (every
+profile); `laravel` / `nextjs` / `astro` are in their own profile manifest.
+
+**Explicit-only activation.** In Codex, the invasive workflows (`feature`, `setup`,
+`laravel`, `nextjs`, `astro`) carry `agents/openai.yaml` with
+`allow_implicit_invocation: false`, so Codex will **not** auto-trigger them from a
+prompt — you must type `$feature`. `start` keeps implicit activation on (useful to
+auto-suggest when you ask "what's the status").
+
+`.opencode/agents/*.md` and `.agents/workflows/*.md` (symlinks) both point at the
+same `SKILL.md` — single source of truth per workflow, no duplication.
+
 ## How It Works
 
 ### Canonical skill store → single source of truth
 
-`.agents/skills/` in **this repo** is the only place where skills live. Projects
-never install or update skills directly — they consume via symlinks (see Profiles).
+`.agents/skills/` in **this repo** is the canonical store for setup-managed agent
+skills. Projects never install or update those skills directly — they consume
+them via symlinks (see Profiles). Optional, tool-specific skills for manual use
+live in `extra/` and are intentionally outside the setup/profile flow.
 How you update depends on the tool:
 
 - **`npx skills`** (mattpocock, anthropics, vercel, …) runs **here**, in this repo —
@@ -157,7 +191,9 @@ pull in another with `@include <name>`, so common skills are defined once.
 
 ```
 # profiles/laravel.list
-@include frontend        # pulls in frontend.list, which pulls in common.list
+@include common
+@include frontend-core
+laravel
 laravel-best-practices
 laravel-permission-development
 livewire-development
@@ -165,13 +201,20 @@ volt-development
 pest-testing
 ```
 
-| Profile   | Includes            | Use for                                  |
-| --------- | ------------------- | ---------------------------------------- |
-| `laravel` | frontend → common   | PHP full-stack (Blade + backend)         |
-| `nextjs`  | frontend → common   | Next.js / React                          |
-| `astro`   | frontend → common   | Astro content/static sites               |
-| `nodejs`  | common              | Node.js backend APIs (no UI skills)      |
-| `full`    | (whole-dir symlink) | Escape hatch — every skill, zero curation |
+| Profile    | Includes                         | Use for                                  |
+| ---------- | -------------------------------- | ---------------------------------------- |
+| `frontend` | common + all frontend groups     | Full frontend/UI stack                  |
+| `laravel`  | common + frontend-core + Laravel | PHP full-stack (Blade + backend)         |
+| `nextjs`   | common + core + design + QA + Next | Next.js / React                        |
+| `astro`    | common + core + design + Astro   | Astro content/static sites               |
+| `nodejs`   | common + Node.js backend patterns | Generic Node.js backend APIs (no UI skills) |
+| `nodejs-ai-backend` | nodejs + API/security/SQL/testing/TypeScript | Node.js/TypeScript AI and integration backends |
+| `full`     | (whole-dir symlink)              | Escape hatch — every skill, zero curation |
+
+Frontend skills are split into composable groups: `frontend-core`,
+`frontend-design`, `frontend-motion`, and `frontend-qa`. The `frontend` profile
+includes all four groups; stack profiles choose a smaller default set. Add a
+group with `@include <name>` when a project needs more than its default profile.
 
 ### Adding / editing a profile
 
@@ -183,18 +226,18 @@ pest-testing
 Add it to `profiles/common.list` — every profile that `@include common` (all of
 them) will pick it up on the next `./setup.sh`.
 
-### Adding a new skill — canonical workflow
+### Adding a new agent skill — canonical workflow
 
-When you create a new skill folder under `.agents/skills/<name>/`, target
+When you create a new agent skill folder under `.agents/skills/<name>/`, target
 projects will **not** see it until you do both steps below. Do not create
 symlinks manually inside project `.agents/skills/` directories — `setup.sh`
-deletes and regenerates symlinks from the manifests (line 121 of `setup.sh`),
+deletes and regenerates symlinks from the manifests,
 so any hand-crafted symlink is wiped on the next run.
 
 1. **Author the skill** in `.agents/skills/<name>/SKILL.md` (this repo).
 2. **Register it in the manifest(s)**:
    - Generic / cross-stack skill → `profiles/common.list` (inherits to every profile)
-   - Frontend / motion / UI skill → `profiles/frontend.list` (laravel, nextjs, astro, full — not nodejs)
+   - Frontend / motion / UI skill → the relevant `profiles/frontend-*.list` group (or `frontend.list` for every frontend profile; not nodejs)
    - Stack-specific skill → the relevant `profiles/<stack>.list`
    - For documentation only, also add a line to `profiles/full.list` (the `full` profile is special-cased in `setup.sh` to symlink the whole dir, but `full.list` is kept as a reference of what "everything" contains).
 3. **Re-run setup.sh on each project** that should pick it up, with its profile:
@@ -207,6 +250,10 @@ To re-sync many projects at once, see the fingerprint trick: resolve each
 profile with `resolve_manifest` (defined in `setup.sh`) and match against the
 sorted list of symlinks present in `project/.agents/skills/` — that recovers
 which profile each project uses without a registry.
+
+For a manual, tool-specific skill that should not be installed into projects,
+place it under `extra/skills/<name>/` instead. Do not add it to a profile or run
+`setup.sh` for it.
 
 ## Recommended Workflow
 
@@ -221,13 +268,16 @@ which profile each project uses without a registry.
 3. **Framework agents** (`/laravel`, `/nextjs`, `/astro`): implement the task list task-by-task using **`tdd`** (red-green-refactor). Switch to a fresh chat and reference the task file path.
    - optional: **`to-tickets`** to publish each task as a tracer-bullet issue on the tracker.
    - optional: **`to-spec`** if a formal, shareable PRD is needed on the tracker.
-4. **`verification-before-completion`**: before claiming "done", run the actual lint/typecheck/test commands and confirm the output.
+4. **Verification**: follow the project's `AGENTS.md` policy. Run the smallest
+   proportional check by default; use `verification-before-completion` when the
+   user explicitly asks for verification.
 
 ### Cross-cutting
 
 5. **`diagnosing-bugs`**: auto-activates on bugs — build a reproducible case first, then fix.
 6. **`improve-codebase-architecture`**: runs periodically to produce before/after refactoring reports.
 7. **`/handoff`**: when a chat becomes too long (deep context, many back-and-forths), compact the conversation into a doc the next agent can pick up in a fresh chat. Saved to `$TMPDIR` by default; `--keep` to persist it in `docs/handoffs/`.
+8. **`lessons-gardener`**: periodically prunes and compresses `.ai/memory/lessons.md` so it stays short and useful.
 
 ### Frontend & Motion
 
@@ -255,6 +305,7 @@ The frontend skills are split by **intent**, not by "frontend" in general. Trigg
 
 ## Notes
 
-- `.opencode` and `.agents` are **personal dev configs** (like `.vscode/`) → `.gitignore`
+- `.opencode` and `.agents` in consuming projects are **personal dev configs** (like `.vscode/`) → `.gitignore`
 - `.ai/` is **project documentation** → commit to the project repo
-- Safe for open source: agent configs are personal, project context is committed
+- `extra/skills/` contains optional, tool-specific skills for manual use; it is not part of the agent profiles or setup flow
+- Keep secrets, private prompts, and project-specific context out of this public repository
