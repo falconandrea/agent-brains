@@ -5,6 +5,7 @@
 # Usage:
 #   ./unlink.sh /path/to/your-project          # Remove both
 #   ./unlink.sh /path/to/your-project opencode # Remove only .opencode
+#   ./unlink.sh /path/to/your-project codex    # Remove only .codex
 #   ./unlink.sh /path/to/your-project agents   # Remove only .agents
 #
 # Handles both setup modes:
@@ -38,6 +39,18 @@ unlink_opencode() {
         echo "   ⚠️  .opencode exists but is NOT a symlink — not removing"
     else
         echo "   ℹ️  .opencode does not exist"
+    fi
+}
+
+unlink_codex() {
+    local target="$TARGET_DIR/.codex"
+    if [ -L "$target" ]; then
+        rm "$target"
+        echo "   ✅ .codex symlink removed"
+    elif [ -e "$target" ]; then
+        echo "   ⚠️  .codex exists but is NOT a symlink — not removing"
+    else
+        echo "   ℹ️  .codex does not exist"
     fi
 }
 
@@ -79,6 +92,10 @@ unlink_agents() {
 
 if [ "$SCOPE" = "all" ] || [ "$SCOPE" = "opencode" ]; then
     unlink_opencode
+fi
+
+if [ "$SCOPE" = "all" ] || [ "$SCOPE" = "codex" ]; then
+    unlink_codex
 fi
 
 if [ "$SCOPE" = "all" ] || [ "$SCOPE" = "agents" ]; then

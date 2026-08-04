@@ -136,8 +136,12 @@ This keeps one canonical version shared across all projects.
 ### Profiles → curated subset per project
 
 A project does **not** get every skill. It gets only the skills listed in its
-profile manifest. `.opencode` is still symlinked whole (agents are opt-in by
-invocation, no always-on cost); only `.agents/skills/` is curated.
+profile manifest. `.opencode` and `.codex` are symlinked whole (tool-specific
+adapters are opt-in by invocation, with no always-on cost); only
+`.agents/skills/` is curated.
+
+Codex does not read OpenCode configuration directly: the canonical `.codex`
+prompts point to the same shared workflows under `.agents/workflows/`.
 
 ```
 # full profile (escape hatch):
