@@ -89,27 +89,6 @@ link_opencode() {
     fi
 }
 
-link_codex() {
-    local source="$SCRIPT_DIR/.codex"
-    local target="$TARGET_DIR/.codex"
-    if [ -L "$target" ]; then
-        local current_source
-        current_source="$(readlink "$target")"
-        if [ "$current_source" = "$source" ]; then
-            echo "   ℹ️  .codex already linked correctly"
-        else
-            echo "   ⚠️  .codex is a symlink to $current_source (different source)"
-            echo "       Remove it manually if you want to relink: rm $target"
-        fi
-    elif [ -e "$target" ]; then
-        echo "   ⚠️  .codex exists and is NOT a symlink — skipping"
-        echo "       Move it aside if you want to replace it, then rerun this script"
-    else
-        ln -s "$source" "$target"
-        echo "   ✅ .codex → linked"
-    fi
-}
-
 # Link the whole .agents dir (used by the `full` profile — old behavior).
 link_agents_whole() {
     local source="$SCRIPT_DIR/.agents"
@@ -216,13 +195,11 @@ if [ "$PROFILE" = "full" ]; then
     echo "   Profile: full (all skills, whole-dir symlink)"
     echo ""
     link_opencode
-    link_codex
     link_agents_whole
 elif [ -f "$PROFILES_DIR/$PROFILE.list" ]; then
     echo "   Profile: $PROFILE (curated)"
     echo ""
     link_opencode
-    link_codex
     if [ -L "$TARGET_DIR/.agents" ]; then
         echo "   ℹ️  Removing old .agents whole-dir symlink to prepare curated profile..."
         rm "$TARGET_DIR/.agents"
@@ -247,12 +224,11 @@ fi
 if [ -f "$TARGET_DIR/.gitignore" ]; then
     echo ""
     echo "📝 Updating .gitignore..."
-    if ! grep -q "\.opencode" "$TARGET_DIR/.gitignore" && ! grep -q "\.agents" "$TARGET_DIR/.gitignore" && ! grep -q "\.codex" "$TARGET_DIR/.gitignore"; then
+    if ! grep -q "\.opencode" "$TARGET_DIR/.gitignore" && ! grep -q "\.agents" "$TARGET_DIR/.gitignore"; then
         echo "" >> "$TARGET_DIR/.gitignore"
         echo "# AI Agent configs (symlinked from agent-brains)" >> "$TARGET_DIR/.gitignore"
     fi
     add_to_gitignore ".opencode"
-    add_to_gitignore ".codex"
     add_to_gitignore ".agents"
 else
     echo ""
