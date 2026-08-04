@@ -1,0 +1,5 @@
+# Laravel analytics dashboard — Laravel/Livewire backend with a rich frontend.
+@include laravel
+@include frontend-design
+@include frontend-motion
+@include frontend-qa
