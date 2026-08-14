@@ -66,6 +66,13 @@ wake up and install its lock after someone else already took over. A marker left
 by a crash is reported with the path to delete. Release additionally verifies the
 inode captured at acquisition, as defence in depth against hand-edited locks.
 
+There is **no "run anyway"**: a refused lock refuses the run. One writer per
+repository is an invariant, not a preference — two agents editing one tree
+corrupt each other's work and the reviewer's evidence with it. Both known
+limitations fail in the safe direction: a recycled PID makes a dead owner look
+alive (the run is refused until the user clears it), and inode reuse could defeat
+the identity checks.
+
 **Skill routing.** `stack → profile → role policy → skill names →
 skillsOverride` on the child's resource loader. A Laravel skill never reaches an
 Astro developer.

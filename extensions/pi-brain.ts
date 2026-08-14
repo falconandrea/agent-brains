@@ -21,7 +21,7 @@ import { loadConfig } from "../src/config.ts";
 import { detectStack } from "../src/stack.ts";
 import { listProfiles, resolveProfile } from "../src/profiles.ts";
 import { RealGitService, ShellVerifyRunner } from "../src/shell.ts";
-import { acquireRunLock, describeLock } from "../src/run-lock.ts";
+import { acquireRunLock, describeLock, type AcquireResult } from "../src/run-lock.ts";
 import { PiHumanInput, UserDismissedError } from "../src/pi/human-input.ts";
 import { PiAgentRunner } from "../src/pi/pi-agent-runner.ts";
 import { runFeatureWorkflow, type FeatureOutcome } from "../src/workflows/feature.ts";
@@ -127,34 +127,13 @@ export default function piBrain(pi: ExtensionAPI): void {
         ctx.ui.notify(`pi-brain: cannot create the run lock in ${cwd}/.pi — ${(err as Error).message}`, "error");
         return;
       }
-      if (!lock.ok && lock.reason === "held_stale") {
-        active = null;
-        ctx.ui.notify(
-          `pi-brain: ${describeLock(lock.heldBy)} is still running and has held this ` +
-            `repository for a long time. If that session is stuck, stop it (or delete ` +
-            `${lock.lockFile}) and run /feature again.`,
-          "warning",
-        );
-        return;
-      }
-      if (!lock.ok && lock.reason === "takeover_in_progress") {
-        active = null;
-        ctx.ui.notify(
-          "pi-brain: another session is claiming this repository's stale lock. " +
-            `If nothing is running, delete ${lock.markerPath} and try again.`,
-          "warning",
-        );
-        return;
-      }
       if (!lock.ok) {
-        const proceed = await ctx.ui.confirm(
-          "pi-brain: this repository is already locked",
-          `${describeLock(lock.heldBy)}\n\nRun anyway? Two agents writing at once will conflict.`,
-        );
-        if (!proceed) {
-          active = null;
-          return;
-        }
+        // No "run anyway": one writer per repository is an invariant, not a
+        // preference. Two agents editing the same tree corrupt each other's
+        // work, and the reviewer's evidence along with it.
+        active = null;
+        ctx.ui.notify(lockRefusal(lock), "warning");
+        return;
       }
 
       const events = {
@@ -194,7 +173,7 @@ export default function piBrain(pi: ExtensionAPI): void {
         events.emit({ type: "workflow.failed", runId, error: message });
         ctx.ui.notify(`pi-brain: ${message}`, "error");
       } finally {
-        if (lock.ok) lock.release();
+        lock.release();
         human.status(undefined);
       }
     },
@@ -264,6 +243,27 @@ export default function piBrain(pi: ExtensionAPI): void {
       );
     },
   });
+}
+
+function lockRefusal(lock: Extract<AcquireResult, { ok: false }>): string {
+  switch (lock.reason) {
+    case "held":
+      return (
+        `pi-brain: another session already owns this repository — ${describeLock(lock.heldBy)}. ` +
+        `Wait for it to finish, or run /flow stop in that terminal.`
+      );
+    case "held_stale":
+      return (
+        `pi-brain: ${describeLock(lock.heldBy)} still owns this repository and has held it for a ` +
+        `long time. Stop that Pi session first (pid ${lock.heldBy.pid}) — the lock is then taken ` +
+        `over automatically. Delete ${lock.lockFile} by hand only if that process no longer exists.`
+      );
+    case "takeover_in_progress":
+      return (
+        `pi-brain: another session is claiming this repository's abandoned lock. Try again in a ` +
+        `moment; if no other Pi session is running, delete ${lock.markerPath}.`
+      );
+  }
 }
 
 function describe(event: WorkflowEvent): string {

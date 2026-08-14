@@ -54,39 +54,50 @@ async function git(
 /** NUL-separated output: the only form that survives newlines and quoting in paths. */
 const splitZ = (out: string): string[] => out.split("\0").filter((s) => s !== "");
 
+async function headSha(repoRoot: string): Promise<string | null> {
+  try {
+    return (await git(repoRoot, ["rev-parse", "HEAD"])).trim();
+  } catch {
+    return null; // repository with no commits yet
+  }
+}
+
 /**
- * Commit object for the current working tree, built in a scratch index so the
- * user's index is untouched. Includes untracked, non-ignored files.
+ * Tree object for the current working tree, built in a SCRATCH index.
+ *
+ * The scratch index is what makes this trustworthy: `assume-unchanged` and
+ * `skip-worktree` are bits stored in the repository's real index, so a fresh
+ * index seeded from HEAD does not carry them and `git add -A` sees the actual
+ * file contents. `git status` cannot make that guarantee.
  */
-async function snapshot(repoRoot: string, label: string): Promise<string> {
+async function snapshotTree(repoRoot: string): Promise<string> {
   const indexFile = join(tmpdir(), `pi-brain-index-${process.pid}-${randomUUID()}`);
   const env = { ...process.env, GIT_INDEX_FILE: indexFile };
   try {
-    let head: string | null = null;
-    try {
-      head = (await git(repoRoot, ["rev-parse", "HEAD"])).trim();
-    } catch {
-      head = null; // repository with no commits yet
-    }
-
+    const head = await headSha(repoRoot);
     await git(repoRoot, head ? ["read-tree", head] : ["read-tree", "--empty"], env);
     await git(repoRoot, ["add", "-A", "--", "."], env);
-    const tree = (await git(repoRoot, ["write-tree"], env)).trim();
-
-    const commitArgs = ["commit-tree", tree, "-m", `pi-brain ${label}`];
-    if (head) commitArgs.push("-p", head);
-    return (
-      await git(repoRoot, commitArgs, {
-        ...env,
-        GIT_AUTHOR_NAME: "pi-brain",
-        GIT_AUTHOR_EMAIL: "pi-brain@localhost",
-        GIT_COMMITTER_NAME: "pi-brain",
-        GIT_COMMITTER_EMAIL: "pi-brain@localhost",
-      })
-    ).trim();
+    return (await git(repoRoot, ["write-tree"], env)).trim();
   } finally {
     rmSync(indexFile, { force: true });
   }
+}
+
+/** The same snapshot, wrapped in a commit so it can be diffed against. */
+async function snapshot(repoRoot: string, label: string): Promise<string> {
+  const tree = await snapshotTree(repoRoot);
+  const head = await headSha(repoRoot);
+  const args = ["commit-tree", tree, "-m", `pi-brain ${label}`];
+  if (head) args.push("-p", head);
+  return (
+    await git(repoRoot, args, {
+      ...process.env,
+      GIT_AUTHOR_NAME: "pi-brain",
+      GIT_AUTHOR_EMAIL: "pi-brain@localhost",
+      GIT_COMMITTER_NAME: "pi-brain",
+      GIT_COMMITTER_EMAIL: "pi-brain@localhost",
+    })
+  ).trim();
 }
 
 /**
@@ -114,19 +125,26 @@ async function dirtySubmodules(repoRoot: string): Promise<string[]> {
       continue;
     }
     // In sync on paper — but its working tree may still hold uncommitted work.
-    // --untracked-files=all is mandatory: a project that sets
-    // status.showUntrackedFiles=no would otherwise hide new files entirely.
-    const status = await git(join(repoRoot, path), [
-      "status",
-      "--porcelain",
-      "--untracked-files=all",
-      "-z",
-    ]);
-    if (status !== "") dirty.push(path);
+    // Compared by snapshot rather than `git status`, because status honours
+    // both `status.showUntrackedFiles=no` and index flags such as
+    // `assume-unchanged`, either of which would hide real code from the review.
+    if (await hasUncommittedWork(join(repoRoot, path))) dirty.push(path);
   }
 
   return dirty;
 }
+
+/** True when the working tree differs from HEAD, whatever git status may claim. */
+async function hasUncommittedWork(repoRoot: string): Promise<boolean> {
+  const tree = await snapshotTree(repoRoot);
+  const head = await headSha(repoRoot);
+  if (head === null) return tree !== EMPTY_TREE;
+  const headTree = (await git(repoRoot, ["rev-parse", `${head}^{tree}`])).trim();
+  return tree !== headTree;
+}
+
+/** git's well-known hash of the empty tree. */
+const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
 /**
  * `git submodule status` lines are `<marker><sha> <path> (<describe>)`, and the

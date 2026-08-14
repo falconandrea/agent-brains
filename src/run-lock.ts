@@ -21,6 +21,16 @@
  *    overriding it is exactly what would make release a check-then-unlink race.
  *  - Release additionally verifies the inode captured at acquisition, as
  *    defence in depth against a lock file replaced by hand.
+ *
+ * Known limitations, both deliberate and both erring towards refusing to run
+ * rather than towards two writers:
+ *
+ *  - Liveness is `kill(pid, 0)`, so a recycled PID makes a dead owner look
+ *    alive. The lock then reports `held` / `held_stale` until the user removes
+ *    it. Annoying, never unsafe.
+ *  - Inode reuse could in principle defeat the identity checks in the takeover
+ *    marker and in release. The alternative is a native flock dependency, which
+ *    the dependency policy rules out.
  */
 
 import {

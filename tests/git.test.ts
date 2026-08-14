@@ -283,3 +283,41 @@ test("a new file in a submodule is detected even with showUntrackedFiles=no", as
   assert.deepEqual(dirtySubmodules, ["vendor/child"], "must not be hidden by user config");
   assert.ok(!patch.includes("invisible?"));
 });
+
+test("assume-unchanged inside a submodule cannot hide the agent's edit", async () => {
+  const { parent } = initRepoWithSubmodule();
+  const sub = join(parent, "vendor", "child");
+  // the classic way to make git status lie about a tracked file
+  execFileSync("git", ["update-index", "--assume-unchanged", "code.txt"], { cwd: sub });
+
+  const baseline = await git.baseline(parent);
+  writeFileSync(join(sub, "code.txt"), "child code\nEDITED BEHIND GIT STATUS\n");
+
+  const { patch, dirtySubmodules } = await git.diffSince(baseline);
+  assert.deepEqual(dirtySubmodules, ["vendor/child"], "status lies; the snapshot does not");
+  assert.ok(!patch.includes("EDITED BEHIND GIT STATUS"));
+});
+
+test("assume-unchanged in the PARENT repo cannot hide the agent's edit either", async () => {
+  const dir = initRepo();
+  execFileSync("git", ["update-index", "--assume-unchanged", "existing.txt"], { cwd: dir });
+
+  const baseline = await git.baseline(dir);
+  writeFileSync(join(dir, "existing.txt"), "one\nEDITED BEHIND GIT STATUS\n");
+
+  const { patch, files } = await git.diffSince(baseline);
+  assert.ok(files.includes("existing.txt"));
+  assert.match(patch, /EDITED BEHIND GIT STATUS/);
+});
+
+test("skip-worktree inside a submodule cannot hide it either", async () => {
+  const { parent } = initRepoWithSubmodule();
+  const sub = join(parent, "vendor", "child");
+  execFileSync("git", ["update-index", "--skip-worktree", "code.txt"], { cwd: sub });
+
+  const baseline = await git.baseline(parent);
+  writeFileSync(join(sub, "code.txt"), "hidden edit\n");
+
+  const { dirtySubmodules } = await git.diffSince(baseline);
+  assert.deepEqual(dirtySubmodules, ["vendor/child"]);
+});
