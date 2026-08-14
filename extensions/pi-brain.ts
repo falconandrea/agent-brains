@@ -127,6 +127,16 @@ export default function piBrain(pi: ExtensionAPI): void {
         ctx.ui.notify(`pi-brain: cannot create the run lock in ${cwd}/.pi — ${(err as Error).message}`, "error");
         return;
       }
+      if (!lock.ok && lock.reason === "held_stale") {
+        active = null;
+        ctx.ui.notify(
+          `pi-brain: ${describeLock(lock.heldBy)} is still running and has held this ` +
+            `repository for a long time. If that session is stuck, stop it (or delete ` +
+            `${lock.lockFile}) and run /feature again.`,
+          "warning",
+        );
+        return;
+      }
       if (!lock.ok && lock.reason === "takeover_in_progress") {
         active = null;
         ctx.ui.notify(

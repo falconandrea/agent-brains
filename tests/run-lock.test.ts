@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, existsSync, mkdirSync, statSync, utimesSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { acquireRunLock, releaseRunLock, lockPath, isStale } from "../src/run-lock.ts";
+import { acquireRunLock, releaseRunLock, lockPath, isAbandoned, looksHung } from "../src/run-lock.ts";
 import { readFileSync } from "node:fs";
 
 const repo = (): string => mkdtempSync(join(tmpdir(), "pi-brain-lock-"));
@@ -55,11 +55,44 @@ test("a corrupt lock file does not wedge the repo", () => {
   assert.equal(acquireRunLock(dir, { runId: "run-new", workflow: "feature" }).ok, true);
 });
 
-test("a live but ancient lock is considered stale", () => {
+test("a live but ancient lock is reported, never auto-taken", () => {
+  // Auto-taking a lock whose owner is still running is what makes release a
+  // check-then-unlink race, so it is refused by design.
   const old = new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString();
   const info = { pid: process.pid, runId: "r", workflow: "feature", startedAt: old, repoRoot: "/x" };
-  assert.equal(isStale(info), true);
-  assert.equal(isStale({ ...info, startedAt: new Date().toISOString() }), false);
+  assert.equal(isAbandoned(info), false, "a live owner is never abandoned");
+  assert.equal(looksHung(info), true);
+  assert.equal(looksHung({ ...info, startedAt: new Date().toISOString() }), false);
+  assert.equal(isAbandoned({ ...info, pid: 999_999_999 }), true, "a dead owner is");
+});
+
+test("a hung live run is surfaced to the user instead of being overridden", () => {
+  const dir = repo();
+  mkdirSync(join(dir, ".pi"), { recursive: true });
+  writeFileSync(
+    lockPath(dir),
+    JSON.stringify({
+      pid: process.pid, // alive
+      runId: "run-hung",
+      workflow: "feature",
+      startedAt: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString(),
+      repoRoot: dir,
+    }),
+  );
+
+  const result = acquireRunLock(dir, { runId: "run-new", workflow: "feature" });
+  assert.equal(result.ok, false);
+  if (!result.ok && result.reason === "held_stale") {
+    assert.equal(result.heldBy.runId, "run-hung");
+    assert.equal(result.lockFile, lockPath(dir));
+  } else {
+    assert.fail(`expected held_stale, got ${JSON.stringify(result)}`);
+  }
+  assert.equal(
+    JSON.parse(readFileSync(lockPath(dir), "utf8")).runId,
+    "run-hung",
+    "the live owner keeps its lock, so its own release stays safe",
+  );
 });
 
 test("release never steals a lock held by another run", () => {

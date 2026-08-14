@@ -14,12 +14,13 @@
  *    precisely what reintroduces the race: a paused taker wakes up and installs
  *    its lock after someone else has already taken over. A marker left behind by
  *    a crash is reported to the user instead, with the path to delete.
- *  - Releasing is bound to the inode captured at acquisition, so a run whose
- *    lock was taken over while it was stalled cannot delete its successor's lock.
- *
- * Residual limitation, deliberate: inode reuse could in principle defeat the
- * identity checks. This is a single-user local tool; the alternative is a native
- * flock dependency, which the dependency policy rules out.
+ *  - A lock is only ever taken over when its owning PROCESS IS GONE. That is
+ *    what makes release safe: a live run cannot have been superseded, so its
+ *    unlink can only ever remove its own file. A live-but-hung owner is
+ *    reported to the user (`held_stale`) rather than overridden, because
+ *    overriding it is exactly what would make release a check-then-unlink race.
+ *  - Release additionally verifies the inode captured at acquisition, as
+ *    defence in depth against a lock file replaced by hand.
  */
 
 import {
@@ -47,9 +48,11 @@ export interface LockInfo {
 export type AcquireResult =
   | { ok: true; release: () => void }
   | { ok: false; reason: "held"; heldBy: LockInfo }
+  /** Owner process is alive but the lock is older than the TTL — user decides. */
+  | { ok: false; reason: "held_stale"; heldBy: LockInfo; lockFile: string }
   | { ok: false; reason: "takeover_in_progress"; markerPath: string };
 
-/** A lock older than this is considered abandoned even if the PID still exists. */
+/** A lock older than this is *reported* as probably abandoned. Never auto-taken. */
 const DEFAULT_TTL_MS = 6 * 60 * 60 * 1000;
 
 export const lockPath = (repoRoot: string): string => join(repoRoot, ".pi", "pi-brain.lock");
@@ -82,9 +85,21 @@ function inodeOf(path: string): number | null {
   }
 }
 
-export function isStale(info: LockInfo | null, ttlMs = DEFAULT_TTL_MS, now = Date.now()): boolean {
-  if (!info) return true;
-  if (!isAlive(info.pid)) return true;
+/**
+ * Only a lock whose owner process is GONE may be taken automatically.
+ *
+ * Taking over a lock while its owner is still running is what makes release
+ * unsafe: the old owner would later unlink a file that is no longer its own, and
+ * no amount of checking before the unlink closes that window. A live owner that
+ * has clearly hung is reported to the user instead — see `held_stale`.
+ */
+export function isAbandoned(info: LockInfo | null): boolean {
+  if (!info) return true; // missing or corrupt: nobody can be relying on it
+  return !isAlive(info.pid);
+}
+
+/** Alive, but running for longer than the TTL: probably forgotten. */
+export function looksHung(info: LockInfo, ttlMs = DEFAULT_TTL_MS, now = Date.now()): boolean {
   const started = Date.parse(info.startedAt);
   return Number.isNaN(started) || now - started > ttlMs;
 }
@@ -140,9 +155,14 @@ export function acquireRunLock(
   if (install()) return acquired();
 
   // --- someone holds it ----------------------------------------------------
-  if (!isStale(readLock(path), options.ttlMs)) return held();
+  const current = readLock(path);
+  if (!isAbandoned(current)) {
+    return looksHung(current!, options.ttlMs)
+      ? { ok: false, reason: "held_stale", heldBy: current!, lockFile: path }
+      : held();
+  }
 
-  // --- stale: exactly one process may replace THIS lock instance -----------
+  // --- abandoned: exactly one process may replace THIS lock instance -------
   const staleInode = inodeOf(path);
   if (staleInode === null) return acquireRunLock(repoRoot, info, options); // vanished; retry
   const markerPath = `${path}.takeover-${staleInode}`;
@@ -160,7 +180,7 @@ export function acquireRunLock(
     // Re-check inside the critical section. If the inode changed, someone
     // already replaced this lock and the new one deserves the usual treatment.
     if (inodeOf(path) !== staleInode) return held();
-    if (!isStale(readLock(path), options.ttlMs)) return held();
+    if (!isAbandoned(readLock(path))) return held();
 
     rmSync(path, { force: true });
     if (!install()) return held();

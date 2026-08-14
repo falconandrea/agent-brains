@@ -11,7 +11,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, renameSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { RealGitService } from "../src/shell.ts";
+import { RealGitService, submodulePath } from "../src/shell.ts";
 
 function initRepo(): string {
   const dir = mkdtempSync(join(tmpdir(), "pi-brain-git-"));
@@ -232,4 +232,54 @@ test("a submodule moved to another commit is reported", async () => {
 
   const { dirtySubmodules } = await git.diffSince(baseline);
   assert.deepEqual(dirtySubmodules, ["vendor/child"]);
+});
+
+test("submodule paths containing spaces are parsed whole", () => {
+  assert.equal(
+    submodulePath(" 1234567890abcdef vendor/child space (heads/main)"),
+    "vendor/child space",
+  );
+  assert.equal(submodulePath("+1234567890abcdef vendor/child (heads/main)"), "vendor/child");
+  assert.equal(submodulePath("-1234567890abcdef vendor/child"), "vendor/child");
+  assert.equal(submodulePath(""), null);
+});
+
+test("a submodule at a path with spaces still escalates instead of crashing", async () => {
+  const child = mkdtempSync(join(tmpdir(), "pi-brain-sub-"));
+  const runChild = (...args: string[]) => execFileSync("git", args, { cwd: child });
+  runChild("init", "-q", "-b", "main");
+  runChild("config", "user.email", "t@example.com");
+  runChild("config", "user.name", "t");
+  writeFileSync(join(child, "code.txt"), "child code\n");
+  runChild("add", ".");
+  runChild("commit", "-qm", "child base");
+
+  const parent = initRepo();
+  execFileSync(
+    "git",
+    ["-c", "protocol.file.allow=always", "submodule", "add", "-q", child, "vendor/child space"],
+    { cwd: parent },
+  );
+  execFileSync("git", ["commit", "-qm", "add submodule"], { cwd: parent });
+
+  const baseline = await git.baseline(parent);
+  writeFileSync(join(parent, "vendor", "child space", "code.txt"), "edited\n");
+
+  const { dirtySubmodules } = await git.diffSince(baseline);
+  assert.deepEqual(dirtySubmodules, ["vendor/child space"]);
+});
+
+test("a new file in a submodule is detected even with showUntrackedFiles=no", async () => {
+  const { parent } = initRepoWithSubmodule();
+  // a project that hides untracked files from git status
+  execFileSync("git", ["config", "status.showUntrackedFiles", "no"], {
+    cwd: join(parent, "vendor", "child"),
+  });
+
+  const baseline = await git.baseline(parent);
+  writeFileSync(join(parent, "vendor", "child", "brand-new.txt"), "invisible?\n");
+
+  const { patch, dirtySubmodules } = await git.diffSince(baseline);
+  assert.deepEqual(dirtySubmodules, ["vendor/child"], "must not be hidden by user config");
+  assert.ok(!patch.includes("invisible?"));
 });

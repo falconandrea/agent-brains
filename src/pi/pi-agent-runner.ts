@@ -75,16 +75,25 @@ export class PiAgentRunner implements AgentRunner {
     }
     if (this.#deps.askUser) customTools.push(this.#buildAskUserTool());
 
-    const { session } = await createAgentSession({
-      cwd: request.cwd,
-      sessionManager: SessionManager.inMemory(request.cwd),
-      modelRuntime: this.#modelRuntime,
-      resourceLoader: this.#buildLoader(request),
-      model: await this.#resolveModel(request),
-      thinkingLevel: request.model?.thinking,
-      customTools,
-      tools: resolveTools(request, customTools),
-    });
+    // Model resolution can hit the network (auth probes) and the session build
+    // can be long. An abort during either arrives as a rejection, and must be
+    // reported as a cancellation rather than a failure.
+    let session;
+    try {
+      ({ session } = await createAgentSession({
+        cwd: request.cwd,
+        sessionManager: SessionManager.inMemory(request.cwd),
+        modelRuntime: this.#modelRuntime,
+        resourceLoader: this.#buildLoader(request),
+        model: await this.#resolveModel(request),
+        thinkingLevel: request.model?.thinking,
+        customTools,
+        tools: resolveTools(request, customTools),
+      }));
+    } catch (err) {
+      if (isAbort(err, request.signal)) return { role: request.role, text: "", aborted: true };
+      throw err;
+    }
 
     let usage: AgentRunResult["usage"];
     const unsubscribe = session.subscribe((event) => {
@@ -129,6 +138,11 @@ export class PiAgentRunner implements AgentRunner {
         usage,
         aborted: request.signal?.aborted ?? false,
       };
+    } catch (err) {
+      if (isAbort(err, request.signal)) {
+        return { role: request.role, text: "", structured, usage, aborted: true };
+      }
+      throw err;
     } finally {
       request.signal?.removeEventListener("abort", onAbort);
       unsubscribe();
@@ -213,6 +227,13 @@ export class PiAgentRunner implements AgentRunner {
       },
     });
   }
+}
+
+/** An abort surfaces as AbortError from the SDK, or simply as a fired signal. */
+function isAbort(err: unknown, signal?: AbortSignal): boolean {
+  if (signal?.aborted) return true;
+  const name = (err as { name?: string } | null)?.name;
+  return name === "AbortError";
 }
 
 function buildResultTool(spec: ResultToolSpec, capture: (payload: unknown) => void): ToolDefinition {

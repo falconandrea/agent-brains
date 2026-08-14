@@ -105,8 +105,8 @@ async function dirtySubmodules(repoRoot: string): Promise<string[]> {
   for (const line of listing.split("\n")) {
     if (line.trim() === "") continue;
     const marker = line[0];
-    const path = line.slice(1).trim().split(/\s+/)[1];
-    if (path === undefined) continue;
+    const path = submodulePath(line);
+    if (path === null) continue;
 
     // Moved, uninitialised or conflicted: the reviewer sees a pointer at best.
     if (marker === "+" || marker === "-" || marker === "U") {
@@ -114,11 +114,34 @@ async function dirtySubmodules(repoRoot: string): Promise<string[]> {
       continue;
     }
     // In sync on paper — but its working tree may still hold uncommitted work.
-    const status = await git(join(repoRoot, path), ["status", "--porcelain", "-z"]);
-    if (status.trim() !== "") dirty.push(path);
+    // --untracked-files=all is mandatory: a project that sets
+    // status.showUntrackedFiles=no would otherwise hide new files entirely.
+    const status = await git(join(repoRoot, path), [
+      "status",
+      "--porcelain",
+      "--untracked-files=all",
+      "-z",
+    ]);
+    if (status !== "") dirty.push(path);
   }
 
   return dirty;
+}
+
+/**
+ * `git submodule status` lines are `<marker><sha> <path> (<describe>)`, and the
+ * path may contain spaces — splitting on whitespace truncates it and the next
+ * git call then runs in a directory that does not exist.
+ */
+export function submodulePath(line: string): string | null {
+  const withoutMarker = line.slice(1);
+  const firstSpace = withoutMarker.indexOf(" ");
+  if (firstSpace === -1) return null;
+  const rest = withoutMarker.slice(firstSpace + 1);
+  // Trailing " (describe)" is optional and only present for initialised ones.
+  const describeAt = rest.lastIndexOf(" (");
+  const path = describeAt === -1 ? rest : rest.slice(0, describeAt);
+  return path.trim() === "" ? null : path;
 }
 
 export class RealGitService implements GitService {

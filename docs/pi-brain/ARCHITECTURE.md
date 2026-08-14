@@ -50,15 +50,21 @@ PRD inline. `ROADMAP.md` is never loaded.
 
 **One writer per repo.** Node's fs exposes no `flock`, so `src/run-lock.ts` is
 built entirely on exclusive create. Acquiring a free lock is a `link()` — atomic.
-Replacing a *stale* one is check-then-act, so it runs under a marker file whose
-name encodes the inode of the exact lock being replaced: two processes seeing the
-same stale lock contend for the same marker and only one can create it. The
-marker deliberately never expires on a timer — a timed expiry is what makes
-takeover racy, because a paused taker wakes up and installs its lock after
-someone else already took over. A marker left by a crash is reported with the
-path to delete. Release is bound to the inode captured at acquisition, so a run
-that stalled past the TTL cannot delete its successor's lock. Residual, accepted:
-inode reuse could defeat the identity checks.
+
+The property that makes release safe is that **a lock is only ever taken over
+when its owning process is gone**. A live run therefore cannot be superseded, so
+its own unlink can only ever remove its own file — there is no check-then-unlink
+window to lose. A live owner that has held the lock past the TTL is *reported*
+(`held_stale`, with the pid and the file to delete), never overridden, precisely
+because overriding it is what would reintroduce that race.
+
+Replacing an abandoned lock is still check-then-act, so it runs under a marker
+file whose name encodes the inode of the exact lock being replaced: two processes
+seeing the same dead lock contend for the same marker and only one can create it.
+The marker never expires on a timer — a timed expiry is what lets a paused taker
+wake up and install its lock after someone else already took over. A marker left
+by a crash is reported with the path to delete. Release additionally verifies the
+inode captured at acquisition, as defence in depth against hand-edited locks.
 
 **Skill routing.** `stack → profile → role policy → skill names →
 skillsOverride` on the child's resource loader. A Laravel skill never reaches an
