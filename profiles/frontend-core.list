@@ -2,4 +2,4 @@
 # Included by laravel / nextjs / astro profiles. Does NOT include common.
 tailwindcss-development
 web-design-guidelines
-designer.md
+designer

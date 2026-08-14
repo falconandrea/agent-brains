@@ -20,6 +20,7 @@ import { loadConfig } from "../src/config.ts";
 import { detectStack } from "../src/stack.ts";
 import { listProfiles, resolveProfile } from "../src/profiles.ts";
 import { RealGitService, ShellVerifyRunner } from "../src/shell.ts";
+import { acquireRunLock, describeLock } from "../src/run-lock.ts";
 import { PiHumanInput, UserDismissedError } from "../src/pi/human-input.ts";
 import { PiAgentRunner } from "../src/pi/pi-agent-runner.ts";
 import { runFeatureWorkflow, type FeatureOutcome } from "../src/workflows/feature.ts";
@@ -75,6 +76,17 @@ export default function piBrain(pi: ExtensionAPI): void {
       const cwd = ctx.cwd;
       const config = loadConfig(cwd);
       const runId = `run-${Date.now().toString(36)}`;
+
+      // Another Pi terminal may already be writing in this repo (spec §21).
+      const lock = acquireRunLock(cwd, { runId, workflow: "feature" });
+      if (!lock.ok) {
+        const proceed = await ctx.ui.confirm(
+          "pi-brain: this repository is already locked",
+          `${describeLock(lock.heldBy)}\n\nRun anyway? Two agents writing at once will conflict.`,
+        );
+        if (!proceed) return;
+      }
+
       const abort = new AbortController();
       const run: ActiveRun = {
         runId,
@@ -133,6 +145,7 @@ export default function piBrain(pi: ExtensionAPI): void {
         events.emit({ type: "workflow.failed", runId, error: message });
         ctx.ui.notify(`pi-brain: ${message}`, "error");
       } finally {
+        if (lock.ok) lock.release();
         human.status(undefined);
       }
     },

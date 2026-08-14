@@ -16,8 +16,8 @@ OpenCode/Codex through `setup.sh`.
 
 | | |
 |---|---|
-| Pi-free logic (profiles, stack, verification, review loop, workflow) | implemented, 24 tests green |
-| Pi SDK layer (`src/pi/`, `extensions/pi-brain.ts`) | written against the docs, **never executed** |
+| Pi-free logic (profiles, stack, context routing, verification, review loop, run lock, workflow) | implemented, 46 tests green |
+| Pi SDK layer (`src/pi/`, `extensions/pi-brain.ts`) | typechecked against pi-coding-agent 0.84.2, **never executed** |
 | Spike proving the Pi APIs | **not run yet** — see [SPIKE.md](./SPIKE.md) |
 
 Nothing here has talked to a model. Run the spike first.
@@ -73,6 +73,8 @@ src/pi/                    the ONLY code that touches the Pi SDK
 src/                       everything else — no Pi, unit-tested
   ports.ts                 HumanInput / VerifyRunner / GitService / events
   agent.ts                 AgentRunner interface + FakeAgentRunner
+  context-router.ts        which .ai/ docs each role/task actually needs
+  run-lock.ts              one writing run per repository
   workflows/feature.ts     the deterministic state machine
 profiles/*.list            unchanged, shared with main
 .agents/skills/            unchanged canonical skill store

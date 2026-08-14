@@ -42,6 +42,17 @@ rejects anything malformed and the run escalates instead of guessing.
 `needs_human` → escalate, max rounds → escalate, same blocking IDs with an
 unchanged diff → escalate as no-progress. It cannot loop forever.
 
+**Context routing.** `src/context-router.ts` loads three always-on documents
+plus whatever the task words earn: a UI task gets `DESIGN_SYSTEM.md`, a database
+task gets the schema and *only the ADRs whose filename matches the task*. The
+developer and reviewer never get product docs — they already have the approved
+PRD inline. `ROADMAP.md` is never loaded.
+
+**One writer per repo.** `src/run-lock.ts` is a single `O_EXCL` lock file under
+`.pi/`, with PID-liveness and TTL takeover so a crashed run cannot wedge the
+repository. Corrupt lock file, dead PID, or a 6h-old lock: taken over. Live and
+recent: you get asked before proceeding.
+
 **Skill routing.** `stack → profile → role policy → skill names →
 skillsOverride` on the child's resource loader. A Laravel skill never reaches an
 Astro developer.
@@ -59,12 +70,10 @@ are never attributed to — or reverted by — the workflow. Nothing is committe
 ## Known gaps
 
 - Everything under `src/pi/` is unverified until the spike passes.
-- `.agents/skills/product-thinking.md` and `designer.md` are loose markdown, not
-  Agent Skills — Pi skips root-level `.md` under `.agents/skills/`, so they are
-  invisible to pi-brain. `tests/repo.test.ts` allow-lists them; convert them to
-  `<name>/SKILL.md` (with `name` + `description` frontmatter) to bring them in.
 - The `ask_user`-mid-child-run path may need `mode: "deferred"` (see SPIKE.md).
 - No `/setup`, `/review`, `/bugfix` yet — phase 2.
-- No worktrees; one writing workflow per repo at a time, no lockfile yet.
+- No worktrees. Concurrent writing runs on the same repo are blocked by a
+  lockfile, not isolated.
 - Run state is appended via `pi.appendEntry` but there is no resume UX.
-- Token/cost reporting is not wired; add it if Pi exposes usage on `agent_end`.
+- Per-agent token usage is captured from `agent_end` but not yet surfaced in a
+  run summary.

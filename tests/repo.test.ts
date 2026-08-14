@@ -19,11 +19,10 @@ const PROFILES_DIR = join(ROOT, "profiles");
 const SKILLS_DIR = join(ROOT, ".agents", "skills");
 
 /**
- * Plain `.md` files at the root of `.agents/skills/` are NOT Agent Skills and
- * Pi ignores them. These two are legacy OpenCode-era files still referenced by
- * profiles; convert them to `<name>/SKILL.md` to make them usable from Pi.
+ * Plain `.md` files at the root of `.agents/skills/` are NOT Agent Skills — Pi
+ * ignores them. There are none left; keep this empty so a new one fails the test.
  */
-const KNOWN_LOOSE_MD = new Set(["product-thinking", "designer"]);
+const KNOWN_LOOSE_MD = new Set<string>();
 
 const realSkills = (): Set<string> =>
   new Set(

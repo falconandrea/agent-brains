@@ -14,7 +14,7 @@
 ## Design System
 
 - Source of truth for all UI decisions: `.ai/context/DESIGN_SYSTEM.md`
-- **Always apply the `designer` skill** (`.agents/skills/designer.md`) when working on frontend files (Blade, JSX, Vue, CSS, Tailwind).
+- **Always apply the `designer` skill** (`.agents/skills/designer/SKILL.md`) when working on frontend files (Blade, JSX, Vue, CSS, Tailwind).
 - Also apply relevant UI skills from `.agents/skills/` (e.g., `tailwindcss-development`, `ui-ux-pro-max`, `frontend-design`) when touching visual components.
 - Color palette, typography, spacing scale, and component variants defined in the design system are **non-negotiable**. Any deviation must be explicitly approved by the user.
 

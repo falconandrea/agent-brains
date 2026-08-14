@@ -23,6 +23,7 @@ import { roleConfig } from "../config.ts";
 import { detectStack, LOW_CONFIDENCE, type ProjectStack } from "../stack.ts";
 import { resolveVerifyCommands } from "../verify.ts";
 import { selectSkills } from "../skill-router.ts";
+import { routeContext } from "../context-router.ts";
 import {
   decideNextRound,
   validateReviewResult,
@@ -85,7 +86,7 @@ export async function runFeatureWorkflow(
     model: plannerCfg,
     skills: planner.skills,
     tools: ["read", "grep", "find", "ls"],
-    contextFiles: contextFilesFor(deps.cwd, ["AGENTS.md", ".ai/context/TECH_STACK.md", ".ai/memory/lessons.md"]),
+    contextFiles: routeContext({ cwd: deps.cwd, role: "planner", task: description, stack }).files,
     signal: deps.signal,
   });
   events.emit({ type: "agent.completed", runId, role: "planner" });
@@ -113,6 +114,19 @@ export async function runFeatureWorkflow(
   const reviewerCfg = roleConfig(config, "reviewer");
   const devSkills = selectSkills(deps.profilesDir, stack.primary, "developer", deps.availableSkills);
   const revSkills = selectSkills(deps.profilesDir, stack.primary, "reviewer", deps.availableSkills);
+
+  // The task text drives context routing, so include the tasks file: a plan
+  // that mentions migrations pulls the schema in even if the one-line request
+  // never said "database".
+  const taskText = `${description}\n${read(tasksPath)}`;
+  const devContext = routeContext({ cwd: deps.cwd, role: "developer", task: taskText, stack }).files;
+  const reviewContext = routeContext({
+    cwd: deps.cwd,
+    role: "reviewer",
+    task: taskText,
+    stack,
+    maxChars: 20_000,
+  }).files;
 
   let round = 0;
   let fixes: ReviewIssue[] = [];
@@ -143,7 +157,7 @@ export async function runFeatureWorkflow(
       }),
       model: developerCfg,
       skills: devSkills.skills,
-      contextFiles: contextFilesFor(deps.cwd, ["AGENTS.md", ".ai/memory/lessons.md"]),
+      contextFiles: devContext,
       signal: deps.signal,
     });
     events.emit({ type: "agent.completed", runId, role: "developer" });
@@ -200,7 +214,7 @@ export async function runFeatureWorkflow(
       skills: revSkills.skills,
       readOnly: reviewerCfg.readOnly ?? true,
       resultTool: REVIEW_TOOL,
-      contextFiles: contextFilesFor(deps.cwd, ["AGENTS.md"]),
+      contextFiles: reviewContext,
       signal: deps.signal,
     });
     events.emit({ type: "agent.completed", runId, role: "reviewer" });
@@ -278,11 +292,6 @@ async function resolveStack(deps: FeatureDeps): Promise<ProjectStack> {
 
 const read = (p: string): string => (existsSync(p) ? readFileSync(p, "utf8") : "");
 
-function contextFilesFor(cwd: string, relatives: string[]): Array<{ path: string; content: string }> {
-  return relatives
-    .map((rel) => ({ path: rel, content: read(join(cwd, rel)) }))
-    .filter((f) => f.content !== "");
-}
 
 const modelLabel = (provider?: string, model?: string): string =>
   `${provider ?? "default"}/${model ?? "default"}`;

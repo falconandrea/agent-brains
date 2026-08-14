@@ -36,7 +36,7 @@ Read **only** these first:
 
 Then load **area-specific** context per the Context Routing table in `AGENTS.md`. Examples: `DESIGN_SYSTEM.md` only if there's UI work; `database_schema.mmd` only if DB is touched; `APP_FLOW.md` / `GLOSSARY.md` only if the task needs them. **Do not preload.**
 
-> **UI rule**: if the feature involves frontend (Blade/JSX/Vue/CSS), activate `designer` (`.agents/skills/designer.md`) + the one relevant UI skill before writing UI code.
+> **UI rule**: if the feature involves frontend (Blade/JSX/Vue/CSS), activate `designer` (`.agents/skills/designer/SKILL.md`) + the one relevant UI skill before writing UI code.
 
 ---
 
