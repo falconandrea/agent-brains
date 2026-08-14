@@ -63,15 +63,23 @@ YAML; converting would have broken the OpenCode path for no gain.
 **Config is JSON.** Zero dependencies. Swap `loadFile()` in `src/config.ts` if
 YAML ever becomes worth a dep.
 
-**Git safety.** A baseline (branch, HEAD, already-dirty files) is captured before
-any writing phase, and pre-existing changes are excluded from the diff so they
-are never attributed to — or reverted by — the workflow. Nothing is committed.
+**Git safety.** At baseline the working tree is captured as a real commit object
+with `git stash create` — non-destructive, it writes objects and never touches
+the tree or the index. Diffing against that commit gives, correctly and for
+free: only the workflow's own edits to files the user was already changing,
+proper rename and delete records, and no filename parsing (NUL-separated lists
+everywhere, so newlines and trailing spaces in paths survive). Untracked files
+the run created are diffed against `/dev/null`; untracked files that existed
+before are never sent to a model. A git failure raises instead of degrading to
+an empty patch. Nothing is committed.
 
 ## Known gaps
 
 - Everything under `src/pi/` is unverified until the spike passes.
 - The `ask_user`-mid-child-run path may need `mode: "deferred"` (see SPIKE.md).
 - No `/setup`, `/review`, `/bugfix` yet — phase 2.
+- Dirty submodules show only as `Subproject commit <sha>-dirty`; the changed
+  files inside them never reach the reviewer.
 - No worktrees. Concurrent writing runs on the same repo are blocked by a
   lockfile, not isolated.
 - Run state is appended via `pi.appendEntry` but there is no resume UX.

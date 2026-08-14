@@ -22,6 +22,7 @@ import type {
 } from "../src/ports.ts";
 import type { ReviewResult } from "../src/review.ts";
 import { runFeatureWorkflow, type FeatureDeps } from "../src/workflows/feature.ts";
+import { mkdirSync, writeFileSync } from "node:fs";
 
 const PROFILES_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "profiles");
 const SKILLS = new Set(["karpathy-guidelines", "code-review", "feature", "nodejs-best-practices"]);
@@ -65,7 +66,14 @@ class FakeGit implements GitService {
   patches = ["diff-1", "diff-2", "diff-3"];
   calls = 0;
   async baseline(cwd: string): Promise<GitBaseline> {
-    return { repoRoot: cwd, branch: "main", headSha: "abc123", preexistingChanges: [] };
+    return {
+      repoRoot: cwd,
+      branch: "main",
+      headSha: "abc123",
+      baseCommit: "abc123",
+      capturedWorkingTree: false,
+      preexistingUntracked: [],
+    };
   }
   async diffSince(): Promise<{ patch: string; files: string[] }> {
     const patch = this.patches[Math.min(this.calls, this.patches.length - 1)]!;
@@ -269,4 +277,79 @@ test("abort before the first developer run cancels cleanly", async () => {
 
   const outcome = await runFeatureWorkflow(deps, "add invitations", "run-6");
   assert.equal(outcome.status, "cancelled");
+});
+
+test("a plan from an earlier pi-brain run on the same feature is overwritten", async () => {
+  const { deps, agents, cwd } = harness((req) =>
+    req.role === "planner"
+      ? plannerResult
+      : req.role === "developer"
+        ? devResult
+        : reviewOf({ verdict: "approved", summary: "ok", issues: [] }),
+  );
+
+  // first run: the user rejects the plan
+  const human = deps.human as FakeHuman;
+  human.approve = false;
+  await runFeatureWorkflow(deps, "add invitations", "run-first");
+
+  const dir = join(cwd, ".ai/features/add-invitations");
+  const rejected = readFileSync(join(dir, "prd-add-invitations.md"), "utf8");
+  assert.match(rejected, /Build the thing/);
+
+  // second run of the SAME feature: same directory, fresh content
+  human.approve = true;
+  await runFeatureWorkflow(deps, "add invitations", "run-second");
+
+  assert.ok(!existsSync(join(cwd, ".ai/features/add-invitations-2")), "must reuse its own directory");
+  const developer = agents.calls.find((c) => c.role === "developer")!;
+  assert.match(developer.prompt, /T1 do it/);
+});
+
+test("a plan file pi-brain did not write is never clobbered", async () => {
+  const { deps, cwd } = harness((req) =>
+    req.role === "planner"
+      ? plannerResult
+      : req.role === "developer"
+        ? devResult
+        : reviewOf({ verdict: "approved", summary: "ok", issues: [] }),
+  );
+
+  const dir = join(cwd, ".ai/features/add-invitations");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "prd-add-invitations.md"), "# hand-written plan\n");
+
+  await runFeatureWorkflow(deps, "add invitations", "run-foreign");
+
+  assert.match(readFileSync(join(dir, "prd-add-invitations.md"), "utf8"), /hand-written/);
+  assert.ok(existsSync(join(cwd, ".ai/features/add-invitations-2")));
+});
+
+test("two different features that slugify the same get separate directories", async () => {
+  const { deps, cwd } = harness((req) =>
+    req.role === "planner"
+      ? plannerResult
+      : req.role === "developer"
+        ? devResult
+        : reviewOf({ verdict: "approved", summary: "ok", issues: [] }),
+  );
+
+  await runFeatureWorkflow(deps, "add invitations to the org for admins only", "run-a");
+  await runFeatureWorkflow(deps, "add invitations to the org for guests too", "run-b");
+
+  assert.ok(existsSync(join(cwd, ".ai/features/add-invitations-to-the-org-for")));
+  assert.ok(existsSync(join(cwd, ".ai/features/add-invitations-to-the-org-for-2")));
+});
+
+test("an aborted child run cancels instead of pressing on", async () => {
+  const { deps, agents } = harness((req) =>
+    req.role === "planner"
+      ? plannerResult
+      : { role: "developer", text: "", aborted: true },
+  );
+
+  const outcome = await runFeatureWorkflow(deps, "add invitations", "run-abort");
+
+  assert.deepEqual(outcome, { status: "cancelled", at: "development" });
+  assert.equal(agents.calls.filter((c) => c.role === "reviewer").length, 0);
 });

@@ -7,6 +7,7 @@
  * docs/pi-brain/SPIKE.md.
  */
 
+import { execFileSync } from "node:child_process";
 import { readdirSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -47,6 +48,19 @@ function availableSkills(): Set<string> {
   );
 }
 
+/**
+ * Pi can be opened anywhere inside a repository. Config, the lock, the git
+ * baseline and .ai/ artefacts must all agree on ONE root, or two terminals in
+ * different subdirectories will both think they hold the lock.
+ */
+function repoRootOf(cwd: string): string {
+  try {
+    return execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd, encoding: "utf8" }).trim();
+  } catch {
+    return cwd; // not a git repo: degrade to the current directory
+  }
+}
+
 interface ActiveRun {
   runId: string;
   workflow: string;
@@ -73,20 +87,10 @@ export default function piBrain(pi: ExtensionAPI): void {
         return;
       }
 
-      const cwd = ctx.cwd;
-      const config = loadConfig(cwd);
+      const cwd = repoRootOf(ctx.cwd);
+      const { config, warnings } = loadConfig(cwd);
+      for (const warning of warnings) ctx.ui.notify(`pi-brain config: ${warning}`, "warning");
       const runId = `run-${Date.now().toString(36)}`;
-
-      // Another Pi terminal may already be writing in this repo (spec §21).
-      const lock = acquireRunLock(cwd, { runId, workflow: "feature" });
-      if (!lock.ok) {
-        const proceed = await ctx.ui.confirm(
-          "pi-brain: this repository is already locked",
-          `${describeLock(lock.heldBy)}\n\nRun anyway? Two agents writing at once will conflict.`,
-        );
-        if (!proceed) return;
-      }
-
       const abort = new AbortController();
       const run: ActiveRun = {
         runId,
@@ -101,12 +105,31 @@ export default function piBrain(pi: ExtensionAPI): void {
       // Always resolve the LIVE ctx — captured ones go stale in Pi.
       const human = new PiHumanInput(() => ctx, "live");
 
-      const agents = await PiAgentRunner.create({
-        cwd,
-        askUser: (q) => human.askFromChild(q),
-        onEvent: (e) =>
-          human.status(`${e.role}: ${e.type}${e.detail ? ` ${e.detail}` : ""}`),
-      });
+      let agents;
+      try {
+        agents = await PiAgentRunner.create({
+          cwd,
+          askUser: (q) => human.askFromChild(q),
+          onEvent: (e) => human.status(`${e.role}: ${e.type}${e.detail ? ` ${e.detail}` : ""}`),
+        });
+      } catch (err) {
+        active = null;
+        ctx.ui.notify(`pi-brain: could not start the agent runtime — ${(err as Error).message}`, "error");
+        return;
+      }
+
+      // Another Pi terminal may already be writing in this repo (spec §21).
+      const lock = acquireRunLock(cwd, { runId, workflow: "feature" });
+      if (!lock.ok) {
+        const proceed = await ctx.ui.confirm(
+          "pi-brain: this repository is already locked",
+          `${describeLock(lock.heldBy)}\n\nRun anyway? Two agents writing at once will conflict.`,
+        );
+        if (!proceed) {
+          active = null;
+          return;
+        }
+      }
 
       const events = {
         emit(event: WorkflowEvent) {
@@ -204,7 +227,7 @@ export default function piBrain(pi: ExtensionAPI): void {
         );
         return;
       }
-      const stack = detectStack(ctx.cwd);
+      const stack = detectStack(repoRootOf(ctx.cwd));
       ctx.ui.notify(
         [
           `stack:      ${stack.primary} (${Math.round(stack.confidence * 100)}%)`,

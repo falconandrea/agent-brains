@@ -9,7 +9,16 @@
  * Read-only workflows do not need a lock.
  */
 
-import { openSync, closeSync, writeSync, readFileSync, rmSync, mkdirSync, existsSync } from "node:fs";
+import {
+  openSync,
+  closeSync,
+  writeSync,
+  readFileSync,
+  rmSync,
+  mkdirSync,
+  existsSync,
+  linkSync,
+} from "node:fs";
 import { join } from "node:path";
 
 export interface LockInfo {
@@ -64,36 +73,70 @@ export function acquireRunLock(
   const path = lockPath(repoRoot);
   mkdirSync(join(repoRoot, ".pi"), { recursive: true });
 
-  const write = (): { ok: true; release: () => void } => {
-    const payload: LockInfo = {
-      ...info,
-      pid: process.pid,
-      startedAt: new Date().toISOString(),
-      repoRoot,
-    };
-    // "wx" fails if the file exists — the atomic bit of this whole thing.
-    const fd = openSync(path, "wx");
+  const payload: LockInfo = {
+    ...info,
+    pid: process.pid,
+    startedAt: new Date().toISOString(),
+    repoRoot,
+  };
+  const body = JSON.stringify(payload, null, 2);
+  const held = (): { ok: false; heldBy: LockInfo; reason: "held" } => ({
+    ok: false,
+    heldBy: readLock(path) ?? payload,
+    reason: "held",
+  });
+  const acquired = (): { ok: true; release: () => void } => ({
+    ok: true,
+    release: () => releaseRunLock(repoRoot, payload.runId),
+  });
+
+  // Written in full before it is visible, so a reader never sees a half-written
+  // lock and mistakes it for a corrupt one.
+  const writeAtomic = (target: string, flags: "wx" | "w"): void => {
+    const fd = openSync(target, flags);
     try {
-      writeSync(fd, JSON.stringify(payload, null, 2));
+      writeSync(fd, body);
     } finally {
       closeSync(fd);
     }
-    return { ok: true, release: () => releaseRunLock(repoRoot, payload.runId) };
   };
 
   try {
-    return write();
+    const staging = `${path}.${process.pid}.tmp`;
+    writeAtomic(staging, "w");
+    try {
+      linkSync(staging, path); // fails if the lock already exists — the atomic bit
+      return acquired();
+    } finally {
+      rmSync(staging, { force: true });
+    }
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
   }
 
-  const held = readLock(path);
-  if (!isStale(held, options.ttlMs)) {
-    return { ok: false, heldBy: held!, reason: "held" };
+  const current = readLock(path);
+  if (!isStale(current, options.ttlMs)) return held();
+
+  // Takeover is read -> remove -> create, which is not atomic: another process
+  // may win the same race. Re-read afterwards and only claim the lock if what
+  // is on disk is actually ours.
+  rmSync(path, { force: true });
+  try {
+    const staging = `${path}.${process.pid}.tmp`;
+    writeAtomic(staging, "w");
+    try {
+      linkSync(staging, path);
+    } finally {
+      rmSync(staging, { force: true });
+    }
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+    return held();
   }
 
-  rmSync(path, { force: true });
-  return write();
+  const after = readLock(path);
+  if (after?.runId !== payload.runId || after.pid !== payload.pid) return held();
+  return acquired();
 }
 
 /** Only removes the lock if it is still ours — never steals someone else's. */

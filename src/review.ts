@@ -105,9 +105,11 @@ export function decideNextRound(
   if (review.verdict === "needs_human")
     return { action: "escalate", reason: "reviewer asked for a human decision" };
 
+  // The issue list wins over the verdict: a model that says "approved" while
+  // listing blocking issues must not end the run. Warnings and suggestions do
+  // not block (spec §11 phase G).
   const blocking = blockingIssues(review);
-  if (review.verdict === "approved" || blocking.length === 0)
-    return { action: "complete", reason: `approved on round ${round}` };
+  if (blocking.length === 0) return { action: "complete", reason: `approved on round ${round}` };
 
   if (round >= maxRounds)
     return { action: "escalate", reason: `max review rounds (${maxRounds}) reached` };

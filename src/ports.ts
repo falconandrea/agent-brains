@@ -45,8 +45,16 @@ export interface GitBaseline {
   repoRoot: string;
   branch: string;
   headSha: string;
-  /** Files already dirty before the workflow started — never attributed to it. */
-  preexistingChanges: string[];
+  /**
+   * Commit object the diff is taken against. When the tree was dirty this is a
+   * `git stash create` commit capturing that dirt, so the workflow's own edits
+   * to already-modified files still show up while the user's do not.
+   */
+  baseCommit: string;
+  /** False when the working tree could not be captured and baseCommit is HEAD. */
+  capturedWorkingTree: boolean;
+  /** Untracked files that existed before the workflow started. */
+  preexistingUntracked: string[];
 }
 
 export interface GitService {

@@ -15,6 +15,7 @@ import { detectStack } from "../src/stack.ts";
 import { resolveVerifyCommands } from "../src/verify.ts";
 import { selectSkills } from "../src/skill-router.ts";
 import { decideNextRound, validateReviewResult, type ReviewResult } from "../src/review.ts";
+import { normalizeConfig, DEFAULT_CONFIG, type PiBrainConfig } from "../src/config.ts";
 import { slugify, splitPlannerOutput } from "../src/workflows/feature.ts";
 
 const PROFILES_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "profiles");
@@ -175,4 +176,53 @@ test("splitPlannerOutput separates PRD from TASKS", () => {
   assert.match(prd, /body/);
   assert.match(tasks, /T1/);
   assert.ok(!prd.includes("T1"));
+});
+
+// --- config validation ------------------------------------------------------
+
+test("non-numeric budgets fall back to the defaults instead of looping forever", () => {
+  const raw = {
+    ...DEFAULT_CONFIG,
+    maxReviewRounds: "many",
+    maxVerifyRetries: -1,
+  } as unknown as PiBrainConfig;
+
+  const { config, warnings } = normalizeConfig(raw);
+
+  assert.equal(config.maxReviewRounds, DEFAULT_CONFIG.maxReviewRounds);
+  assert.equal(config.maxVerifyRetries, DEFAULT_CONFIG.maxVerifyRetries);
+  assert.equal(warnings.length, 2);
+  assert.match(warnings[0]!, /maxReviewRounds/);
+});
+
+test("an absurdly large budget is capped", () => {
+  const { config } = normalizeConfig({ ...DEFAULT_CONFIG, maxReviewRounds: 9999 });
+  assert.equal(config.maxReviewRounds, DEFAULT_CONFIG.maxReviewRounds);
+});
+
+test("autoCommit can never be turned on from config", () => {
+  const { config } = normalizeConfig({ ...DEFAULT_CONFIG, autoCommit: true } as unknown as PiBrainConfig);
+  assert.equal(config.autoCommit, false);
+});
+
+test("a valid config passes through without warnings", () => {
+  const { config, warnings } = normalizeConfig({
+    ...DEFAULT_CONFIG,
+    maxReviewRounds: 3,
+    verify: ["make ci"],
+    verbosity: "verbose",
+  });
+  assert.deepEqual(warnings, []);
+  assert.equal(config.maxReviewRounds, 3);
+  assert.deepEqual(config.verify, ["make ci"]);
+});
+
+test("a review that says approved while listing blocking issues is not approved", () => {
+  const inconsistent: ReviewResult = {
+    verdict: "approved",
+    summary: "lgtm",
+    issues: [{ id: "R9", severity: "blocking", category: "security", problem: "token logged" }],
+  };
+  const decision = decideNextRound(inconsistent, 1, 2, new Set(), true);
+  assert.equal(decision.action, "fix");
 });

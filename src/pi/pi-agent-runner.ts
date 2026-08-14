@@ -145,17 +145,38 @@ export class PiAgentRunner implements AgentRunner {
     });
   }
 
+  /**
+   * A role that names only a provider must still land on that provider — falling
+   * back to Pi's default model would silently give the reviewer the developer's
+   * model and destroy the independent-review property (spec §5.4).
+   */
   #resolveModel(request: AgentRunRequest) {
     const { provider, model } = request.model ?? {};
-    if (!provider || !model) return undefined; // fall back to Pi's own default
-    const resolved = this.#modelRuntime.getModel(provider, model);
-    if (!resolved) {
+    if (!provider && !model) return undefined; // no preference: Pi's default
+
+    if (provider && model) {
+      const resolved = this.#modelRuntime.getModel(provider, model);
+      if (resolved) return resolved;
       throw new Error(
         `role '${request.role}': model '${provider}/${model}' is unknown to Pi. ` +
           `Check the id, or run /login for that provider.`,
       );
     }
-    return resolved;
+
+    if (provider) {
+      const candidates = this.#modelRuntime.getModels(provider);
+      const first = candidates[0];
+      if (first) return first;
+      throw new Error(
+        `role '${request.role}': provider '${provider}' has no usable model. ` +
+          `Run /login ${provider}, or set roles.${request.role}.model in the config.`,
+      );
+    }
+
+    throw new Error(
+      `role '${request.role}': model '${model}' was given without a provider. ` +
+        `Set roles.${request.role}.provider too.`,
+    );
   }
 
   #buildAskUserTool(): ToolDefinition {

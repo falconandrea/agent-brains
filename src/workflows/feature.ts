@@ -75,7 +75,7 @@ export async function runFeatureWorkflow(
     model: modelLabel(plannerCfg.provider, plannerCfg.model),
   });
 
-  const slug = slugify(description);
+  const slug = featureSlug(deps.cwd, description);
   const featureDir = join(deps.cwd, ".ai", "features", slug);
 
   const plan = await deps.agents.run({
@@ -90,17 +90,18 @@ export async function runFeatureWorkflow(
     signal: deps.signal,
   });
   events.emit({ type: "agent.completed", runId, role: "planner" });
+  if (plan.aborted || deps.signal?.aborted) return { status: "cancelled", at: "planning" };
 
+  // The planner is read-only by design: it returns the documents as text and the
+  // orchestrator writes them. Always write this run's output — reusing files
+  // left by an earlier, possibly rejected, run would hand the developer a plan
+  // the user never approved.
   const prdPath = join(featureDir, `prd-${slug}.md`);
   const tasksPath = join(featureDir, `tasks-${slug}.md`);
-  if (!existsSync(prdPath) || !existsSync(tasksPath)) {
-    // The planner is read-only by design, so it returns the docs as text and
-    // the orchestrator is what writes them.
-    mkdirSync(featureDir, { recursive: true });
-    const { prd, tasks } = splitPlannerOutput(plan.text);
-    writeFileSync(prdPath, prd, "utf8");
-    writeFileSync(tasksPath, tasks, "utf8");
-  }
+  mkdirSync(featureDir, { recursive: true });
+  const { prd, tasks } = splitPlannerOutput(plan.text);
+  writeFileSync(prdPath, `${descriptionMarker(description)}\n${prd}`, "utf8");
+  writeFileSync(tasksPath, tasks, "utf8");
 
   const approved = await human.confirm({
     message: `Approve the plan for '${slug}' and start implementation?`,
@@ -119,14 +120,13 @@ export async function runFeatureWorkflow(
   // that mentions migrations pulls the schema in even if the one-line request
   // never said "database".
   const taskText = `${description}\n${read(tasksPath)}`;
-  const devContext = routeContext({ cwd: deps.cwd, role: "developer", task: taskText, stack }).files;
-  const reviewContext = routeContext({
-    cwd: deps.cwd,
-    role: "reviewer",
-    task: taskText,
-    stack,
-    maxChars: 20_000,
-  }).files;
+  // Re-read every round: the developer may have edited the schema or the design
+  // system, and the reviewer must not be handed a stale copy alongside a diff
+  // that contains the new one.
+  const devContext = () =>
+    routeContext({ cwd: deps.cwd, role: "developer", task: taskText, stack }).files;
+  const reviewContext = () =>
+    routeContext({ cwd: deps.cwd, role: "reviewer", task: taskText, stack, maxChars: 20_000 }).files;
 
   // Two independent budgets: a run that keeps failing its own test suite must
   // not silently burn the review budget and finish without ever being reviewed.
@@ -154,7 +154,7 @@ export async function runFeatureWorkflow(
       role: "developer",
       model: modelLabel(developerCfg.provider, developerCfg.model),
     });
-    await deps.agents.run({
+    const devRun = await deps.agents.run({
       runId,
       role: "developer",
       cwd: deps.cwd,
@@ -166,10 +166,11 @@ export async function runFeatureWorkflow(
       }),
       model: developerCfg,
       skills: devSkills.skills,
-      contextFiles: devContext,
+      contextFiles: devContext(),
       signal: deps.signal,
     });
     events.emit({ type: "agent.completed", runId, role: "developer" });
+    if (devRun.aborted || deps.signal?.aborted) return { status: "cancelled", at: "development" };
 
     // deterministic verification BEFORE spending reviewer tokens (§24)
     events.emit({ type: "phase.started", runId, phase: "verify" });
@@ -229,10 +230,11 @@ export async function runFeatureWorkflow(
       skills: revSkills.skills,
       readOnly: reviewerCfg.readOnly ?? true,
       resultTool: REVIEW_TOOL,
-      contextFiles: reviewContext,
+      contextFiles: reviewContext(),
       signal: deps.signal,
     });
     events.emit({ type: "agent.completed", runId, role: "reviewer" });
+    if (raw.aborted || deps.signal?.aborted) return { status: "cancelled", at: `review #${reviewRound}` };
 
     const validated = validateReviewResult(raw.structured);
     if (!validated.ok) {
@@ -312,6 +314,28 @@ const modelLabel = (provider?: string, model?: string): string =>
   `${provider ?? "default"}/${model ?? "default"}`;
 
 const tail = (s: string, lines = 40): string => s.split("\n").slice(-lines).join("\n");
+
+const DESCRIPTION_MARKER = "<!-- pi-brain:feature ";
+
+const descriptionMarker = (description: string): string =>
+  `${DESCRIPTION_MARKER}${JSON.stringify(description)} -->`;
+
+/**
+ * Two different requests can share the first six slug words. Reusing the
+ * directory would silently overwrite an unrelated feature's documents, so a
+ * collision with a *different* description gets a numeric suffix.
+ */
+export function featureSlug(cwd: string, description: string): string {
+  const base = slugify(description);
+  const marker = descriptionMarker(description);
+  for (let n = 1; n < 100; n += 1) {
+    const slug = n === 1 ? base : `${base}-${n}`;
+    const prd = join(cwd, ".ai", "features", slug, `prd-${slug}.md`);
+    if (!existsSync(prd)) return slug;
+    if (read(prd).startsWith(marker)) return slug; // same feature, resumed
+  }
+  return `${base}-${Date.now().toString(36)}`;
+}
 
 export function slugify(description: string): string {
   return description
