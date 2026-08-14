@@ -119,7 +119,14 @@ export default function piBrain(pi: ExtensionAPI): void {
       }
 
       // Another Pi terminal may already be writing in this repo (spec §21).
-      const lock = acquireRunLock(cwd, { runId, workflow: "feature" });
+      let lock;
+      try {
+        lock = acquireRunLock(cwd, { runId, workflow: "feature" });
+      } catch (err) {
+        active = null;
+        ctx.ui.notify(`pi-brain: cannot create the run lock in ${cwd}/.pi — ${(err as Error).message}`, "error");
+        return;
+      }
       if (!lock.ok) {
         const proceed = await ctx.ui.confirm(
           "pi-brain: this repository is already locked",

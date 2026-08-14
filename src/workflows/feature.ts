@@ -100,8 +100,9 @@ export async function runFeatureWorkflow(
   const tasksPath = join(featureDir, `tasks-${slug}.md`);
   mkdirSync(featureDir, { recursive: true });
   const { prd, tasks } = splitPlannerOutput(plan.text);
-  writeFileSync(prdPath, `${descriptionMarker(description)}\n${prd}`, "utf8");
-  writeFileSync(tasksPath, tasks, "utf8");
+  const marker = descriptionMarker(description);
+  writeFileSync(prdPath, `${marker}\n${prd}`, "utf8");
+  writeFileSync(tasksPath, `${marker}\n${tasks}`, "utf8");
 
   const approved = await human.confirm({
     message: `Approve the plan for '${slug}' and start implementation?`,
@@ -252,6 +253,16 @@ export async function runFeatureWorkflow(
       round: reviewRound,
     });
 
+    if (diff.dirtySubmodules.length > 0) {
+      return {
+        status: "needs_human",
+        reason:
+          `dirty submodules (${diff.dirtySubmodules.join(", ")}) — their contents cannot be ` +
+          `included in the diff, so the reviewer never saw them. Review those by hand.`,
+        review: lastReview,
+      };
+    }
+
     const decision = decideNextRound(
       lastReview,
       reviewRound,
@@ -330,9 +341,15 @@ export function featureSlug(cwd: string, description: string): string {
   const marker = descriptionMarker(description);
   for (let n = 1; n < 100; n += 1) {
     const slug = n === 1 ? base : `${base}-${n}`;
-    const prd = join(cwd, ".ai", "features", slug, `prd-${slug}.md`);
-    if (!existsSync(prd)) return slug;
-    if (read(prd).startsWith(marker)) return slug; // same feature, resumed
+    const dir = join(cwd, ".ai", "features", slug);
+    // EVERY document we would write must be absent or ours. Checking only the
+    // PRD would let a hand-written task file be overwritten.
+    const documents = [join(dir, `prd-${slug}.md`), join(dir, `tasks-${slug}.md`)];
+    const existing = documents.filter((f) => existsSync(f));
+    if (existing.length === 0) return slug; // free
+    if (existing.length === documents.length && existing.every((f) => read(f).startsWith(marker))) {
+      return slug; // our own earlier run of this same feature
+    }
   }
   return `${base}-${Date.now().toString(36)}`;
 }

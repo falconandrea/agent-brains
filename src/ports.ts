@@ -46,21 +46,21 @@ export interface GitBaseline {
   branch: string;
   headSha: string;
   /**
-   * Commit object the diff is taken against. When the tree was dirty this is a
-   * `git stash create` commit capturing that dirt, so the workflow's own edits
-   * to already-modified files still show up while the user's do not.
+   * Commit object capturing the entire working tree at baseline, untracked
+   * files included. The diff is snapshot-to-snapshot, so pre-existing dirt
+   * cancels out on both sides and only the run's own changes remain.
    */
   baseCommit: string;
-  /** False when the working tree could not be captured and baseCommit is HEAD. */
-  capturedWorkingTree: boolean;
-  /** Untracked files that existed before the workflow started. */
-  preexistingUntracked: string[];
 }
 
 export interface GitService {
   baseline(cwd: string): Promise<GitBaseline>;
-  /** Diff from the baseline, excluding pre-existing changes where practical. */
-  diffSince(baseline: GitBaseline): Promise<{ patch: string; files: string[] }>;
+  diffSince(baseline: GitBaseline): Promise<{
+    patch: string;
+    files: string[];
+    /** Submodules with modified contents — their inner diff is NOT in `patch`. */
+    dirtySubmodules: string[];
+  }>;
 }
 
 export interface WorkflowEventSink {

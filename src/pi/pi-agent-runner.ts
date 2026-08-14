@@ -60,6 +60,9 @@ export class PiAgentRunner implements AgentRunner {
   }
 
   async run(request: AgentRunRequest): Promise<AgentRunResult> {
+    if (request.signal?.aborted) {
+      return { role: request.role, text: "", aborted: true };
+    }
     let structured: unknown;
 
     const customTools: ToolDefinition[] = [];
@@ -77,7 +80,7 @@ export class PiAgentRunner implements AgentRunner {
       sessionManager: SessionManager.inMemory(request.cwd),
       modelRuntime: this.#modelRuntime,
       resourceLoader: this.#buildLoader(request),
-      model: this.#resolveModel(request),
+      model: await this.#resolveModel(request),
       thinkingLevel: request.model?.thinking,
       customTools,
       tools: resolveTools(request, customTools),
@@ -107,6 +110,15 @@ export class PiAgentRunner implements AgentRunner {
 
     const onAbort = (): void => void session.abort();
     request.signal?.addEventListener("abort", onAbort, { once: true });
+
+    // The signal may have fired while the session was being created, before the
+    // listener existed — adding a listener to an already-aborted signal does
+    // nothing, so check once more before spending a single token.
+    if (request.signal?.aborted) {
+      request.signal.removeEventListener("abort", onAbort);
+      session.dispose();
+      return { role: request.role, text: "", aborted: true };
+    }
 
     try {
       await session.prompt(request.prompt);
@@ -150,7 +162,7 @@ export class PiAgentRunner implements AgentRunner {
    * back to Pi's default model would silently give the reviewer the developer's
    * model and destroy the independent-review property (spec §5.4).
    */
-  #resolveModel(request: AgentRunRequest) {
+  async #resolveModel(request: AgentRunRequest) {
     const { provider, model } = request.model ?? {};
     if (!provider && !model) return undefined; // no preference: Pi's default
 
@@ -164,11 +176,12 @@ export class PiAgentRunner implements AgentRunner {
     }
 
     if (provider) {
-      const candidates = this.#modelRuntime.getModels(provider);
-      const first = candidates[0];
+      // getModels() is the catalogue; only getAvailable() reflects working auth.
+      const usable = await this.#modelRuntime.getAvailable(provider);
+      const first = usable[0];
       if (first) return first;
       throw new Error(
-        `role '${request.role}': provider '${provider}' has no usable model. ` +
+        `role '${request.role}': provider '${provider}' has no authenticated model. ` +
           `Run /login ${provider}, or set roles.${request.role}.model in the config.`,
       );
     }

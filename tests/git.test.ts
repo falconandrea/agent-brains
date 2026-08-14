@@ -74,7 +74,6 @@ test("the workflow's edit to an already-dirty file is included, the user's is no
   // the user was mid-edit when /feature started
   writeFileSync(join(dir, "existing.txt"), "one\nUSER EDIT\n");
   const baseline = await git.baseline(dir);
-  assert.equal(baseline.capturedWorkingTree, true);
 
   // the agent then appends to that same file
   writeFileSync(join(dir, "existing.txt"), "one\nUSER EDIT\nAGENT EDIT\n");
@@ -90,7 +89,6 @@ test("pre-existing untracked files stay out, new ones come in", async () => {
   writeFileSync(join(dir, "scratch", "private.txt"), "my notes\n");
 
   const baseline = await git.baseline(dir);
-  assert.ok(baseline.preexistingUntracked.includes("scratch/private.txt"));
 
   writeFileSync(join(dir, "created-by-agent.txt"), "agent output\n");
 
@@ -120,8 +118,6 @@ test("filenames with trailing spaces and newlines survive", async () => {
 test("a clean tree diffs against HEAD", async () => {
   const dir = initRepo();
   const baseline = await git.baseline(dir);
-  assert.equal(baseline.capturedWorkingTree, false);
-  assert.equal(baseline.baseCommit, baseline.headSha);
 
   const { patch, files } = await git.diffSince(baseline);
   assert.deepEqual(files, []);
@@ -135,4 +131,49 @@ test("a git failure surfaces instead of degrading to an empty patch", async () =
     () => git.diffSince({ ...baseline, baseCommit: "0000000000000000000000000000000000000000" }),
     /git diff .* failed/,
   );
+});
+
+test("a pre-existing untracked file stays out even after the agent stages it", async () => {
+  const dir = initRepo();
+  writeFileSync(join(dir, "private-notes.txt"), "SECRET USER NOTES\n");
+
+  const baseline = await git.baseline(dir);
+
+  // the agent runs `git add -A` as part of its work — the file becomes tracked
+  execFileSync("git", ["add", "-A"], { cwd: dir });
+  writeFileSync(join(dir, "agent-file.txt"), "agent output\n");
+
+  const { patch, files } = await git.diffSince(baseline);
+  assert.ok(!patch.includes("SECRET USER NOTES"), "content must never reach the reviewer");
+  assert.ok(!files.includes("private-notes.txt"));
+  assert.ok(files.includes("agent-file.txt"));
+});
+
+test("a conflicted index does not silently fall back to a HEAD diff", async () => {
+  const dir = initRepo();
+  const run = (...args: string[]) => execFileSync("git", args, { cwd: dir });
+
+  // build a real merge conflict
+  run("checkout", "-q", "-b", "other");
+  writeFileSync(join(dir, "existing.txt"), "other side\n");
+  run("commit", "-qam", "other");
+  run("checkout", "-q", "main");
+  writeFileSync(join(dir, "existing.txt"), "main side\n");
+  run("commit", "-qam", "main");
+  try {
+    run("merge", "other");
+  } catch {
+    // expected: conflict
+  }
+
+  const baseline = await git.baseline(dir);
+  const { patch } = await git.diffSince(baseline);
+  assert.equal(patch, "", "a conflicted tree that nobody touched yields no diff");
+});
+
+test("dirty submodule contents are reported, since they cannot be diffed inline", async () => {
+  const dir = initRepo();
+  const baseline = await git.baseline(dir);
+  const { dirtySubmodules } = await git.diffSince(baseline);
+  assert.deepEqual(dirtySubmodules, [], "no submodules here");
 });

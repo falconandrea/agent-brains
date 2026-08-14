@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { acquireRunLock, releaseRunLock, lockPath, isStale } from "../src/run-lock.ts";
+import { readFileSync } from "node:fs";
 
 const repo = (): string => mkdtempSync(join(tmpdir(), "pi-brain-lock-"));
 
@@ -67,4 +68,48 @@ test("release never steals a lock held by another run", () => {
 
   releaseRunLock(dir, "some-other-run");
   assert.equal(existsSync(lockPath(dir)), true, "still held by run-1");
+});
+
+test("a takeover in progress is not overridden by a second one", () => {
+  const dir = repo();
+  mkdirSync(join(dir, ".pi"), { recursive: true });
+  // a stale lock both processes would want to take over
+  writeFileSync(
+    lockPath(dir),
+    JSON.stringify({
+      pid: 999_999_999,
+      runId: "zombie",
+      workflow: "feature",
+      startedAt: new Date().toISOString(),
+      repoRoot: dir,
+    }),
+  );
+  // process A is inside the critical section right now
+  writeFileSync(`${lockPath(dir)}.takeover`, "");
+
+  const b = acquireRunLock(dir, { runId: "run-b", workflow: "feature" });
+  assert.equal(b.ok, false, "B must not take over while A is mid-swap");
+});
+
+test("the winner of a takeover owns the lock file", () => {
+  const dir = repo();
+  mkdirSync(join(dir, ".pi"), { recursive: true });
+  writeFileSync(
+    lockPath(dir),
+    JSON.stringify({
+      pid: 999_999_999,
+      runId: "zombie",
+      workflow: "feature",
+      startedAt: new Date().toISOString(),
+      repoRoot: dir,
+    }),
+  );
+
+  const a = acquireRunLock(dir, { runId: "run-a", workflow: "feature" });
+  assert.equal(a.ok, true);
+  assert.equal(JSON.parse(readFileSync(lockPath(dir), "utf8")).runId, "run-a");
+  assert.equal(existsSync(`${lockPath(dir)}.takeover`), false, "marker cleaned up");
+
+  const b = acquireRunLock(dir, { runId: "run-b", workflow: "feature" });
+  assert.equal(b.ok, false, "the fresh lock is respected");
 });

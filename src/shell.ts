@@ -5,14 +5,23 @@
  * renames, deletions, odd filenames and pre-existing dirt all have to come out
  * right, and a git failure must never silently degrade into an empty patch.
  *
- * Strategy: at baseline, capture the working tree as a real commit object with
- * `git stash create` (non-destructive — it writes objects, never touches the
- * tree or the index). Diffing against that commit gives, for free and correctly:
- * only the workflow's own changes to already-dirty files, proper rename and
- * delete records, and no filename parsing at all for the patch itself.
+ * Strategy: snapshot the whole working tree — tracked modifications AND
+ * untracked files — into a commit object, twice: once at baseline, once when
+ * the diff is requested. Diffing snapshot-to-snapshot gives, correctly and for
+ * free: only the workflow's own changes, proper rename and delete records, no
+ * filename parsing, and pre-existing dirt cancelled out on both sides
+ * (including an untracked file the workflow later `git add`s).
+ *
+ * Snapshotting uses a throwaway index file via GIT_INDEX_FILE, so the user's
+ * real index and working tree are never touched. `git add -A` there honours
+ * .gitignore, so ignored paths stay out.
  */
 
 import { execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import type { CommandResult, GitBaseline, GitService, VerifyRunner } from "./ports.ts";
 import type { VerifyCommand } from "./verify.ts";
@@ -28,24 +37,16 @@ interface ExecFailure {
   message: string;
 }
 
-async function git(cwd: string, args: string[]): Promise<string> {
+async function git(
+  cwd: string,
+  args: string[],
+  env?: NodeJS.ProcessEnv,
+): Promise<string> {
   try {
-    const { stdout } = await exec("git", args, { cwd, maxBuffer: MAX_BUFFER });
+    const { stdout } = await exec("git", args, { cwd, maxBuffer: MAX_BUFFER, env });
     return stdout;
   } catch (err) {
     const e = err as ExecFailure;
-    throw new Error(`git ${args.join(" ")} failed (${e.code}): ${e.stderr || e.message}`);
-  }
-}
-
-/** `git diff --no-index` exits 1 when there IS a diff; anything else is an error. */
-async function gitDiffNoIndex(cwd: string, args: string[]): Promise<string> {
-  try {
-    const { stdout } = await exec("git", args, { cwd, maxBuffer: MAX_BUFFER });
-    return stdout;
-  } catch (err) {
-    const e = err as ExecFailure;
-    if (e.code === 1) return e.stdout ?? "";
     throw new Error(`git ${args.join(" ")} failed (${e.code}): ${e.stderr || e.message}`);
   }
 }
@@ -53,67 +54,91 @@ async function gitDiffNoIndex(cwd: string, args: string[]): Promise<string> {
 /** NUL-separated output: the only form that survives newlines and quoting in paths. */
 const splitZ = (out: string): string[] => out.split("\0").filter((s) => s !== "");
 
+/**
+ * Commit object for the current working tree, built in a scratch index so the
+ * user's index is untouched. Includes untracked, non-ignored files.
+ */
+async function snapshot(repoRoot: string, label: string): Promise<string> {
+  const indexFile = join(tmpdir(), `pi-brain-index-${process.pid}-${randomUUID()}`);
+  const env = { ...process.env, GIT_INDEX_FILE: indexFile };
+  try {
+    let head: string | null = null;
+    try {
+      head = (await git(repoRoot, ["rev-parse", "HEAD"])).trim();
+    } catch {
+      head = null; // repository with no commits yet
+    }
+
+    await git(repoRoot, head ? ["read-tree", head] : ["read-tree", "--empty"], env);
+    await git(repoRoot, ["add", "-A", "--", "."], env);
+    const tree = (await git(repoRoot, ["write-tree"], env)).trim();
+
+    const commitArgs = ["commit-tree", tree, "-m", `pi-brain ${label}`];
+    if (head) commitArgs.push("-p", head);
+    return (
+      await git(repoRoot, commitArgs, {
+        ...env,
+        GIT_AUTHOR_NAME: "pi-brain",
+        GIT_AUTHOR_EMAIL: "pi-brain@localhost",
+        GIT_COMMITTER_NAME: "pi-brain",
+        GIT_COMMITTER_EMAIL: "pi-brain@localhost",
+      })
+    ).trim();
+  } finally {
+    rmSync(indexFile, { force: true });
+  }
+}
+
+/** Submodules whose contents changed: their inner diff never reaches a reviewer. */
+async function dirtySubmodules(repoRoot: string): Promise<string[]> {
+  try {
+    const out = await git(repoRoot, ["submodule", "status", "--recursive"]);
+    return out
+      .split("\n")
+      .filter((line) => line.trim() !== "")
+      .filter((line) => line.startsWith("+") || line.startsWith("U"))
+      .map((line) => line.trim().split(/\s+/)[1] ?? line.trim());
+  } catch {
+    return [];
+  }
+}
+
 export class RealGitService implements GitService {
   async baseline(cwd: string): Promise<GitBaseline> {
     const repoRoot = (await git(cwd, ["rev-parse", "--show-toplevel"])).trim();
     const branch = (await git(repoRoot, ["rev-parse", "--abbrev-ref", "HEAD"])).trim();
     const headSha = (await git(repoRoot, ["rev-parse", "HEAD"])).trim();
-    const preexistingUntracked = splitZ(
-      await git(repoRoot, ["ls-files", "--others", "--exclude-standard", "-z"]),
-    );
 
-    // Empty output means the tree was clean. A failure (no identity configured,
-    // unusual repo state) falls back to HEAD: the diff then over-reports the
-    // user's own dirt, which is safe, rather than hiding workflow changes.
-    let baseCommit = headSha;
-    let capturedWorkingTree = false;
-    try {
-      const wip = (await git(repoRoot, ["stash", "create"])).trim();
-      if (wip !== "") {
-        baseCommit = wip;
-        capturedWorkingTree = true;
-      }
-    } catch {
-      // keep headSha
-    }
+    // A failure here is fatal on purpose: silently falling back to HEAD would
+    // hand the reviewer the user's pre-existing work as if the run had made it.
+    const baseCommit = await snapshot(repoRoot, "baseline");
 
-    return {
-      repoRoot,
-      branch,
-      headSha,
-      baseCommit,
-      capturedWorkingTree,
-      preexistingUntracked,
-    };
+    return { repoRoot, branch, headSha, baseCommit };
   }
 
-  async diffSince(baseline: GitBaseline): Promise<{ patch: string; files: string[] }> {
+  async diffSince(
+    baseline: GitBaseline,
+  ): Promise<{ patch: string; files: string[]; dirtySubmodules: string[] }> {
     const root = baseline.repoRoot;
+    const current = await snapshot(root, "current");
 
-    // Tracked changes: one diff, rename detection on, no pathspec to mangle.
-    const trackedFiles = splitZ(
-      await git(root, ["diff", "--name-only", "--find-renames", "-z", baseline.baseCommit, "--"]),
+    const files = splitZ(
+      await git(root, [
+        "diff",
+        "--name-only",
+        "--find-renames",
+        "-z",
+        baseline.baseCommit,
+        current,
+        "--",
+      ]),
     );
-    const parts: string[] = [];
-    if (trackedFiles.length > 0) {
-      parts.push(await git(root, ["diff", "--find-renames", baseline.baseCommit, "--"]));
-    }
+    const patch =
+      files.length > 0
+        ? await git(root, ["diff", "--find-renames", baseline.baseCommit, current, "--"])
+        : "";
 
-    // Untracked files the workflow created. `git diff <commit>` cannot see them,
-    // so each is diffed against /dev/null explicitly.
-    const preexisting = new Set(baseline.preexistingUntracked);
-    const newUntracked = splitZ(
-      await git(root, ["ls-files", "--others", "--exclude-standard", "-z"]),
-    ).filter((f) => !preexisting.has(f));
-
-    for (const file of newUntracked) {
-      parts.push(await gitDiffNoIndex(root, ["diff", "--no-index", "--", "/dev/null", file]));
-    }
-
-    return {
-      patch: parts.filter((p) => p !== "").join("\n"),
-      files: [...trackedFiles, ...newUntracked],
-    };
+    return { patch, files, dirtySubmodules: await dirtySubmodules(root) };
   }
 }
 

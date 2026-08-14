@@ -66,19 +66,13 @@ class FakeGit implements GitService {
   patches = ["diff-1", "diff-2", "diff-3"];
   calls = 0;
   async baseline(cwd: string): Promise<GitBaseline> {
-    return {
-      repoRoot: cwd,
-      branch: "main",
-      headSha: "abc123",
-      baseCommit: "abc123",
-      capturedWorkingTree: false,
-      preexistingUntracked: [],
-    };
+    return { repoRoot: cwd, branch: "main", headSha: "abc123", baseCommit: "snap-base" };
   }
-  async diffSince(): Promise<{ patch: string; files: string[] }> {
+  dirtySubmodules: string[] = [];
+  async diffSince(): Promise<{ patch: string; files: string[]; dirtySubmodules: string[] }> {
     const patch = this.patches[Math.min(this.calls, this.patches.length - 1)]!;
     this.calls += 1;
-    return { patch, files: ["src/a.ts"] };
+    return { patch, files: ["src/a.ts"], dirtySubmodules: this.dirtySubmodules };
   }
 }
 
@@ -280,13 +274,20 @@ test("abort before the first developer run cancels cleanly", async () => {
 });
 
 test("a plan from an earlier pi-brain run on the same feature is overwritten", async () => {
-  const { deps, agents, cwd } = harness((req) =>
-    req.role === "planner"
-      ? plannerResult
-      : req.role === "developer"
-        ? devResult
-        : reviewOf({ verdict: "approved", summary: "ok", issues: [] }),
-  );
+  let plannerCalls = 0;
+  const { deps, agents, cwd } = harness((req) => {
+    if (req.role === "planner") {
+      plannerCalls += 1;
+      // the two runs must be distinguishable, or "overwritten" proves nothing
+      return {
+        role: "planner",
+        text: `## PRD\nPlan revision ${plannerCalls}.\n\n## TASKS\n- T${plannerCalls} do it\n`,
+        aborted: false,
+      };
+    }
+    if (req.role === "developer") return devResult;
+    return reviewOf({ verdict: "approved", summary: "ok", issues: [] });
+  });
 
   // first run: the user rejects the plan
   const human = deps.human as FakeHuman;
@@ -294,16 +295,20 @@ test("a plan from an earlier pi-brain run on the same feature is overwritten", a
   await runFeatureWorkflow(deps, "add invitations", "run-first");
 
   const dir = join(cwd, ".ai/features/add-invitations");
-  const rejected = readFileSync(join(dir, "prd-add-invitations.md"), "utf8");
-  assert.match(rejected, /Build the thing/);
+  assert.match(readFileSync(join(dir, "prd-add-invitations.md"), "utf8"), /Plan revision 1/);
 
-  // second run of the SAME feature: same directory, fresh content
+  // second run of the SAME feature: same directory, second plan wins
   human.approve = true;
   await runFeatureWorkflow(deps, "add invitations", "run-second");
 
   assert.ok(!existsSync(join(cwd, ".ai/features/add-invitations-2")), "must reuse its own directory");
+  const prd = readFileSync(join(dir, "prd-add-invitations.md"), "utf8");
+  assert.match(prd, /Plan revision 2/);
+  assert.ok(!prd.includes("Plan revision 1"), "the rejected plan must be gone");
+
   const developer = agents.calls.find((c) => c.role === "developer")!;
-  assert.match(developer.prompt, /T1 do it/);
+  assert.match(developer.prompt, /T2 do it/);
+  assert.ok(!developer.prompt.includes("T1 do it"));
 });
 
 test("a plan file pi-brain did not write is never clobbered", async () => {
@@ -323,6 +328,41 @@ test("a plan file pi-brain did not write is never clobbered", async () => {
 
   assert.match(readFileSync(join(dir, "prd-add-invitations.md"), "utf8"), /hand-written/);
   assert.ok(existsSync(join(cwd, ".ai/features/add-invitations-2")));
+});
+
+test("a hand-written tasks file is not clobbered when the PRD is absent", async () => {
+  const { deps, cwd } = harness((req) =>
+    req.role === "planner"
+      ? plannerResult
+      : req.role === "developer"
+        ? devResult
+        : reviewOf({ verdict: "approved", summary: "ok", issues: [] }),
+  );
+
+  const dir = join(cwd, ".ai/features/add-invitations");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "tasks-add-invitations.md"), "- MY OWN TASK LIST\n");
+
+  await runFeatureWorkflow(deps, "add invitations", "run-partial");
+
+  assert.match(readFileSync(join(dir, "tasks-add-invitations.md"), "utf8"), /MY OWN TASK LIST/);
+  assert.ok(existsSync(join(cwd, ".ai/features/add-invitations-2")));
+});
+
+test("dirty submodules stop the run instead of approving unseen code", async () => {
+  const { deps } = harness((req) =>
+    req.role === "planner"
+      ? plannerResult
+      : req.role === "developer"
+        ? devResult
+        : reviewOf({ verdict: "approved", summary: "ok", issues: [] }),
+  );
+  (deps.git as FakeGit).dirtySubmodules = ["vendor/child"];
+
+  const outcome = await runFeatureWorkflow(deps, "add invitations", "run-submodule");
+
+  assert.equal(outcome.status, "needs_human");
+  assert.match((outcome as { reason: string }).reason, /vendor\/child/);
 });
 
 test("two different features that slugify the same get separate directories", async () => {

@@ -18,6 +18,7 @@ import {
   mkdirSync,
   existsSync,
   linkSync,
+  statSync,
 } from "node:fs";
 import { join } from "node:path";
 
@@ -114,14 +115,28 @@ export function acquireRunLock(
     if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
   }
 
-  const current = readLock(path);
-  if (!isStale(current, options.ttlMs)) return held();
+  if (!isStale(readLock(path), options.ttlMs)) return held();
 
-  // Takeover is read -> remove -> create, which is not atomic: another process
-  // may win the same race. Re-read afterwards and only claim the lock if what
-  // is on disk is actually ours.
-  rmSync(path, { force: true });
+  // Taking over a stale lock is read -> remove -> create, which is not atomic:
+  // two processes could both decide to take over, and the loser would delete
+  // the winner's fresh lock. So the takeover itself runs under its own O_EXCL
+  // file — exactly one process can be inside this section at a time.
+  const takeoverPath = `${path}.takeover`;
   try {
+    const fd = openSync(takeoverPath, "wx");
+    closeSync(fd);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+    // Someone else is mid-takeover, or died holding this marker.
+    if (ageMs(takeoverPath) < TAKEOVER_TIMEOUT_MS) return held();
+    rmSync(takeoverPath, { force: true });
+    return acquireRunLock(repoRoot, info, options);
+  }
+
+  try {
+    // Re-check inside the critical section: the winner may have just replaced it.
+    if (!isStale(readLock(path), options.ttlMs)) return held();
+    rmSync(path, { force: true });
     const staging = `${path}.${process.pid}.tmp`;
     writeAtomic(staging, "w");
     try {
@@ -129,14 +144,24 @@ export function acquireRunLock(
     } finally {
       rmSync(staging, { force: true });
     }
+    return acquired();
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
     return held();
+  } finally {
+    rmSync(takeoverPath, { force: true });
   }
+}
 
-  const after = readLock(path);
-  if (after?.runId !== payload.runId || after.pid !== payload.pid) return held();
-  return acquired();
+/** A takeover marker older than this belonged to a process that died mid-swap. */
+const TAKEOVER_TIMEOUT_MS = 30_000;
+
+function ageMs(path: string): number {
+  try {
+    return Date.now() - statSync(path).mtimeMs;
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
 }
 
 /** Only removes the lock if it is still ours — never steals someone else's. */
