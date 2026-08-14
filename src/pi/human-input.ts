@@ -1,35 +1,26 @@
 /**
  * HumanInput backed by Pi's TUI (spec §5.1, §15).
  *
- * Two modes, because of the open risk documented in docs/pi-brain/SPIKE.md:
+ * NOTE: Pi's UI API is POSITIONAL, not object-based — `confirm(title, message)`,
+ * `select(title, options)`, `input(title, placeholder)`, `setStatus(key, text)`
+ * — and select/input/editor return `undefined` when the user dismisses the
+ * dialog. Verified against @earendil-works/pi-coding-agent 0.84.2 types.
  *
- *  - "live": ask immediately via ctx.ui.*, even while a child agent is running.
- *    Requires the spike to prove that a parent ctx stays usable mid-child-run.
- *  - "deferred": questions are queued and flushed at the next phase boundary,
- *    the child gets a "decide and state your assumption" answer. Always safe.
+ * Two modes, because of the open risk in docs/pi-brain/SPIKE.md:
  *
- * The mode is chosen once, at construction, so workflow code never cares.
+ *  - "live": ask immediately, even while a child agent is running. Requires the
+ *    spike to prove a parent ctx stays usable mid-child-run.
+ *  - "deferred": queue the question, tell the child to assume and continue,
+ *    flush at the next phase boundary. Always safe.
  */
 
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type {
   ConfirmQuestion,
   HumanInput,
   InputQuestion,
   SelectQuestion,
 } from "../ports.ts";
-
-/** Minimal surface we need from Pi's `ctx` — keeps this file honest. */
-export interface PiUiContext {
-  hasUI: boolean;
-  ui: {
-    confirm(opts: unknown): Promise<boolean>;
-    select(opts: unknown): Promise<string>;
-    input(opts: unknown): Promise<string>;
-    editor(opts: unknown): Promise<string>;
-    notify(message: string): void;
-    setStatus?(message: string): void;
-  };
-}
 
 export interface DeferredQuestion {
   question: string;
@@ -38,16 +29,26 @@ export interface DeferredQuestion {
   askedAt: string;
 }
 
+export class UserDismissedError extends Error {
+  constructor(what: string) {
+    super(`the user dismissed the ${what} dialog`);
+    this.name = "UserDismissedError";
+  }
+}
+
+const STATUS_KEY = "pi-brain";
+
 export class PiHumanInput implements HumanInput {
   readonly #deferred: DeferredQuestion[] = [];
-  readonly #liveCtx: () => PiUiContext;
+  readonly #liveCtx: () => ExtensionContext;
   readonly #mode: "live" | "deferred";
 
   /**
-   * @param liveCtx MUST return the *currently live* ctx, not a captured one —
-   *   Pi's docs warn that captured contexts go stale after a session replacement.
+   * @param liveCtx MUST return the *currently live* ctx, not one captured
+   *   earlier — Pi's docs warn captured contexts go stale after a session
+   *   replacement.
    */
-  constructor(liveCtx: () => PiUiContext, mode: "live" | "deferred" = "live") {
+  constructor(liveCtx: () => ExtensionContext, mode: "live" | "deferred" = "live") {
     this.#liveCtx = liveCtx;
     this.#mode = mode;
   }
@@ -55,33 +56,32 @@ export class PiHumanInput implements HumanInput {
   async confirm(q: ConfirmQuestion): Promise<boolean> {
     const ctx = this.#liveCtx();
     if (!ctx.hasUI) return q.defaultValue ?? false;
-    return ctx.ui.confirm({
-      message: q.message,
-      description: q.detail,
-      defaultValue: q.defaultValue ?? false,
-    });
+    return ctx.ui.confirm(q.message, q.detail ?? "");
   }
 
   async select(q: SelectQuestion): Promise<string> {
     const ctx = this.#liveCtx();
     if (!ctx.hasUI) return q.options[0]!.value;
-    return ctx.ui.select({ message: q.message, options: q.options });
+    const labels = q.options.map((o) => o.label);
+    const picked = await ctx.ui.select(q.message, labels);
+    if (picked === undefined) throw new UserDismissedError("select");
+    const match = q.options.find((o) => o.label === picked);
+    return match ? match.value : picked;
   }
 
   async input(q: InputQuestion): Promise<string> {
     const ctx = this.#liveCtx();
     if (!ctx.hasUI) return q.defaultValue ?? "";
-    return ctx.ui.input({
-      message: q.message,
-      placeholder: q.placeholder,
-      defaultValue: q.defaultValue,
-    });
+    const answer = await ctx.ui.input(q.message, q.placeholder);
+    if (answer === undefined) throw new UserDismissedError("input");
+    return answer;
   }
 
   async editor(q: { message: string; content: string }): Promise<string> {
     const ctx = this.#liveCtx();
     if (!ctx.hasUI) return q.content;
-    return ctx.ui.editor({ message: q.message, content: q.content });
+    const edited = await ctx.ui.editor(q.message, q.content);
+    return edited ?? q.content;
   }
 
   notify(message: string): void {
@@ -89,23 +89,38 @@ export class PiHumanInput implements HumanInput {
     if (ctx.hasUI) ctx.ui.notify(message);
   }
 
+  status(text: string | undefined): void {
+    const ctx = this.#liveCtx();
+    if (ctx.hasUI) ctx.ui.setStatus(STATUS_KEY, text);
+  }
+
   /**
-   * Called by the child agents' `ask_user` tool. In deferred mode it returns
-   * null immediately and the question surfaces at the next phase boundary.
+   * Called by a child agent's `ask_user` tool. In deferred mode it returns null
+   * immediately and the question surfaces at the next phase boundary.
    */
-  async askFromChild(q: { question: string; reason?: string; options?: string[] }): Promise<string | null> {
+  async askFromChild(q: {
+    question: string;
+    reason?: string;
+    options?: string[];
+  }): Promise<string | null> {
     if (this.#mode === "deferred") {
       this.#deferred.push({ ...q, askedAt: new Date().toISOString() });
       this.notify(`agent question queued: ${q.question}`);
       return null;
     }
-    if (q.options && q.options.length > 0) {
-      return this.select({
-        message: q.question,
-        options: q.options.map((o) => ({ label: o, value: o })),
-      });
+    try {
+      if (q.options && q.options.length > 0) {
+        return await this.select({
+          message: q.question,
+          options: q.options.map((o) => ({ label: o, value: o })),
+        });
+      }
+      return await this.input({ message: q.question, placeholder: q.reason });
+    } catch (err) {
+      // A dismissed dialog must not kill the child run.
+      if (err instanceof UserDismissedError) return null;
+      throw err;
     }
-    return this.input({ message: q.question, placeholder: q.reason });
   }
 
   /** Flush queued child questions at a phase boundary. */
