@@ -34,6 +34,8 @@ export interface PiBrainConfig {
   /** Extra skill roots beyond the bundled .agents/skills. */
   skillRoots: string[];
   maxReviewRounds: number;
+  /** Developer retries allowed on failing deterministic checks, before escalating. */
+  maxVerifyRetries: number;
   /** Explicit verification commands; when empty they are resolved per stack. */
   verify: string[];
   verbosity: "compact" | "normal" | "verbose";
@@ -50,6 +52,7 @@ export const DEFAULT_CONFIG: PiBrainConfig = {
   },
   skillRoots: [],
   maxReviewRounds: 2,
+  maxVerifyRetries: 2,
   verify: [],
   verbosity: "normal",
   autoCommit: false,

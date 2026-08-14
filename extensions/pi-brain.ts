@@ -138,7 +138,7 @@ export default function piBrain(pi: ExtensionAPI): void {
         );
         run.status = outcome.status;
         ctx.ui.notify(renderOutcome(outcome), outcome.status === "completed" ? "info" : "warning");
-        if (config.notifications.bell) process.stdout.write("");
+        if (config.notifications.bell) process.stdout.write("\x07"); // terminal bell
       } catch (err) {
         run.status = err instanceof UserDismissedError ? "cancelled" : "failed";
         const message = (err as Error).message;

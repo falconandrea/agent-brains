@@ -172,6 +172,48 @@ test("verification failure sends the developer back and does NOT call the review
   assert.equal(reviewerCalls, 1, "reviewer only ran once verification was green");
 });
 
+test("failing checks do not eat the review budget", async () => {
+  // Two failed verifications used to consume both review rounds, so the run
+  // could end in needs_human without the reviewer ever being called.
+  const verifier = new FakeVerifier([1, 1, 0]);
+  let reviewerCalls = 0;
+  const { deps, agents } = harness(
+    (req) => {
+      if (req.role === "planner") return plannerResult;
+      if (req.role === "developer") return devResult;
+      reviewerCalls += 1;
+      return reviewOf({ verdict: "approved", summary: "ok", issues: [] });
+    },
+    { verifier },
+  );
+
+  const outcome = await runFeatureWorkflow(deps, "add invitations", "run-verify");
+
+  assert.equal(outcome.status, "completed");
+  assert.equal(agents.calls.filter((c) => c.role === "developer").length, 3);
+  assert.equal(reviewerCalls, 1, "the reviewer still gets its turn");
+});
+
+test("verification that never goes green escalates with the failing command", async () => {
+  const verifier = new FakeVerifier([1]);
+  let reviewerCalls = 0;
+  const { deps } = harness(
+    (req) => {
+      if (req.role === "planner") return plannerResult;
+      if (req.role === "developer") return devResult;
+      reviewerCalls += 1;
+      return reviewOf({ verdict: "approved", summary: "ok", issues: [] });
+    },
+    { verifier, config: { maxVerifyRetries: 1 } },
+  );
+
+  const outcome = await runFeatureWorkflow(deps, "add invitations", "run-verify-2");
+
+  assert.equal(outcome.status, "needs_human");
+  assert.match((outcome as { reason: string }).reason, /npm test/);
+  assert.equal(reviewerCalls, 0);
+});
+
 test("reviewer that never approves stops at maxReviewRounds", async () => {
   const { deps, agents } = harness((req) => {
     if (req.role === "planner") return plannerResult;

@@ -128,17 +128,26 @@ export async function runFeatureWorkflow(
     maxChars: 20_000,
   }).files;
 
-  let round = 0;
+  // Two independent budgets: a run that keeps failing its own test suite must
+  // not silently burn the review budget and finish without ever being reviewed.
+  let reviewRound = 0;
+  let verifyRetries = 0;
+  let developerRuns = 0;
   let fixes: ReviewIssue[] = [];
   let previousBlockingIds = new Set<string>();
   let previousPatch = "";
   let lastReview: ReviewResult | undefined;
 
   for (;;) {
-    if (deps.signal?.aborted) return { status: "cancelled", at: `round ${round}` };
+    if (deps.signal?.aborted) return { status: "cancelled", at: `round ${reviewRound}` };
 
     // developer
-    events.emit({ type: "phase.started", runId, phase: round === 0 ? "develop" : `fix #${round}` });
+    events.emit({
+      type: "phase.started",
+      runId,
+      phase: developerRuns === 0 ? "develop" : `fix #${developerRuns}`,
+    });
+    developerRuns += 1;
     events.emit({
       type: "agent.started",
       runId,
@@ -175,11 +184,17 @@ export async function runFeatureWorkflow(
     events.emit({ type: "verification.completed", runId, passed: blockingFailures.length === 0 });
 
     if (blockingFailures.length > 0) {
-      if (round >= config.maxReviewRounds)
-        return { status: "needs_human", reason: "verification keeps failing" };
-      round += 1;
+      if (verifyRetries >= config.maxVerifyRetries) {
+        return {
+          status: "needs_human",
+          reason: `verification still failing after ${verifyRetries} developer retries: ${blockingFailures
+            .map((f) => f.command)
+            .join(", ")}`,
+        };
+      }
+      verifyRetries += 1;
       fixes = blockingFailures.map((f, i) => ({
-        id: `verify-${round}-${i}`,
+        id: `verify-${verifyRetries}-${i}`,
         severity: "blocking" as const,
         category: "tests" as const,
         problem: `\`${f.command}\` exited ${f.exitCode}:\n${tail(f.output)}`,
@@ -188,8 +203,8 @@ export async function runFeatureWorkflow(
     }
 
     // review
-    round += 1;
-    events.emit({ type: "phase.started", runId, phase: `review #${round}` });
+    reviewRound += 1;
+    events.emit({ type: "phase.started", runId, phase: `review #${reviewRound}` });
     const diff = await deps.git.diffSince(baseline);
     events.emit({
       type: "agent.started",
@@ -232,12 +247,12 @@ export async function runFeatureWorkflow(
       type: "review.completed",
       runId,
       verdict: lastReview.verdict,
-      round,
+      round: reviewRound,
     });
 
     const decision = decideNextRound(
       lastReview,
-      round,
+      reviewRound,
       config.maxReviewRounds,
       previousBlockingIds,
       diff.patch !== previousPatch,

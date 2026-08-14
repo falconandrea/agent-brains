@@ -94,14 +94,15 @@ spike/                     capability spike, run before trusting src/pi/
 ## Test
 
 ```bash
-npm test        # node --test with Node's type stripping — no install needed
+npm install     # devDeps + the Pi peer deps (pinned by package-lock.json)
+npm test        # node --test with Node's type stripping
+npm run typecheck
 ```
 
-`npm run typecheck` needs `npm install` first, which also pulls the Pi peer
-deps — so it has never been run here. Until it is, TypeScript is only checked by
-Node's stripper, and only for files a test imports (`extensions/` and `src/pi/`
-are not). `erasableSyntaxOnly` is on in `tsconfig.json`: no parameter
-properties, no enums, no namespaces.
+Both are clean as of pi-coding-agent **0.84.2**, the version `package-lock.json`
+pins and the one `src/pi/` was typechecked against. `erasableSyntaxOnly` is on in
+`tsconfig.json` (no parameter properties, no enums, no namespaces) so Node can
+strip types without a build step.
 
 ## Safety
 
