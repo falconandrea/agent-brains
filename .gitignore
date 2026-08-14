@@ -1,2 +1,7 @@
 # agents-skills-custom repo files
 .DS_Store
+
+# pi-brain (node package on this branch)
+node_modules/
+dist/
+*.tsbuildinfo

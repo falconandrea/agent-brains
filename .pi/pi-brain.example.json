@@ -1,0 +1,16 @@
+{
+  "$comment": "Copy to .pi/pi-brain.json in a project, or to ~/.pi/agent/pi-brain/config.json for defaults. Every key is optional.",
+
+  "roles": {
+    "planner": { "provider": "openrouter", "thinking": "medium" },
+    "developer": { "provider": "zai", "model": "glm-4.6", "thinking": "high" },
+    "reviewer": { "provider": "openai", "model": "gpt-5-codex", "thinking": "high", "readOnly": true },
+    "security-reviewer": { "enabled": false, "readOnly": true }
+  },
+
+  "stack": "laravel",
+  "maxReviewRounds": 2,
+  "verify": ["./vendor/bin/pest --compact", "./vendor/bin/pint --test"],
+  "verbosity": "normal",
+  "notifications": { "bell": true, "os": false }
+}
