@@ -171,9 +171,65 @@ test("a conflicted index does not silently fall back to a HEAD diff", async () =
   assert.equal(patch, "", "a conflicted tree that nobody touched yields no diff");
 });
 
-test("dirty submodule contents are reported, since they cannot be diffed inline", async () => {
+test("a repository with no submodules reports none", async () => {
   const dir = initRepo();
   const baseline = await git.baseline(dir);
   const { dirtySubmodules } = await git.diffSince(baseline);
-  assert.deepEqual(dirtySubmodules, [], "no submodules here");
+  assert.deepEqual(dirtySubmodules, []);
+});
+
+/** Parent repo with a real submodule at vendor/child. */
+function initRepoWithSubmodule(): { parent: string; child: string } {
+  const child = mkdtempSync(join(tmpdir(), "pi-brain-sub-"));
+  const runChild = (...args: string[]) => execFileSync("git", args, { cwd: child });
+  runChild("init", "-q", "-b", "main");
+  runChild("config", "user.email", "t@example.com");
+  runChild("config", "user.name", "t");
+  writeFileSync(join(child, "code.txt"), "child code\n");
+  runChild("add", ".");
+  runChild("commit", "-qm", "child base");
+
+  const parent = initRepo();
+  execFileSync(
+    "git",
+    ["-c", "protocol.file.allow=always", "submodule", "add", "-q", child, "vendor/child"],
+    { cwd: parent },
+  );
+  execFileSync("git", ["commit", "-qm", "add submodule"], { cwd: parent });
+  return { parent, child };
+}
+
+test("uncommitted work INSIDE a submodule is detected", async () => {
+  const { parent } = initRepoWithSubmodule();
+  const baseline = await git.baseline(parent);
+
+  // git submodule status still shows a leading space for this
+  writeFileSync(join(parent, "vendor", "child", "code.txt"), "child code\nEDITED BY AGENT\n");
+
+  const { patch, dirtySubmodules } = await git.diffSince(baseline);
+  assert.deepEqual(dirtySubmodules, ["vendor/child"]);
+  assert.ok(!patch.includes("EDITED BY AGENT"), "the edit genuinely is not in the patch");
+});
+
+test("a clean submodule is not reported", async () => {
+  const { parent } = initRepoWithSubmodule();
+  const baseline = await git.baseline(parent);
+  writeFileSync(join(parent, "existing.txt"), "one\ntwo\n");
+
+  const { dirtySubmodules } = await git.diffSince(baseline);
+  assert.deepEqual(dirtySubmodules, []);
+});
+
+test("a submodule moved to another commit is reported", async () => {
+  const { parent, child } = initRepoWithSubmodule();
+  const baseline = await git.baseline(parent);
+
+  writeFileSync(join(child, "code.txt"), "child v2\n");
+  execFileSync("git", ["commit", "-qam", "child v2"], { cwd: child });
+  execFileSync("git", ["-c", "protocol.file.allow=always", "pull", "-q"], {
+    cwd: join(parent, "vendor", "child"),
+  });
+
+  const { dirtySubmodules } = await git.diffSince(baseline);
+  assert.deepEqual(dirtySubmodules, ["vendor/child"]);
 });

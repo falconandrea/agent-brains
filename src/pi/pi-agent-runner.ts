@@ -177,7 +177,9 @@ export class PiAgentRunner implements AgentRunner {
 
     if (provider) {
       // getModels() is the catalogue; only getAvailable() reflects working auth.
-      const usable = await this.#modelRuntime.getAvailable(provider);
+      const usable = await this.#modelRuntime.getAvailable(provider, {
+        signal: request.signal,
+      });
       const first = usable[0];
       if (first) return first;
       throw new Error(

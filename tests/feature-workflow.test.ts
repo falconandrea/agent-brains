@@ -363,6 +363,11 @@ test("dirty submodules stop the run instead of approving unseen code", async () 
 
   assert.equal(outcome.status, "needs_human");
   assert.match((outcome as { reason: string }).reason, /vendor\/child/);
+  assert.equal(
+    (deps.agents as FakeAgentRunner).calls.filter((c) => c.role === "reviewer").length,
+    0,
+    "escalation is deterministic: no reviewer call is spent first",
+  );
 });
 
 test("two different features that slugify the same get separate directories", async () => {

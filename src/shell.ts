@@ -89,18 +89,36 @@ async function snapshot(repoRoot: string, label: string): Promise<string> {
   }
 }
 
-/** Submodules whose contents changed: their inner diff never reaches a reviewer. */
+/**
+ * Submodules the reviewer cannot see into.
+ *
+ * `git submodule status` prefixes are about the recorded COMMIT (' ' in sync,
+ * '+' moved, '-' uninitialised, 'U' conflicted) and say nothing about
+ * uncommitted edits inside the submodule — those show a leading space while the
+ * working tree is dirty. So each submodule is asked directly. Errors propagate:
+ * silently returning [] here would let the run approve code nobody reviewed.
+ */
 async function dirtySubmodules(repoRoot: string): Promise<string[]> {
-  try {
-    const out = await git(repoRoot, ["submodule", "status", "--recursive"]);
-    return out
-      .split("\n")
-      .filter((line) => line.trim() !== "")
-      .filter((line) => line.startsWith("+") || line.startsWith("U"))
-      .map((line) => line.trim().split(/\s+/)[1] ?? line.trim());
-  } catch {
-    return [];
+  const listing = await git(repoRoot, ["submodule", "status", "--recursive"]);
+  const dirty: string[] = [];
+
+  for (const line of listing.split("\n")) {
+    if (line.trim() === "") continue;
+    const marker = line[0];
+    const path = line.slice(1).trim().split(/\s+/)[1];
+    if (path === undefined) continue;
+
+    // Moved, uninitialised or conflicted: the reviewer sees a pointer at best.
+    if (marker === "+" || marker === "-" || marker === "U") {
+      dirty.push(path);
+      continue;
+    }
+    // In sync on paper — but its working tree may still hold uncommitted work.
+    const status = await git(join(repoRoot, path), ["status", "--porcelain", "-z"]);
+    if (status.trim() !== "") dirty.push(path);
   }
+
+  return dirty;
 }
 
 export class RealGitService implements GitService {

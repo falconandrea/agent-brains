@@ -48,10 +48,17 @@ task gets the schema and *only the ADRs whose filename matches the task*. The
 developer and reviewer never get product docs — they already have the approved
 PRD inline. `ROADMAP.md` is never loaded.
 
-**One writer per repo.** `src/run-lock.ts` is a single `O_EXCL` lock file under
-`.pi/`, with PID-liveness and TTL takeover so a crashed run cannot wedge the
-repository. Corrupt lock file, dead PID, or a 6h-old lock: taken over. Live and
-recent: you get asked before proceeding.
+**One writer per repo.** Node's fs exposes no `flock`, so `src/run-lock.ts` is
+built entirely on exclusive create. Acquiring a free lock is a `link()` — atomic.
+Replacing a *stale* one is check-then-act, so it runs under a marker file whose
+name encodes the inode of the exact lock being replaced: two processes seeing the
+same stale lock contend for the same marker and only one can create it. The
+marker deliberately never expires on a timer — a timed expiry is what makes
+takeover racy, because a paused taker wakes up and installs its lock after
+someone else already took over. A marker left by a crash is reported with the
+path to delete. Release is bound to the inode captured at acquisition, so a run
+that stalled past the TTL cannot delete its successor's lock. Residual, accepted:
+inode reuse could defeat the identity checks.
 
 **Skill routing.** `stack → profile → role policy → skill names →
 skillsOverride` on the child's resource loader. A Laravel skill never reaches an
@@ -80,9 +87,12 @@ code it was never shown. Nothing is committed.
 - Everything under `src/pi/` is unverified until the spike passes.
 - The `ask_user`-mid-child-run path may need `mode: "deferred"` (see SPIKE.md).
 - No `/setup`, `/review`, `/bugfix` yet — phase 2.
-- Submodules are not supported: their inner diff cannot be included, so a run
-  that finds dirty submodules escalates to needs_human rather than approving
-  code the reviewer never saw.
+- Submodules are not supported. Their inner diff cannot be included, so a run
+  that finds any submodule dirty, moved or uninitialised escalates to
+  needs_human before a reviewer is called. Detection asks each submodule
+  directly with `git status --porcelain`, because `git submodule status` only
+  reports the recorded commit and shows a leading space while the submodule's
+  working tree is dirty.
 - No worktrees. Concurrent writing runs on the same repo are blocked by a
   lockfile, not isolated.
 - Run state is appended via `pi.appendEntry` but there is no resume UX.

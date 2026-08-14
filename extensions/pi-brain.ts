@@ -127,6 +127,15 @@ export default function piBrain(pi: ExtensionAPI): void {
         ctx.ui.notify(`pi-brain: cannot create the run lock in ${cwd}/.pi — ${(err as Error).message}`, "error");
         return;
       }
+      if (!lock.ok && lock.reason === "takeover_in_progress") {
+        active = null;
+        ctx.ui.notify(
+          "pi-brain: another session is claiming this repository's stale lock. " +
+            `If nothing is running, delete ${lock.markerPath} and try again.`,
+          "warning",
+        );
+        return;
+      }
       if (!lock.ok) {
         const proceed = await ctx.ui.confirm(
           "pi-brain: this repository is already locked",

@@ -208,6 +208,19 @@ export async function runFeatureWorkflow(
     reviewRound += 1;
     events.emit({ type: "phase.started", runId, phase: `review #${reviewRound}` });
     const diff = await deps.git.diffSince(baseline);
+
+    // Deterministic escalation, before a single reviewer token is spent: the
+    // reviewer cannot see inside a submodule, so nothing may approve that code.
+    if (diff.dirtySubmodules.length > 0) {
+      events.emit({ type: "workflow.completed", runId, status: "needs_human" });
+      return {
+        status: "needs_human",
+        reason:
+          `dirty submodules (${diff.dirtySubmodules.join(", ")}) — their contents cannot be ` +
+          `included in the diff, so no reviewer can see them. Review those by hand.`,
+        review: lastReview,
+      };
+    }
     events.emit({
       type: "agent.started",
       runId,
@@ -252,16 +265,6 @@ export async function runFeatureWorkflow(
       verdict: lastReview.verdict,
       round: reviewRound,
     });
-
-    if (diff.dirtySubmodules.length > 0) {
-      return {
-        status: "needs_human",
-        reason:
-          `dirty submodules (${diff.dirtySubmodules.join(", ")}) — their contents cannot be ` +
-          `included in the diff, so the reviewer never saw them. Review those by hand.`,
-        review: lastReview,
-      };
-    }
 
     const decision = decideNextRound(
       lastReview,
