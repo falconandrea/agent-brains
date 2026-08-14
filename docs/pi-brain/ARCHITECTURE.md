@@ -59,6 +59,10 @@ are never attributed to — or reverted by — the workflow. Nothing is committe
 ## Known gaps
 
 - Everything under `src/pi/` is unverified until the spike passes.
+- `.agents/skills/product-thinking.md` and `designer.md` are loose markdown, not
+  Agent Skills — Pi skips root-level `.md` under `.agents/skills/`, so they are
+  invisible to pi-brain. `tests/repo.test.ts` allow-lists them; convert them to
+  `<name>/SKILL.md` (with `name` + `description` frontmatter) to bring them in.
 - The `ask_user`-mid-child-run path may need `mode: "deferred"` (see SPIKE.md).
 - No `/setup`, `/review`, `/bugfix` yet — phase 2.
 - No worktrees; one writing workflow per repo at a time, no lockfile yet.

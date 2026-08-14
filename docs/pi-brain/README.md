@@ -92,9 +92,14 @@ spike/                     capability spike, run before trusting src/pi/
 ## Test
 
 ```bash
-npm test        # node --test, no deps, no network
-npm run typecheck
+npm test        # node --test with Node's type stripping — no install needed
 ```
+
+`npm run typecheck` needs `npm install` first, which also pulls the Pi peer
+deps — so it has never been run here. Until it is, TypeScript is only checked by
+Node's stripper, and only for files a test imports (`extensions/` and `src/pi/`
+are not). `erasableSyntaxOnly` is on in `tsconfig.json`: no parameter
+properties, no enums, no namespaces.
 
 ## Safety
 

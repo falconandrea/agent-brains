@@ -51,13 +51,32 @@ export class RealGitService implements GitService {
 
     if (files.length === 0) return { patch: "", files: [] };
 
-    const patch = await git(baseline.repoRoot, [
-      "diff",
-      baseline.headSha,
-      "--",
-      ...files,
-    ]).catch(() => "");
-    return { patch, files };
+    // `git diff <sha> -- <path>` produces nothing for an untracked file, so new
+    // files would silently vanish from the reviewer's patch. Diff them
+    // separately against /dev/null. `--no-index` exits 1 when there is a diff.
+    const untrackedSet = new Set(
+      untracked
+        .split("\n")
+        .map((f) => f.trim())
+        .filter((f) => f !== "" && !preexisting.has(f)),
+    );
+    const tracked = files.filter((f) => !untrackedSet.has(f));
+
+    const parts: string[] = [];
+    if (tracked.length > 0) {
+      parts.push(
+        await git(baseline.repoRoot, ["diff", baseline.headSha, "--", ...tracked]).catch(() => ""),
+      );
+    }
+    for (const file of untrackedSet) {
+      parts.push(
+        await git(baseline.repoRoot, ["diff", "--no-index", "--", "/dev/null", file]).catch(
+          (err: { stdout?: string }) => err.stdout ?? "",
+        ),
+      );
+    }
+
+    return { patch: parts.filter((p) => p !== "").join("\n"), files };
   }
 }
 

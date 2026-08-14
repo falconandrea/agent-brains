@@ -15,6 +15,7 @@ pi -e ./spike/spike-extension.ts
 
 | # | Check | Consequence if it fails |
 |---|---|---|
+| 0 | **skills actually load from the package** (see below) | every skill-routing check below is meaningless |
 | 1 | `pi.registerCommand` — `/spike` runs | nothing works; re-read the extensions docs |
 | 2 | `ctx.ui.confirm` from a command handler | no approval gate; workflow needs another UI path |
 | 3 | `createAgentSession` with an explicitly chosen model | roles cannot use different models — the whole premise |
@@ -23,6 +24,25 @@ pi -e ./spike/spike-extension.ts
 | 6 | structured output captured by a result tool | reviewer output must be parsed from prose — bad |
 | 7 | `skillsOverride` filters skills per child | no per-role skill routing; all roles get everything |
 | 8 | `pi.appendEntry` persists state | no crash-tolerant run history |
+
+## Check 0 first — do the skills even load?
+
+`package.json` points the **package** loader at `./.agents/skills`, a directory
+that follows the **`.agents/skills` convention**. Those are two different
+discovery rule sets in Pi's docs (package: top-level `.md` counts as a skill;
+`.agents/skills`: top-level `.md` is skipped). Which one wins for this path is
+not settled by the docs.
+
+```bash
+pi install .
+pi
+> /skill:            # tab-complete: are our skills listed?
+```
+
+Expect ~55 skills and **no** entries for `product-thinking` / `designer` (loose
+`.md` files, not Agent Skills — convert them to `<name>/SKILL.md` if you want
+them in Pi). If nothing loads, or if `.agents/workflows/*.md` symlinks show up
+as bogus skills, fix the `pi.skills` path before spending time on checks 1–8.
 
 ## Step 4 is the risky one
 

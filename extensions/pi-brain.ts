@@ -24,10 +24,19 @@ const PACKAGE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PROFILES_DIR = join(PACKAGE_ROOT, "profiles");
 const SKILLS_DIR = join(PACKAGE_ROOT, ".agents", "skills");
 
-const availableSkills = (): Set<string> =>
-  existsSync(SKILLS_DIR)
-    ? new Set(readdirSync(SKILLS_DIR, { withFileTypes: true }).map((d) => d.name))
-    : new Set<string>();
+/**
+ * Only directories holding a SKILL.md count: Pi skips loose `.md` files at the
+ * root of `.agents/skills/`, so a few legacy ones (product-thinking.md,
+ * designer.md) are invisible to Pi until they are converted.
+ */
+const availableSkills = (): Set<string> => {
+  if (!existsSync(SKILLS_DIR)) return new Set<string>();
+  return new Set(
+    readdirSync(SKILLS_DIR, { withFileTypes: true })
+      .filter((d) => (d.isDirectory() || d.isSymbolicLink()) && existsSync(join(SKILLS_DIR, d.name, "SKILL.md")))
+      .map((d) => d.name),
+  );
+};
 
 interface ActiveRun {
   runId: string;
