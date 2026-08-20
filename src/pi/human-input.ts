@@ -38,10 +38,35 @@ export class UserDismissedError extends Error {
 
 const STATUS_KEY = "pi-brain";
 
+/**
+ * An `options` array longer than this is almost certainly a batch of numbered
+ * questions (Q1..Qn × A/B/C), not one decision. A single-pick `select` cannot
+ * answer a batch — the user must be able to type "1: A, 2: B" — so larger
+ * batches fall back to freeform input with the options inlined in the message.
+ */
+const SELECT_MAX_OPTIONS = 3;
+
+/**
+ * Terminal option appended to every child-question select so the user can
+ * always type an arbitrary answer (e.g. "1: A, 2: B" for a batch the model
+ * squeezed into one select). Picking it opens a chained input dialog —
+ * unlike typing in the main chat, which lands in the main session and never
+ * reaches the child.
+ */
+const SELECT_FREEFORM = "Other — type your answer";
+
 export class PiHumanInput implements HumanInput {
   readonly #deferred: DeferredQuestion[] = [];
   readonly #liveCtx: () => ExtensionContext;
   readonly #mode: "live" | "deferred";
+  /**
+   * Pi's TUI can lose a dialog fired from the background workflow while
+   * another one is still open or closing — observed as a `tool ask_user`
+   * status with zero CPU, no dialog and a forever-pending promise
+   * (docs/pi-brain/ARCHITECTURE.md, ask_user finding). Every dialog is
+   * chained through here so at most one is ever in flight.
+   */
+  #dialogChain: Promise<unknown> = Promise.resolve();
 
   /**
    * @param liveCtx MUST return the *currently live* ctx, not one captured
@@ -53,17 +78,23 @@ export class PiHumanInput implements HumanInput {
     this.#mode = mode;
   }
 
+  #serialized<T>(dialog: () => Promise<T>): Promise<T> {
+    const run = this.#dialogChain.then(dialog, dialog);
+    this.#dialogChain = run.catch(() => undefined);
+    return run;
+  }
+
   async confirm(q: ConfirmQuestion): Promise<boolean> {
     const ctx = this.#liveCtx();
     if (!ctx.hasUI) return q.defaultValue ?? false;
-    return ctx.ui.confirm(q.message, q.detail ?? "");
+    return this.#serialized(() => ctx.ui.confirm(q.message, q.detail ?? ""));
   }
 
   async select(q: SelectQuestion): Promise<string> {
     const ctx = this.#liveCtx();
     if (!ctx.hasUI) return q.options[0]!.value;
     const labels = q.options.map((o) => o.label);
-    const picked = await ctx.ui.select(q.message, labels);
+    const picked = await this.#serialized(() => ctx.ui.select(q.message, labels));
     if (picked === undefined) throw new UserDismissedError("select");
     const match = q.options.find((o) => o.label === picked);
     return match ? match.value : picked;
@@ -72,7 +103,7 @@ export class PiHumanInput implements HumanInput {
   async input(q: InputQuestion): Promise<string> {
     const ctx = this.#liveCtx();
     if (!ctx.hasUI) return q.defaultValue ?? "";
-    const answer = await ctx.ui.input(q.message, q.placeholder);
+    const answer = await this.#serialized(() => ctx.ui.input(q.message, q.placeholder));
     if (answer === undefined) throw new UserDismissedError("input");
     return answer;
   }
@@ -80,7 +111,7 @@ export class PiHumanInput implements HumanInput {
   async editor(q: { message: string; content: string }): Promise<string> {
     const ctx = this.#liveCtx();
     if (!ctx.hasUI) return q.content;
-    const edited = await ctx.ui.editor(q.message, q.content);
+    const edited = await this.#serialized(() => ctx.ui.editor(q.message, q.content));
     return edited ?? q.content;
   }
 
@@ -97,6 +128,10 @@ export class PiHumanInput implements HumanInput {
   /**
    * Called by a child agent's `ask_user` tool. In deferred mode it returns null
    * immediately and the question surfaces at the next phase boundary.
+   *
+   * Live-mode routing: up to SELECT_MAX_OPTIONS options → single-pick select;
+   * more → freeform input with the options inlined, so a batch of numbered
+   * questions can be answered in one line ("1: A, 2: B, …").
    */
   async askFromChild(q: {
     question: string;
@@ -109,11 +144,26 @@ export class PiHumanInput implements HumanInput {
       return null;
     }
     try {
-      if (q.options && q.options.length > 0) {
-        return await this.select({
-          message: q.question,
-          options: q.options.map((o) => ({ label: o, value: o })),
+      if (q.options && q.options.length > SELECT_MAX_OPTIONS) {
+        const message =
+          [q.question, "", ...q.options.map((o, i) => `${i + 1}. ${o}`)].join("\n");
+        return await this.input({
+          message,
+          placeholder: "Answer freely, e.g. '1: A, 2: B'",
         });
+      }
+      if (q.options && q.options.length > 0) {
+        const picked = await this.select({
+          message: q.question,
+          options: [...q.options, SELECT_FREEFORM].map((o) => ({ label: o, value: o })),
+        });
+        if (picked === SELECT_FREEFORM) {
+          return await this.input({
+            message: q.question,
+            placeholder: "Type your answer, e.g. '1: A, 2: B'",
+          });
+        }
+        return picked;
       }
       return await this.input({ message: q.question, placeholder: q.reason });
     } catch (err) {
