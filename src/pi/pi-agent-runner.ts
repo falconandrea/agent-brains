@@ -214,14 +214,35 @@ export class PiAgentRunner implements AgentRunner {
       name: "ask_user",
       label: "Ask user",
       description:
-        "Ask the human a question that materially changes product behaviour, architecture, " +
-        "scope or compatibility. Do NOT use it for routine implementation choices.",
+        "Ask the human ONE question that materially changes product behaviour, " +
+        "architecture, scope or compatibility. Exactly one decision per call: a " +
+        "short question plus 2-3 concrete options. Additional decisions go in " +
+        "separate sequential calls — NEVER batch several questions into one call " +
+        "and never embed unnumbered extra questions in the question text. Do NOT " +
+        "use this tool for routine implementation choices.",
       parameters: Type.Object({
         question: Type.String({ description: "The question, phrased for a busy human." }),
         reason: Type.Optional(Type.String({ description: "Why the answer changes the outcome." })),
         options: Type.Optional(Type.Array(Type.String())),
       }),
       execute: async (_id, params) => {
+        // A malformed call (empty or placeholder question text) must bounce
+        // back to the child as a tool error, never reach the user's screen
+        // as a garbage dialog.
+        const question = (params.question ?? "").trim();
+        if (!question || /^placeholder$/i.test(question)) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "ERROR: ask_user was called without a real question. Call it again " +
+                  "with a concrete question in the 'question' parameter (2-3 options, " +
+                  "one decision per call).",
+              },
+            ],
+            details: {},
+          };
+        }
         const answer = await askUser?.(params);
         return { content: [{ type: "text", text: answer ?? NO_ANSWER }], details: {} };
       },
