@@ -147,35 +147,40 @@ export default function piBrain(pi: ExtensionAPI): void {
         },
       };
 
-      try {
-        const outcome = await runFeatureWorkflow(
-          {
-            cwd,
-            profilesDir: PROFILES_DIR,
-            availableSkills: availableSkills(),
-            config,
-            agents,
-            human,
-            verifier: new ShellVerifyRunner(cwd),
-            git: new RealGitService(),
-            events,
-            signal: abort.signal,
-          },
-          description,
-          runId,
-        );
-        run.status = outcome.status;
-        ctx.ui.notify(renderOutcome(outcome), outcome.status === "completed" ? "info" : "warning");
-        if (config.notifications.bell) process.stdout.write("\x07"); // terminal bell
-      } catch (err) {
-        run.status = err instanceof UserDismissedError ? "cancelled" : "failed";
-        const message = (err as Error).message;
-        events.emit({ type: "workflow.failed", runId, error: message });
-        ctx.ui.notify(`pi-brain: ${message}`, "error");
-      } finally {
-        lock.release();
-        human.status(undefined);
-      }
+      // Run detached: awaiting here would hold Pi's command loop hostage for
+      // the whole pipeline and /flow status|log|stop could never answer.
+      void (async () => {
+        try {
+          const outcome = await runFeatureWorkflow(
+            {
+              cwd,
+              profilesDir: PROFILES_DIR,
+              availableSkills: availableSkills(),
+              config,
+              agents,
+              human,
+              verifier: new ShellVerifyRunner(cwd),
+              git: new RealGitService(),
+              events,
+              signal: abort.signal,
+            },
+            description,
+            runId,
+          );
+          run.status = outcome.status;
+          ctx.ui.notify(renderOutcome(outcome), outcome.status === "completed" ? "info" : "warning");
+          if (config.notifications.bell) process.stdout.write("\x07"); // terminal bell
+        } catch (err) {
+          run.status = err instanceof UserDismissedError ? "cancelled" : "failed";
+          const message = (err as Error).message;
+          events.emit({ type: "workflow.failed", runId, error: message });
+          ctx.ui.notify(`pi-brain: ${message}`, "error");
+        } finally {
+          lock.release();
+          human.status(undefined);
+        }
+      })();
+      ctx.ui.notify(`pi-brain: ${runId} started — /flow status, /flow log, /flow stop.`);
     },
   });
 
