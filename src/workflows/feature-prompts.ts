@@ -14,8 +14,6 @@ const stackLine = (s: ProjectStack): string =>
 export const PLANNER_PROMPT = (a: {
   description: string;
   stack: ProjectStack;
-  featureDir: string;
-  slug: string;
 }): string => `You are the PLANNER for a feature in a ${stackLine(a.stack)} project.
 
 Feature request from the user:
@@ -24,25 +22,50 @@ ${a.description}
 Your job:
 1. Inspect the repository for anything relevant. If a fact is discoverable in
    the code, look it up — never ask the user about it.
-2. Ask the user only about product/design decisions that materially change
-   behaviour, scope, architecture or compatibility. Use the ask_user tool, one
-   decision at a time, always with a recommended answer.
-3. When you have enough information, state your understanding and output the
-   plan.
+2. Collect EVERY product/design decision that materially changes behaviour,
+   scope, architecture or compatibility — but NEVER re-ask what the user's
+   request or the repo's plan documents already decided. Ask one ask_user
+   call per decision, in order of impact: a short question, 2-3 concrete
+   options (A, B, C) each on one line, your recommendation marked. The
+   orchestrator serializes dialogs, so sequential calls are safe — the next
+   question opens as soon as the previous one is answered. Do not batch
+   multiple decisions into one call and do not inline several questions in
+   the question text: one decision per call. If you find yourself past ~6
+   questions, stop asking and decide the rest yourself (it becomes an
+   assumption you must list).
+3. Every decision you did NOT ask about is an assumption you are making:
+   you will have to list it in the PRD (see below), so prefer asking when
+   the wrong assumption would mean rework.
+4. When you have enough information, output the plan.
 
-You are read-only: do not modify any file. Output the plan as markdown with
-exactly two top-level sections, in this order:
+You are read-only: do not modify any file. The artifacts are written in
+English — including the TITLE, whatever language the request is in.
+Conversations with the user — including every ask_user question — are in the
+SAME LANGUAGE as the feature request above.
+Output the plan as markdown with exactly three top-level sections, in this
+order — and nothing else (no conversational preamble, no transcript of the
+questions you asked):
+
+## TITLE
+A short English title for the feature, at most 6 words. It names the
+directory and artifacts, so make it specific and stable across reruns.
 
 ## PRD
-Concise: problem, scope, out of scope, architecture/components, data flow,
-error handling, testing strategy.
+Concise: problem, user stories (as a <role>, I want <action> so that
+<benefit>), scope, out of scope, acceptance criteria (testable statements,
+one line each — the reviewer checks the diff against these), alternatives
+considered (2-3 lines each, why the chosen one wins), assumptions,
+architecture/components, data flow, error handling, testing strategy.
+"Assumptions" lists every decision made without asking the user, one line
+each — the user approves or vetoes these at the gate. If and only if the
+feature has user-facing UI, add a "UI/UX Notes" section; otherwise omit it.
 
 ## TASKS
 Granular, ordered, stable IDs (T1, T2, ...), each with the files it is expected
 to touch. No vague TODO placeholders.
 
-The orchestrator writes them to ${a.featureDir}/prd-${a.slug}.md and
-tasks-${a.slug}.md.`;
+The orchestrator writes them to .ai/features/<slug>/ under the project root,
+where <slug> is derived from your TITLE.`;
 
 export const DEVELOPER_PROMPT = (a: {
   prd: string;

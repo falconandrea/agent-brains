@@ -171,11 +171,22 @@ test("slugify produces a short kebab slug", () => {
   assert.equal(slugify("Add organization invitations with email acceptance"), "add-organization-invitations-with-email-acceptance");
 });
 
-test("splitPlannerOutput separates PRD from TASKS", () => {
-  const { prd, tasks } = splitPlannerOutput("## PRD\nbody\n\n## TASKS\n- T1 do it");
-  assert.match(prd, /body/);
-  assert.match(tasks, /T1/);
-  assert.ok(!prd.includes("T1"));
+test("splitPlannerOutput separates TITLE, PRD and TASKS", () => {
+  const out = splitPlannerOutput(
+    "preamble noise\n## TITLE\nPlaywright Flight Provider\n\n## PRD\nbody\n\n## TASKS\n- T1 do it",
+  );
+  assert.equal(out.title, "Playwright Flight Provider");
+  assert.match(out.prd, /body/);
+  assert.match(out.tasks, /T1/);
+  assert.ok(!out.prd.includes("T1"));
+  assert.ok(!out.prd.includes("TITLE"));
+});
+
+test("splitPlannerOutput without a TITLE falls back to null", () => {
+  const out = splitPlannerOutput("## PRD\nbody\n\n## TASKS\n- T1 do it");
+  assert.equal(out.title, null);
+  assert.match(out.prd, /body/);
+  assert.match(out.tasks, /T1/);
 });
 
 // --- config validation ------------------------------------------------------

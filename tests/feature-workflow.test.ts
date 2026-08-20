@@ -386,6 +386,57 @@ test("two different features that slugify the same get separate directories", as
   assert.ok(existsSync(join(cwd, ".ai/features/add-invitations-to-the-org-for-2")));
 });
 
+test("the planner's English TITLE names the directory, not the raw request", async () => {
+  const planWithTitle = (title: string): AgentRunResult => ({
+    role: "planner",
+    text: `## TITLE\n${title}\n\n## PRD\nbody\n\n## TASKS\n- T1 do it\n`,
+    aborted: false,
+  });
+  const { deps, cwd } = harness((req) =>
+    req.role === "planner"
+      ? planWithTitle("Playwright Flight Provider")
+      : req.role === "developer"
+        ? devResult
+        : reviewOf({ verdict: "approved", summary: "ok", issues: [] }),
+  );
+
+  const outcome = await runFeatureWorkflow(
+    deps,
+    "aggiungi un PlaywrightProvider come nuovo provider",
+    "run-titolo",
+  );
+  assert.equal(outcome.status, "completed");
+  assert.ok(existsSync(join(cwd, ".ai/features/playwright-flight-provider")));
+  assert.ok(
+    !existsSync(join(cwd, ".ai/features/aggiungi-un-playwrightprovider-come-nuovo")),
+    "the Italian description must not name the directory",
+  );
+});
+
+test("a rerun whose TITLE is worded differently reuses its earlier directory", async () => {
+  let titleNo = 0;
+  const { deps, cwd } = harness((req) =>
+    req.role === "planner"
+      ? ({
+          role: "planner",
+          text: `## TITLE\nPlaywright Provider slice ${++titleNo}\n\n## PRD\nbody\n\n## TASKS\n- T1 do it\n`,
+          aborted: false,
+        }) satisfies AgentRunResult
+      : req.role === "developer"
+        ? devResult
+        : reviewOf({ verdict: "approved", summary: "ok", issues: [] }),
+  );
+
+  await runFeatureWorkflow(deps, "aggiungi un PlaywrightProvider", "run-1");
+  await runFeatureWorkflow(deps, "aggiungi un PlaywrightProvider", "run-2");
+
+  assert.ok(existsSync(join(cwd, ".ai/features/playwright-provider-slice-1")));
+  assert.ok(
+    !existsSync(join(cwd, ".ai/features/playwright-provider-slice-2")),
+    "the marker, not the TITLE, identifies a rerun",
+  );
+});
+
 test("an aborted child run cancels instead of pressing on", async () => {
   const { deps, agents } = harness((req) =>
     req.role === "planner"

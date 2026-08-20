@@ -8,7 +8,7 @@
  *   discover -> clarify -> spec (hard gate) -> develop -> verify -> review -> loop -> final
  */
 
-import { readFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { readFileSync, existsSync, mkdirSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentRunner } from "../agent.ts";
 import type {
@@ -75,14 +75,11 @@ export async function runFeatureWorkflow(
     model: modelLabel(plannerCfg.provider, plannerCfg.model),
   });
 
-  const slug = featureSlug(deps.cwd, description);
-  const featureDir = join(deps.cwd, ".ai", "features", slug);
-
   const plan = await deps.agents.run({
     runId,
     role: "planner",
     cwd: deps.cwd,
-    prompt: PLANNER_PROMPT({ description, stack, featureDir, slug }),
+    prompt: PLANNER_PROMPT({ description, stack }),
     model: plannerCfg,
     skills: planner.skills,
     tools: ["read", "grep", "find", "ls"],
@@ -95,11 +92,16 @@ export async function runFeatureWorkflow(
   // The planner is read-only by design: it returns the documents as text and the
   // orchestrator writes them. Always write this run's output — reusing files
   // left by an earlier, possibly rejected, run would hand the developer a plan
-  // the user never approved.
+  // the user never approved. The slug comes from the planner's English TITLE
+  // (falling back to the raw description); a rerun of the same request reuses
+  // its earlier directory, found via the description marker — which also
+  // covers reruns whose TITLE gets worded differently.
+  const { title, prd, tasks } = splitPlannerOutput(plan.text);
+  const slug = findExistingFeatureSlug(deps.cwd, description) ?? featureSlug(deps.cwd, title ?? description);
+  const featureDir = join(deps.cwd, ".ai", "features", slug);
   const prdPath = join(featureDir, `prd-${slug}.md`);
   const tasksPath = join(featureDir, `tasks-${slug}.md`);
   mkdirSync(featureDir, { recursive: true });
-  const { prd, tasks } = splitPlannerOutput(plan.text);
   const marker = descriptionMarker(description);
   writeFileSync(prdPath, `${marker}\n${prd}`, "utf8");
   writeFileSync(tasksPath, `${marker}\n${tasks}`, "utf8");
@@ -357,6 +359,24 @@ export function featureSlug(cwd: string, description: string): string {
   return `${base}-${Date.now().toString(36)}`;
 }
 
+/**
+ * A rerun of the same request must land in its earlier directory even when
+ * the planner words the English TITLE differently this time. Every artifact
+ * starts with the description marker, so scan for ours.
+ */
+function findExistingFeatureSlug(cwd: string, description: string): string | null {
+  const root = join(cwd, ".ai", "features");
+  if (!existsSync(root)) return null;
+  const marker = descriptionMarker(description);
+  for (const entry of readdirSync(root)) {
+    const dir = join(root, entry);
+    if (!statSync(dir).isDirectory()) continue;
+    const prd = join(dir, `prd-${entry}.md`);
+    if (existsSync(prd) && readFileSync(prd, "utf8").startsWith(marker)) return entry;
+  }
+  return null;
+}
+
 export function slugify(description: string): string {
   return description
     .toLowerCase()
@@ -367,10 +387,25 @@ export function slugify(description: string): string {
     .join("-");
 }
 
-/** Planner returns `## PRD` and `## TASKS` sections; split them for writing. */
-export function splitPlannerOutput(text: string): { prd: string; tasks: string } {
+/**
+ * Planner returns `## TITLE`, `## PRD` and `## TASKS` sections; split them for
+ * writing. Anything before the `## TITLE`/`## PRD` heading (conversational
+ * preamble the model was told not to emit) never reaches the artifact files.
+ * A missing or empty TITLE yields null and the caller falls back to the raw
+ * description for the slug.
+ */
+export function splitPlannerOutput(text: string): { title: string | null; prd: string; tasks: string } {
+  const titleMatch = /^#{1,3}\s*TITLE\b\s*\n?/im.exec(text);
+  const afterTitle = titleMatch ? text.slice(titleMatch.index + titleMatch[0].length) : text;
+  const prdStart = /^#{1,3}\s*PRD\b/im.exec(afterTitle);
+  const title = titleMatch
+    ? afterTitle.slice(0, prdStart?.index ?? afterTitle.length).trim()
+    : null;
+  const body = prdStart ? afterTitle.slice(prdStart.index) : afterTitle;
   const marker = /^#{1,3}\s*TASKS\b/im;
-  const match = marker.exec(text);
-  if (!match) return { prd: text, tasks: "# Tasks\n\n_(planner returned no task section)_\n" };
-  return { prd: text.slice(0, match.index).trim(), tasks: text.slice(match.index).trim() };
+  const match = marker.exec(body);
+  if (!match) {
+    return { title, prd: body, tasks: "# Tasks\n\n_(planner returned no task section)_\n" };
+  }
+  return { title, prd: body.slice(0, match.index).trim(), tasks: body.slice(match.index).trim() };
 }
