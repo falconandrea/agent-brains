@@ -1,6 +1,6 @@
 ---
 name: designer
-description: Product design and UX engineering for frontend work: loads the project DESIGN_SYSTEM.md first, then applies layout, hierarchy, accessibility and visual-polish rules. Use before writing or reviewing any UI code (Blade, JSX, Vue, CSS, Tailwind).
+description: "Product design and UX engineering for frontend work: loads the project DESIGN_SYSTEM.md first, then applies layout, hierarchy, accessibility and visual-polish rules. Use before writing or reviewing any UI code (Blade, JSX, Vue, CSS, Tailwind)."
 ---
 
 # Skill: Product Design & UX Engineering

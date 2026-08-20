@@ -1,6 +1,6 @@
 ---
 name: product-thinking
-description: Ruthless MVP scoping and product direction: pressure-test a feature idea against user value, scope creep and engineering debt before any code is written. Use when planning a feature, cutting scope, deciding what to build first, or challenging whether something should be built at all.
+description: "Ruthless MVP scoping and product direction: pressure-test a feature idea against user value, scope creep and engineering debt before any code is written. Use when planning a feature, cutting scope, deciding what to build first, or challenging whether something should be built at all."
 ---
 
 # Skill: Product Thinking & MVP Scoping
