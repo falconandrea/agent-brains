@@ -97,8 +97,51 @@ code it was never shown. Nothing is committed.
 
 ## Known gaps
 
-- Everything under `src/pi/` is unverified until the spike passes.
-- The `ask_user`-mid-child-run path may need `mode: "deferred"` (see SPIKE.md).
+- `src/pi/` primitives are proven by the spike (2026-08-17, 0.84.2). The
+  `/feature` pipeline's spec phase (planner → PRD/TASKS → gate) has run
+  against real models (2026-08-18, glm-5.3 planner); developer → verify →
+  reviewer have not yet.
+- The `ask_user`-mid-child-run path **works** for a single dialog (spike
+  check 4). Two failure modes surfaced on 2026-08-18 (runs against
+  search-flights, Pi 0.84.2):
+  1. **Lost sequential dialog.** A `ctx.ui.*` dialog fired from the detached
+     workflow while another was open/closing never rendered — status line
+     showed `planner: tool ask_user`, no dialog, zero CPU, no open sockets,
+     promise pending forever (run run-msyr18rk).
+  2. **Single-pick dead end.** `ctx.ui.select` allows choosing exactly one
+     row with no freeform escape, so a planner that batches Q1..Qn × A/B/C
+     options into one `ask_user` is unanswerable.
+
+  Bridge mitigations (src/pi/human-input.ts): every dialog is chained through
+  a serialization lock (at most one in flight), option batches larger than 3
+  are routed to freeform `ctx.ui.input` with the options inlined in the
+  message (answerable as "1: A, 2: B"), and every child-question select gets a
+  trailing "Other — type your answer" row that opens a chained input — the
+  user must never have to type a workflow answer into the main chat, where it
+  wakes the main agent instead of reaching the child. With the lock in place,
+  role prompts mandate ONE decision per ask_user call (2-3 options each),
+  asked sequentially — the batched Q1..Qn single call is explicitly banned.
+  Known residual risk: if the TUI ever loses a dialog anyway, the lock queues
+  all later dialogs behind the dead promise — `/flow stop` is the escape
+  hatch. `mode: "deferred"` remains the fallback.
+- Typed chat input during a run lands in the MAIN session and wakes the main
+  agent, which knows nothing about the workflow and starts investigating it
+  (observed 2026-08-18: a "1: A, …" answer typed in chat instead of the
+  dialog produced several minutes of main-agent detective work — pure token
+  burn; the workflow itself correctly stayed at its gate). Open fix ideas:
+  surface "workflow running — answer dialogs, not chat" guidance, or have the
+  extension answer main-session questions about runs cheaply.
+- [pi-ask-user](https://github.com/edlsh/pi-ask-user) and
+  [pi-ask](https://github.com/eko24ive/pi-ask) (tabbed multi-question forms,
+  per-option notes, review tab — the best ask UX in the ecosystem) were
+  evaluated and rejected for now: both register their tool at the extension
+  level for the *main* session, while pi-brain's children are built via
+  `createAgentSession` with explicit `customTools` and cannot see other
+  extensions' tools; importing their internals would couple us to unexported,
+  version-sensitive code (pi-ask-user's own issue #17 documents the
+  dual-module-instance class of bugs). Revisit if Pi ever exposes extension
+  tools to child sessions — at that point adopt pi-ask and drop the bridge's
+  hand-rolled dialogs.
 - No `/setup`, `/review`, `/bugfix` yet — phase 2.
 - Submodules are not supported. Their inner diff cannot be included, so a run
   that finds any submodule dirty, moved or uninitialised escalates to

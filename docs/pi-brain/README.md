@@ -17,10 +17,11 @@ OpenCode/Codex through `setup.sh`.
 | | |
 |---|---|
 | Pi-free logic (profiles, stack, context routing, verification, review loop, run lock, workflow) | implemented, 46 tests green |
-| Pi SDK layer (`src/pi/`, `extensions/pi-brain.ts`) | typechecked against pi-coding-agent 0.84.2, **never executed** |
-| Spike proving the Pi APIs | **not run yet** — see [SPIKE.md](./SPIKE.md) |
+| Pi SDK layer (`src/pi/`, `extensions/pi-brain.ts`) | typechecked against pi-coding-agent 0.84.2, **never executed end-to-end** |
+| Spike proving the Pi APIs | **passed 2026-08-17 on 0.84.2** — all checks, see [SPIKE.md](./SPIKE.md) |
 
-Nothing here has talked to a model. Run the spike first.
+The spike proves every Pi primitive pi-brain uses (including `ask_user` mid-run).
+`src/pi/` itself still has not run a real `/feature` — that is the next step.
 
 ---
 

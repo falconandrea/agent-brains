@@ -77,6 +77,7 @@ Change the mode in `extensions/pi-brain.ts` — it is the only place that picks 
 Append the outcome here (date, Pi version, which checks passed) so the next
 session does not have to re-run it blind.
 
-| Date | Pi version | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | Notes |
-|---|---|---|---|---|---|---|---|---|---|---|
-| _not run yet_ | | | | | | | | | | |
+| Date | Pi version | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | Notes |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-08-17 | 0.84.2 | ✅ | | | | | | | | | ~57 skills load, no bogus workflow entries. `designer`/`product-thinking` failed YAML (unquoted `: ` in description — fixed). 4 collisions with `~/.agents/skills` (tdd, grill-with-docs, improve-codebase-architecture, vercel-react-best-practices): user-level copies win, repo copies skipped — the two tdd copies *differ*. Restart Pi to confirm the two fixes load. |
+| 2026-08-17 | 0.84.2 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | All checks passed. Reached the final line, which only prints if no check threw. **Check 4 passed** — `ctx.ui.input` from inside a custom tool mid-`session.prompt()` works; the `mode: "deferred"` fallback stays available but is not needed. Check 7: filtered child saw only `code-review`, no laravel/astro leak. |
