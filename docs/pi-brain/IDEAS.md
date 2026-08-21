@@ -76,6 +76,14 @@ was exhausted (2026-08-18) forced a full restart, planner questions included.
 diff on disk; verify/review recompute diff and read PRD/TASKS fresh each
 round. So resume is mostly *skipping phases whose events are already logged*.
 
+**Correction (2026-08-21): do NOT trust `pi.appendEntry` for durability.**
+A fully successful run (review rounds included) left ZERO trace in
+`~/.pi/agent/sessions` — pi never flushed the session to disk on exit. The
+event sink must own its persistence: append events to a pi-brain-owned
+`.pi/pi-brain/runs/<runId>.jsonl` in addition to (or instead of)
+`pi.appendEntry`. This also makes `/flow log` trivially readable after a
+crash and decouples resume from pi's session lifecycle.
+
 **Design sketch.** `/flow resume <runId>`:
 1. Replay the event log for that runId → last completed phase, review round,
    verify retry counter.

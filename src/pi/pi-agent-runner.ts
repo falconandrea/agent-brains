@@ -226,18 +226,22 @@ export class PiAgentRunner implements AgentRunner {
         options: Type.Optional(Type.Array(Type.String())),
       }),
       execute: async (_id, params) => {
-        // A malformed call (empty or placeholder question text) must bounce
-        // back to the child as a tool error, never reach the user's screen
-        // as a garbage dialog.
+        // A malformed call (empty/placeholder question, or degenerate options
+        // like bare numbers — the model filling the schema wrongly) must
+        // bounce back to the child as a tool error, never reach the user's
+        // screen as a garbage dialog.
         const question = (params.question ?? "").trim();
-        if (!question || /^placeholder$/i.test(question)) {
+        const options = (params.options ?? []).map((o: unknown) => String(o ?? "").trim());
+        const garbage = options.filter((o: string) => !o || /^[0-9.]+$/.test(o));
+        if (!question || /^placeholder$/i.test(question) || garbage.length > 0) {
           return {
             content: [
               {
                 type: "text",
-                text: "ERROR: ask_user was called without a real question. Call it again " +
-                  "with a concrete question in the 'question' parameter (2-3 options, " +
-                  "one decision per call).",
+                text: "ERROR: ask_user was called with an unusable question/options payload " +
+                  "(empty/placeholder question, or options that are bare numbers — they look " +
+                  "like a schema-filling mistake). Call it again with a concrete question and " +
+                  "2-3 meaningful, human-readable option labels, one decision per call.",
               },
             ],
             details: {},
