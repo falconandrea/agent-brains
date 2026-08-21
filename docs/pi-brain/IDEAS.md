@@ -65,6 +65,29 @@ to a handful of developer turns, so a single `/feature` fits comfortably;
 hitting the limit mid-run fails the run cleanly (Pi error) and the run can be
 retried when the window resets. No mitigation worth building until observed.
 
+## Plan reviewer (spec review before the gate)
+
+**Status:** idea, deferred until a run actually fails from a bad PRD. Raised
+2026-08-21 after the user asked "should codex review the plan too?".
+
+**The idea.** planner (glm) → spec review (codex, readOnly, structured
+verdict) → planner fix round (bound: 1) → human gate → develop → …
+
+**Why deferred.** Spec quality has not been an observed failure mode (the
+human gate catches plan issues today, with veto on Assumptions); it doubles
+codex budget pressure (the quota already killed a run once); and codex on
+both plan-review and dev-review re-correlates "rules" with their enforcement
+— the exact coupling the reviewer-independence principle exists to avoid.
+
+**Cheaper alternatives when the need appears.**
+1. Deterministic PRD lint before the gate (zero tokens): required sections
+   present, acceptance criteria countable/testable, tasks reference real
+   files, no "TBD" assumptions. Fits the project philosophy: code decides,
+   models work.
+2. `/flow review-plan` on demand: send the PRD to the reviewer model only
+   when the human gate suspects something — pay for plan review per use,
+   not per run.
+
 ## Resume mode for interrupted runs
 
 **Status:** idea, well-supported by existing pieces. Triggered by the first
