@@ -24,7 +24,7 @@ import { RealGitService, ShellVerifyRunner } from "../src/shell.ts";
 import { acquireRunLock, describeLock, type AcquireResult } from "../src/run-lock.ts";
 import { PiHumanInput, UserDismissedError } from "../src/pi/human-input.ts";
 import { PiAgentRunner } from "../src/pi/pi-agent-runner.ts";
-import { runFeatureWorkflow, type FeatureOutcome } from "../src/workflows/feature.ts";
+import { runFeatureWorkflow, type FeatureOutcome, type UsageByRole } from "../src/workflows/feature.ts";
 import type { WorkflowEvent } from "../src/ports.ts";
 
 const PACKAGE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -207,10 +207,26 @@ export default function piBrain(pi: ExtensionAPI): void {
         case "log":
           ctx.ui.notify(active.events.map(describe).join("\n") || "(no events yet)");
           return;
-        default:
+        default: {
+          // Live usage folded from agent.completed events (per-call deltas).
+          const live: UsageByRole = {};
+          for (const event of active.events) {
+            if (event.type !== "agent.completed" || !event.usage) continue;
+            const current = live[event.role] ?? { input: 0, output: 0 };
+            current.input += event.usage.input;
+            current.output += event.usage.output;
+            live[event.role] = current;
+          }
+          const usageLine = renderUsage(live);
           ctx.ui.notify(
-            `pi-brain ${active.workflow} [${active.status}] phase=${active.phase} run=${active.runId}`,
+            [
+              `pi-brain ${active.workflow} [${active.status}] phase=${active.phase} run=${active.runId}`,
+              usageLine,
+            ]
+              .filter(Boolean)
+              .join("\n"),
           );
+        }
       }
     },
   });
@@ -277,6 +293,8 @@ function describe(event: WorkflowEvent): string {
       return `● ${event.phase}`;
     case "agent.started":
       return `  ${event.role} → ${event.model}`;
+    case "agent.completed":
+      return `  ${event.role} done${event.usage ? ` (${fmtTokens(event.usage.input)} in / ${fmtTokens(event.usage.output)} out)` : ""}`;
     case "command.completed":
       return `  ${event.exitCode === 0 ? "✓" : "✗"} ${event.command}`;
     case "review.completed":
@@ -286,7 +304,26 @@ function describe(event: WorkflowEvent): string {
   }
 }
 
+/** 1234 → "1.2k", 250 → "250" — compact enough for a status line. */
+function fmtTokens(n: number): string {
+  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+}
+
+/** "planner 1.2k/0.4k · developer 8.9k/2.1k · total 10.1k/2.5k" (in/out). */
+function renderUsage(usage: UsageByRole): string {
+  const roles = Object.entries(usage);
+  if (roles.length === 0) return "";
+  const parts = roles.map(([role, u]) => `${role} ${fmtTokens(u!.input)}/${fmtTokens(u!.output)}`);
+  const total = roles.reduce(
+    (acc, [, u]) => ({ input: acc.input + u!.input, output: acc.output + u!.output }),
+    { input: 0, output: 0 },
+  );
+  parts.push(`total ${fmtTokens(total.input)}/${fmtTokens(total.output)}`);
+  return `tokens in/out: ${parts.join(" · ")}`;
+}
+
 function renderOutcome(outcome: FeatureOutcome): string {
+  const usageLine = renderUsage(outcome.usage);
   switch (outcome.status) {
     case "completed":
       return [
@@ -295,12 +332,13 @@ function renderOutcome(outcome: FeatureOutcome): string {
         outcome.review.issues.length > 0
           ? `${outcome.review.issues.length} non-blocking note(s) left by the reviewer.`
           : "",
+        usageLine,
         "Inspect with: git diff",
       ]
         .filter(Boolean)
         .join("\n");
     case "needs_human":
-      return `⚠ NEEDS HUMAN — ${outcome.reason}`;
+      return ["⚠ NEEDS HUMAN — " + outcome.reason, usageLine].filter(Boolean).join("\n");
     default:
       return `cancelled at ${outcome.at}`;
   }

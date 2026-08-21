@@ -109,6 +109,64 @@ const reviewOf = (r: ReviewResult): AgentRunResult => ({
 const plannerResult: AgentRunResult = { role: "planner", text: PLAN, aborted: false };
 const devResult: AgentRunResult = { role: "developer", text: "DEV_INTERNAL_MONOLOGUE", aborted: false };
 
+test("token usage aggregates per role and ships with the outcome", async () => {
+  let reviewIndex = 0;
+  const { deps, events } = harness((req) => {
+    if (req.role === "planner") {
+      return { ...plannerResult, usage: { input: 1000, output: 500 } };
+    }
+    if (req.role === "developer") {
+      // 1st dev run + fix round: usage must accumulate per role.
+      return { ...devResult, usage: { input: 2000, output: 900 } };
+    }
+    reviewIndex += 1;
+    return {
+      ...reviewOf(
+        reviewIndex === 1
+          ? {
+              verdict: "changes_requested",
+              summary: "one bug",
+              issues: [{ id: "R1", severity: "blocking", category: "bug", problem: "off by one" }],
+            }
+          : { verdict: "approved", summary: "ok", issues: [] },
+      ),
+      usage: { input: 3000, output: 1200 },
+    };
+  });
+
+  const outcome = await runFeatureWorkflow(deps, "add invitations", "run-usage");
+
+  assert.equal(outcome.status, "completed");
+  assert.deepEqual(outcome.usage, {
+    planner: { input: 1000, output: 500 },
+    developer: { input: 4000, output: 1800 },
+    reviewer: { input: 6000, output: 2400 },
+  });
+
+  const agentDone = events.filter((e) => e.type === "agent.completed");
+  const devDone = agentDone.filter((e) => e.role === "developer");
+  assert.deepEqual(
+    devDone.map((e) => (e as { usage?: unknown }).usage),
+    [
+      { input: 2000, output: 900 },
+      { input: 2000, output: 900 },
+    ],
+    "each agent.completed event carries its own call's usage",
+  );
+});
+
+test("a run with no reported usage yields an empty usage map, not undefined", async () => {
+  const { deps } = harness((req) =>
+    req.role === "planner"
+      ? plannerResult
+      : req.role === "developer"
+        ? devResult
+        : reviewOf({ verdict: "approved", summary: "ok", issues: [] }),
+  );
+  const outcome = await runFeatureWorkflow(deps, "add invitations", "run-no-usage");
+  assert.deepEqual(outcome.usage, {});
+});
+
 test("happy path: changes requested on round 1, approved on round 2", async () => {
   let reviewIndex = 0;
   const { deps, agents, cwd, events } = harness((req) => {
@@ -241,7 +299,7 @@ test("rejecting the plan cancels before any developer runs", async () => {
 
   const outcome = await runFeatureWorkflow(deps, "add invitations", "run-4");
 
-  assert.deepEqual(outcome, { status: "cancelled", at: "spec approval" });
+  assert.deepEqual(outcome, { status: "cancelled", at: "spec approval", usage: {} });
   assert.equal(agents.calls.filter((c) => c.role !== "planner").length, 0);
 });
 
@@ -446,6 +504,6 @@ test("an aborted child run cancels instead of pressing on", async () => {
 
   const outcome = await runFeatureWorkflow(deps, "add invitations", "run-abort");
 
-  assert.deepEqual(outcome, { status: "cancelled", at: "development" });
+  assert.deepEqual(outcome, { status: "cancelled", at: "development", usage: {} });
   assert.equal(agents.calls.filter((c) => c.role === "reviewer").length, 0);
 });

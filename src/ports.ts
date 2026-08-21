@@ -71,7 +71,13 @@ export type WorkflowEvent =
   | { type: "workflow.started"; runId: string; workflow: string }
   | { type: "phase.started"; runId: string; phase: string }
   | { type: "agent.started"; runId: string; role: string; model: string }
-  | { type: "agent.completed"; runId: string; role: string }
+  | {
+      type: "agent.completed";
+      runId: string;
+      role: string;
+      /** Token usage of THIS agent call, when the runner reports it. */
+      usage?: { input: number; output: number };
+    }
   | { type: "agent.waiting_input"; runId: string; role: string; question: string }
   | { type: "command.completed"; runId: string; command: string; exitCode: number }
   | { type: "verification.completed"; runId: string; passed: boolean }

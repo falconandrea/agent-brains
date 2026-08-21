@@ -152,5 +152,9 @@ code it was never shown. Nothing is committed.
 - No worktrees. Concurrent writing runs on the same repo are blocked by a
   lockfile, not isolated.
 - Run state is appended via `pi.appendEntry` but there is no resume UX.
-- Per-agent token usage is captured from `agent_end` but not yet surfaced in a
-  run summary.
+- Per-agent token usage is captured from `agent_end`, aggregated per role in
+  the workflow (`UsageByRole`) and surfaced in the final summary and
+  `/flow status` (live, folded from `agent.completed` events). Caveat:
+  `pi.appendEntry` durability is NOT guaranteed — a completed run left no
+  session trace on disk (2026-08-21); the persisted-usage story belongs to
+  the run-state file planned in IDEAS.md (resume mode).

@@ -45,10 +45,19 @@ export interface FeatureDeps {
   signal?: AbortSignal;
 }
 
+export interface UsageTotals {
+  input: number;
+  output: number;
+  cost?: number;
+}
+
+/** Cumulative token usage per role over the whole run. */
+export type UsageByRole = Partial<Record<string, UsageTotals>>;
+
 export type FeatureOutcome =
-  | { status: "completed"; summary: string; files: string[]; review: ReviewResult }
-  | { status: "needs_human"; reason: string; review?: ReviewResult }
-  | { status: "cancelled"; at: string };
+  | { status: "completed"; summary: string; files: string[]; review: ReviewResult; usage: UsageByRole }
+  | { status: "needs_human"; reason: string; review?: ReviewResult; usage: UsageByRole }
+  | { status: "cancelled"; at: string; usage: UsageByRole };
 
 export async function runFeatureWorkflow(
   deps: FeatureDeps,
@@ -57,6 +66,23 @@ export async function runFeatureWorkflow(
 ): Promise<FeatureOutcome> {
   const { human, events, config } = deps;
   events.emit({ type: "workflow.started", runId, workflow: "feature" });
+
+  // Token accounting: every agent result folds in here and ships with the
+  // outcome, whatever way the run ends. A missing usage (fake runners, a
+  // provider that reports nothing) simply does not add.
+  const usage: UsageByRole = {};
+  const recordUsage = (role: string, u?: { input?: number; output?: number; cost?: number }): void => {
+    if (u === undefined) return;
+    const input = u.input ?? 0;
+    const output = u.output ?? 0;
+    const cost = u.cost;
+    if (input === 0 && output === 0 && cost === undefined) return;
+    const current = usage[role] ?? { input: 0, output: 0 };
+    current.input += input;
+    current.output += output;
+    if (cost !== undefined) current.cost = (current.cost ?? 0) + cost;
+    usage[role] = current;
+  };
 
   // --- Phase A: discovery --------------------------------------------------
   events.emit({ type: "phase.started", runId, phase: "discover" });
@@ -86,8 +112,14 @@ export async function runFeatureWorkflow(
     contextFiles: routeContext({ cwd: deps.cwd, role: "planner", task: description, stack }).files,
     signal: deps.signal,
   });
-  events.emit({ type: "agent.completed", runId, role: "planner" });
-  if (plan.aborted || deps.signal?.aborted) return { status: "cancelled", at: "planning" };
+  events.emit({
+    type: "agent.completed",
+    runId,
+    role: "planner",
+    ...(plan.usage ? { usage: { input: plan.usage.input ?? 0, output: plan.usage.output ?? 0 } } : {}),
+  });
+  recordUsage("planner", plan.usage);
+  if (plan.aborted || deps.signal?.aborted) return { status: "cancelled", at: "planning", usage };
 
   // The planner is read-only by design: it returns the documents as text and the
   // orchestrator writes them. Always write this run's output — reusing files
@@ -111,7 +143,7 @@ export async function runFeatureWorkflow(
     detail: `${prdPath}\n${tasksPath}`,
     defaultValue: false,
   });
-  if (!approved) return { status: "cancelled", at: "spec approval" };
+  if (!approved) return { status: "cancelled", at: "spec approval", usage };
 
   // --- Phase D..G: develop / verify / review loop --------------------------
   const developerCfg = roleConfig(config, "developer");
@@ -142,7 +174,7 @@ export async function runFeatureWorkflow(
   let lastReview: ReviewResult | undefined;
 
   for (;;) {
-    if (deps.signal?.aborted) return { status: "cancelled", at: `round ${reviewRound}` };
+    if (deps.signal?.aborted) return { status: "cancelled", at: `round ${reviewRound}`, usage };
 
     // developer
     events.emit({
@@ -172,8 +204,14 @@ export async function runFeatureWorkflow(
       contextFiles: devContext(),
       signal: deps.signal,
     });
-    events.emit({ type: "agent.completed", runId, role: "developer" });
-    if (devRun.aborted || deps.signal?.aborted) return { status: "cancelled", at: "development" };
+    events.emit({
+      type: "agent.completed",
+      runId,
+      role: "developer",
+      ...(devRun.usage ? { usage: { input: devRun.usage.input ?? 0, output: devRun.usage.output ?? 0 } } : {}),
+    });
+    recordUsage("developer", devRun.usage);
+    if (devRun.aborted || deps.signal?.aborted) return { status: "cancelled", at: "development", usage };
 
     // deterministic verification BEFORE spending reviewer tokens (§24)
     events.emit({ type: "phase.started", runId, phase: "verify" });
@@ -194,6 +232,7 @@ export async function runFeatureWorkflow(
           reason: `verification still failing after ${verifyRetries} developer retries: ${blockingFailures
             .map((f) => f.command)
             .join(", ")}`,
+          usage,
         };
       }
       verifyRetries += 1;
@@ -221,6 +260,7 @@ export async function runFeatureWorkflow(
           `dirty submodules (${diff.dirtySubmodules.join(", ")}) — their contents cannot be ` +
           `included in the diff, so no reviewer can see them. Review those by hand.`,
         review: lastReview,
+        usage,
       };
     }
     events.emit({
@@ -249,8 +289,14 @@ export async function runFeatureWorkflow(
       contextFiles: reviewContext(),
       signal: deps.signal,
     });
-    events.emit({ type: "agent.completed", runId, role: "reviewer" });
-    if (raw.aborted || deps.signal?.aborted) return { status: "cancelled", at: `review #${reviewRound}` };
+    events.emit({
+      type: "agent.completed",
+      runId,
+      role: "reviewer",
+      ...(raw.usage ? { usage: { input: raw.usage.input ?? 0, output: raw.usage.output ?? 0 } } : {}),
+    });
+    recordUsage("reviewer", raw.usage);
+    if (raw.aborted || deps.signal?.aborted) return { status: "cancelled", at: `review #${reviewRound}`, usage };
 
     const validated = validateReviewResult(raw.structured);
     if (!validated.ok) {
@@ -258,6 +304,7 @@ export async function runFeatureWorkflow(
       return {
         status: "needs_human",
         reason: `reviewer returned an invalid result: ${validated.errors.join("; ")}`,
+        usage,
       };
     }
     lastReview = validated.value;
@@ -283,11 +330,12 @@ export async function runFeatureWorkflow(
         summary: lastReview.summary,
         files: diff.files,
         review: lastReview,
+        usage,
       };
     }
     if (decision.action === "escalate") {
       events.emit({ type: "workflow.completed", runId, status: "needs_human" });
-      return { status: "needs_human", reason: decision.reason, review: lastReview };
+      return { status: "needs_human", reason: decision.reason, review: lastReview, usage };
     }
 
     fixes = decision.issues;
