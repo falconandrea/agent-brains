@@ -3,6 +3,40 @@
 Nothing here is decided. Each idea earns code only after a spike or trial
 proves it. These notes exist so a future session does not re-derive them.
 
+## NEXT: skill-router refactor — intersection, not union
+
+**Status:** designed, next to build (agreed 2026-08-21).
+
+**The problem.** Role routing is additive today: a role inherits the whole
+stack profile and ROLE_POLICIES only subtract a few names. Observed result on
+a nodejs project: developer gets `grilling`, `product-thinking`,
+`handoff`, `start`, `setup`, `to-tickets` — skills a pipeline role can never
+use. Every leaked skill is context the child pays for in input tokens.
+
+**The design (option A — code, not config).**
+- ROLE_POLICIES become **allowlists by capability**: each role declares which
+  skill categories it admits (planning / review / debugging / testing /
+  craft / operational), and a skill enters a role's set only if its category
+  is admitted AND the stack profile contains it. The profile stays the single
+  source; the role is the filter.
+- Target contract:
+  - planner: planning + research (feature, grilling, grill-with-docs,
+    to-spec, product-thinking, research)
+  - developer: testing + debugging + craft (karpathy-guidelines, tdd,
+    diagnosing-bugs, verification-before-completion) + stack technical skills
+  - reviewer: review + craft (code-review, simplify, karpathy-guidelines) +
+    stack technical skills
+- Operational skills (handoff, lessons-gardener, start, setup, to-tickets,
+  long-horizon-brief, improve-codebase-architecture, i-have-adhd…) belong to
+  the main session only and are excluded from every pipeline role.
+- Skill→category mapping lives in one place in skill-router.ts (explicit
+  table), not in config files; per-project override via `.pi/pi-brain.json`
+  stays a possible later addition, not the default mechanism.
+- Verification: extend tests ("developer has no planning skills", "no
+  operational skills in any role") + the runtime check command used on
+  2026-08-21 (`selectSkills` per role). `agent.started` events now carry the
+  routed skills (`/flow log`), so real runs expose any remaining leak.
+
 ## Triage orchestrator (entry router)
 
 **Status:** idea. Not designed, not spiked.

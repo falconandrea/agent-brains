@@ -292,7 +292,7 @@ function describe(event: WorkflowEvent): string {
     case "phase.started":
       return `● ${event.phase}`;
     case "agent.started":
-      return `  ${event.role} → ${event.model}`;
+      return `  ${event.role} → ${event.model}${event.skills?.length ? ` [${event.skills.join(", ")}]` : ""}`;
     case "agent.completed":
       return `  ${event.role} done${event.usage ? ` (${fmtTokens(event.usage.input)} in / ${fmtTokens(event.usage.output)} out)` : ""}`;
     case "command.completed":

@@ -70,7 +70,14 @@ export interface WorkflowEventSink {
 export type WorkflowEvent =
   | { type: "workflow.started"; runId: string; workflow: string }
   | { type: "phase.started"; runId: string; phase: string }
-  | { type: "agent.started"; runId: string; role: string; model: string }
+  | {
+      type: "agent.started";
+      runId: string;
+      role: string;
+      model: string;
+      /** Skill names routed to this role (visibility/debugging). */
+      skills?: string[];
+    }
   | {
       type: "agent.completed";
       runId: string;

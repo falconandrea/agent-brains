@@ -94,12 +94,13 @@ export async function runFeatureWorkflow(
   events.emit({ type: "phase.started", runId, phase: "spec" });
   const planner = selectSkills(deps.profilesDir, stack.primary, "planner", deps.availableSkills);
   const plannerCfg = roleConfig(config, "planner");
-  events.emit({
-    type: "agent.started",
-    runId,
-    role: "planner",
-    model: modelLabel(plannerCfg.provider, plannerCfg.model),
-  });
+    events.emit({
+      type: "agent.started",
+      runId,
+      role: "planner",
+      model: modelLabel(plannerCfg.provider, plannerCfg.model),
+      skills: planner.skills,
+    });
 
   const plan = await deps.agents.run({
     runId,
@@ -188,6 +189,7 @@ export async function runFeatureWorkflow(
       runId,
       role: "developer",
       model: modelLabel(developerCfg.provider, developerCfg.model),
+      skills: devSkills.skills,
     });
     const devRun = await deps.agents.run({
       runId,
@@ -268,6 +270,7 @@ export async function runFeatureWorkflow(
       runId,
       role: "reviewer",
       model: modelLabel(reviewerCfg.provider, reviewerCfg.model),
+      skills: revSkills.skills,
     });
 
     const raw = await deps.agents.run({
