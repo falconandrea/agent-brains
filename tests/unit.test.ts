@@ -100,17 +100,68 @@ test("node verification falls back to tsc when no typecheck script", () => {
 
 // --- skill routing ----------------------------------------------------------
 
-test("reviewer gets code-review, developer does not", () => {
-  const available = new Set(resolveProfile(PROFILES_DIR, "full").skills);
-  available.add("code-review");
-  available.add("karpathy-guidelines");
+const AVAILABLE_SKILLS = (() => {
+  const set = new Set(resolveProfile(PROFILES_DIR, "full").skills);
+  for (const s of [
+    "code-review",
+    "karpathy-guidelines",
+    "verification-before-completion",
+    "feature",
+    "grilling",
+    "product-thinking",
+    "to-spec",
+    "research",
+    "simplify",
+    "tdd",
+    "diagnosing-bugs",
+    "handoff",
+    "start",
+    "setup",
+    "to-tickets",
+    "lessons-gardener",
+    "long-horizon-brief",
+    "improve-codebase-architecture",
+  ]) {
+    set.add(s);
+  }
+  return set;
+})();
 
+test("each role gets only its categories: developer plans nothing, reviewer reviews", () => {
+  const dev = selectSkills(PROFILES_DIR, "nodejs", "developer", AVAILABLE_SKILLS);
+  const rev = selectSkills(PROFILES_DIR, "nodejs", "reviewer", AVAILABLE_SKILLS);
+  const plan = selectSkills(PROFILES_DIR, "nodejs", "planner", AVAILABLE_SKILLS);
+
+  assert.ok(!dev.skills.includes("feature"), "planning must not reach the developer");
+  assert.ok(!dev.skills.includes("grilling"), "planning must not reach the developer");
+  assert.ok(!dev.skills.includes("product-thinking"), "planning must not reach the developer");
+  assert.ok(!rev.skills.includes("feature"), "planning must not reach the reviewer");
+  assert.ok(!plan.skills.includes("code-review"), "review must not reach the planner");
+  assert.ok(!plan.skills.includes("simplify"), "review must not reach the planner");
+  assert.ok(rev.skills.includes("code-review"), "the reviewer judges code");
+  assert.ok(dev.skills.includes("tdd"), "the developer tests");
+  assert.ok(dev.skills.includes("diagnosing-bugs"), "the developer debugs");
+});
+
+test("no operational skill reaches any pipeline role", () => {
+  for (const role of ["planner", "developer", "reviewer", "tester", "security-reviewer"] as const) {
+    const sel = selectSkills(PROFILES_DIR, "full", role, AVAILABLE_SKILLS);
+    for (const banned of ["handoff", "start", "setup", "to-tickets", "lessons-gardener", "long-horizon-brief", "improve-codebase-architecture"]) {
+      assert.ok(!sel.skills.includes(banned), `${banned} must not reach ${role}`);
+    }
+  }
+});
+
+test("stack skills flow to every role but only within the profile", () => {
+  const available = new Set([...resolveProfile(PROFILES_DIR, "laravel").skills, ...AVAILABLE_SKILLS]);
   const dev = selectSkills(PROFILES_DIR, "laravel", "developer", available);
   const rev = selectSkills(PROFILES_DIR, "laravel", "reviewer", available);
+  assert.ok(dev.skills.includes("laravel-best-practices"), "stack knowledge reaches the developer");
+  assert.ok(rev.skills.includes("laravel-best-practices"), "stack knowledge reaches the reviewer");
 
-  assert.ok(rev.skills.includes("code-review"));
-  assert.ok(!dev.skills.includes("code-review"));
-  assert.ok(!dev.skills.includes("feature"), "planning skills must not leak into the developer");
+  const nodeDev = selectSkills(PROFILES_DIR, "nodejs", "developer", available);
+  assert.ok(!nodeDev.skills.some((s) => s.startsWith("laravel")), "no laravel skills in a nodejs project");
+  assert.ok(!nodeDev.skills.includes("livewire-development"));
 });
 
 test("astro developer gets no laravel skills", () => {

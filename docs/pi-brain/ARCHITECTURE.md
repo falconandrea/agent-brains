@@ -73,9 +73,14 @@ limitations fail in the safe direction: a recycled PID makes a dead owner look
 alive (the run is refused until the user clears it), and inode reuse could defeat
 the identity checks.
 
-**Skill routing.** `stack → profile → role policy → skill names →
-skillsOverride` on the child's resource loader. A Laravel skill never reaches an
-Astro developer.
+**Skill routing.** `stack → profile → category filter → skill names →
+skillsOverride` on the child's resource loader. Every skill maps to one
+category (`SKILL_CATEGORIES` in src/skill-router.ts); every role admits a set
+of categories (`ROLE_CATEGORIES`); a skill reaches a role only when its
+category is admitted AND the stack profile contains it. So a Laravel skill
+never reaches an Astro developer, a planning skill never reaches the
+developer/reviewer, and operational/session skills (handoff, start, setup…)
+never reach any pipeline child.
 
 **Profiles stay `.list`.** Same files `setup.sh` uses on `main`. The spec sketched
 YAML; converting would have broken the OpenCode path for no gain.
