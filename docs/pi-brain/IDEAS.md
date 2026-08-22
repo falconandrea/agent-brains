@@ -166,6 +166,17 @@ event sink must own its persistence: append events to a pi-brain-owned
 `pi.appendEntry`. This also makes `/flow log` trivially readable after a
 crash and decouples resume from pi's session lifecycle.
 
+**Escalation (2026-08-22, now PRIORITY): same gap lost real data a second
+time.** A `needs_human` outcome (max review rounds) rendered its full
+reviewer findings in a TUI notify; the user accidentally scrolled it away
+with `/flow log` and NOTHING persisted — not the outcome, not the review
+issues, not the token usage. The run-state file is not just resume
+infrastructure: it is the audit trail (outcomes, review issues per round,
+per-role usage) that `/flow log` should read from and that survives TUI
+scrolling, crashes and unflushed sessions. Design note: `ReviewResult`
+(issues included) should be emitted in the `review.completed` event, so the
+persisted log is self-sufficient for post-mortems.
+
 **Design sketch.** `/flow resume <runId>`:
 1. Replay the event log for that runId → last completed phase, review round,
    verify retry counter.
