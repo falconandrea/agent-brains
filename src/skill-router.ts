@@ -89,7 +89,7 @@ const ROLE_CATEGORIES: Record<Role, SkillCategory[]> = {
   planner: ["planning", "craft", "stack"],
   developer: ["testing", "debugging", "craft", "stack"],
   reviewer: ["review", "craft", "stack"],
-  "security-reviewer": ["review", "stack"],
+  "security-reviewer": ["review", "craft", "stack"],
   tester: ["testing", "debugging", "stack"],
 };
 
