@@ -156,7 +156,15 @@ code it was never shown. Nothing is committed.
   working tree is dirty.
 - No worktrees. Concurrent writing runs on the same repo are blocked by a
   lockfile, not isolated.
-- Run state is appended via `pi.appendEntry` but there is no resume UX.
+- Run state is appended to a pi-brain-owned audit trail at
+  `.pi/pi-brain/runs/<runId>.jsonl` (src/run-log.ts): every workflow event,
+  the final `workflow.outcome` (status, reason, review issues, per-role
+  usage), best-effort writes that never kill a run, torn-final-line
+  tolerance. `/flow log` reads from this file and `/flow log-all` lists every
+  persisted run. This exists BECAUSE `pi.appendEntry` proved unreliable —
+  two incidents (2026-08-21/22) of completed runs leaving no session trace
+  and a lost needs_human outcome with all its review findings. Resume UX on
+  top of this log is still missing (IDEAS.md).
 - Per-agent token usage is captured from `agent_end`, aggregated per role in
   the workflow (`UsageByRole`) and surfaced in the final summary and
   `/flow status` (live, folded from `agent.completed` events). Caveat:

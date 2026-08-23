@@ -3,6 +3,16 @@
 Nothing here is decided. Each idea earns code only after a spike or trial
 proves it. These notes exist so a future session does not re-derive them.
 
+## Housekeeping: translate Italian artifacts to English
+
+`docs/plans/agent-workflow-improvements.md` (504 lines, the W0–W5 workflow
+plan for main) predates the English-artifacts convention and was written in
+Italian on explicit user request. Translate to English before merging to
+main. Convention recap: repo docs/artifacts = English; conversation with the
+user = user's language. Check also for any other Italian docs that slipped
+into the repo (search-flights is a separate project — its Italian docs are
+correct, that repo's convention is Italian).
+
 ## DONE: skill-router refactor — intersection, not union
 
 **Status:** implemented 2026-08-21 (commit trail in git). Kept for context.

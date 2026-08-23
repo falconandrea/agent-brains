@@ -316,6 +316,12 @@ export async function runFeatureWorkflow(
       runId,
       verdict: lastReview.verdict,
       round: reviewRound,
+      issues: lastReview.issues.map((i) => ({
+        id: i.id,
+        severity: i.severity,
+        category: i.category,
+        problem: i.problem,
+      })),
     });
 
     const decision = decideNextRound(

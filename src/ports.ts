@@ -88,6 +88,40 @@ export type WorkflowEvent =
   | { type: "agent.waiting_input"; runId: string; role: string; question: string }
   | { type: "command.completed"; runId: string; command: string; exitCode: number }
   | { type: "verification.completed"; runId: string; passed: boolean }
-  | { type: "review.completed"; runId: string; verdict: string; round: number }
+  | {
+      type: "review.completed";
+      runId: string;
+      verdict: string;
+      round: number;
+      /** Blocking findings of this round, for persisted post-mortems. */
+      issues?: Array<{ id: string; severity: string; category: string; problem: string }>;
+    }
+  | {
+      /**
+       * Final outcome with everything a post-mortem needs — persisted in the
+       * run log so findings survive the TUI (IDEAS.md run-state escalation).
+       */
+      type: "workflow.outcome";
+      runId: string;
+      status: string;
+      reason?: string;
+      summary?: string;
+      files?: string[];
+      /** Last review of the run, issues included (needs_human/completed). */
+      review?: {
+        verdict: string;
+        summary: string;
+        issues: Array<{
+          id: string;
+          severity: string;
+          category: string;
+          problem: string;
+          file?: string;
+          line?: number;
+          recommendation?: string;
+        }>;
+      };
+      usage?: Record<string, { input: number; output: number }>;
+    }
   | { type: "workflow.completed"; runId: string; status: string }
   | { type: "workflow.failed"; runId: string; error: string };

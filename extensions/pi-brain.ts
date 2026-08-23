@@ -26,6 +26,7 @@ import { PiHumanInput, UserDismissedError } from "../src/pi/human-input.ts";
 import { PiAgentRunner } from "../src/pi/pi-agent-runner.ts";
 import { runFeatureWorkflow, type FeatureOutcome, type UsageByRole } from "../src/workflows/feature.ts";
 import type { WorkflowEvent } from "../src/ports.ts";
+import { RunLog, readRunLog, listRunIds } from "../src/run-log.ts";
 
 const PACKAGE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PROFILES_DIR = join(PACKAGE_ROOT, "profiles");
@@ -92,6 +93,7 @@ export default function piBrain(pi: ExtensionAPI): void {
       for (const warning of warnings) ctx.ui.notify(`pi-brain config: ${warning}`, "warning");
       const runId = `run-${Date.now().toString(36)}`;
       const abort = new AbortController();
+      const runLog = RunLog.open(cwd, runId);
       const run: ActiveRun = {
         runId,
         workflow: "feature",
@@ -139,7 +141,8 @@ export default function piBrain(pi: ExtensionAPI): void {
       const events = {
         emit(event: WorkflowEvent) {
           run.events.push(event);
-          pi.appendEntry("pi-brain.event", event); // survives a crash (§20)
+          pi.appendEntry("pi-brain.event", event); // pi-side history (unreliable — see run-log.ts)
+          runLog.append(event); // OUR audit trail: survives crashes and scrolling
           if (event.type === "phase.started") {
             run.phase = event.phase;
             human.status(`${run.workflow}: ${event.phase}`);
@@ -168,6 +171,39 @@ export default function piBrain(pi: ExtensionAPI): void {
             runId,
           );
           run.status = outcome.status;
+          // Persist the full outcome — review findings included — before any
+          // TUI rendering can lose it (IDEAS.md run-state escalation).
+          events.emit({
+            type: "workflow.outcome",
+            runId,
+            status: outcome.status,
+            ...("reason" in outcome && outcome.reason !== undefined ? { reason: outcome.reason } : {}),
+            ...("summary" in outcome && outcome.summary !== undefined ? { summary: outcome.summary } : {}),
+            ...("files" in outcome && outcome.files !== undefined ? { files: outcome.files } : {}),
+            ...("review" in outcome && outcome.review !== undefined
+              ? {
+                  review: {
+                    verdict: outcome.review.verdict,
+                    summary: outcome.review.summary,
+                    issues: outcome.review.issues.map((i) => ({
+                      id: i.id,
+                      severity: i.severity,
+                      category: i.category,
+                      problem: i.problem,
+                      ...(i.file !== undefined ? { file: i.file } : {}),
+                      ...(i.line !== undefined ? { line: i.line } : {}),
+                      ...(i.recommendation !== undefined ? { recommendation: i.recommendation } : {}),
+                    })),
+                  },
+                }
+              : {}),
+            usage: Object.fromEntries(
+              Object.entries(outcome.usage).map(([role, u]) => [
+                role,
+                { input: u?.input ?? 0, output: u?.output ?? 0 },
+              ]),
+            ),
+          });
           ctx.ui.notify(renderOutcome(outcome), outcome.status === "completed" ? "info" : "warning");
           if (config.notifications.bell) process.stdout.write("\x07"); // terminal bell
         } catch (err) {
@@ -190,7 +226,8 @@ export default function piBrain(pi: ExtensionAPI): void {
     getArgumentCompletions: () =>
       [
         { value: "status", label: "status", description: "current phase and run id" },
-        { value: "log", label: "log", description: "event trace for this run" },
+        { value: "log", label: "log", description: "event trace for this run (persisted)" },
+        { value: "log-all", label: "log-all", description: "all persisted runs in this repo" },
         { value: "stop", label: "stop", description: "cancel the active run" },
       ],
     handler: async (args: string, ctx: ExtensionCommandContext) => {
@@ -204,9 +241,46 @@ export default function piBrain(pi: ExtensionAPI): void {
           active.status = "cancelled";
           ctx.ui.notify("pi-brain: cancelling…", "warning");
           return;
-        case "log":
-          ctx.ui.notify(active.events.map(describe).join("\n") || "(no events yet)");
+        case "log": {
+          // Read from the persisted run log (survives scrolling/crashes), not
+          // from the in-memory buffer.
+          const events = readRunLog(repoRootOf(ctx.cwd), active.runId);
+          ctx.ui.notify(
+            events.length > 0
+              ? events.map(describe).join("\n")
+              : active.events.map(describe).join("\n") || "(no events yet)",
+          );
           return;
+        }
+        case "log-all": {
+          // Every persisted run in this repo, newest first, one summary line each.
+          const root = repoRootOf(ctx.cwd);
+          const ids = listRunIds(root);
+          if (ids.length === 0) {
+            ctx.ui.notify("pi-brain: no persisted runs in this repo.");
+            return;
+          }
+          const lines: string[] = [];
+          for (const id of ids) {
+            const events = readRunLog(root, id);
+            const outcome = events.find((e): e is Extract<WorkflowEvent, { type: "workflow.outcome" }> => e.type === "workflow.outcome");
+            const lastReview = [...events]
+              .reverse()
+              .find((e): e is Extract<WorkflowEvent, { type: "review.completed" }> => e.type === "review.completed");
+            lines.push(
+              [
+                id,
+                outcome
+                  ? `outcome=${outcome.status}${outcome.reason ? ` (${outcome.reason.slice(0, 80)})` : ""}`
+                  : lastReview
+                    ? `last=${lastReview.verdict}`
+                    : "in-progress-or-interrupted",
+              ].join("  "),
+            );
+          }
+          ctx.ui.notify(lines.join("\n"));
+          return;
+        }
         default: {
           // Live usage folded from agent.completed events (per-call deltas).
           const live: UsageByRole = {};
@@ -298,7 +372,25 @@ function describe(event: WorkflowEvent): string {
     case "command.completed":
       return `  ${event.exitCode === 0 ? "✓" : "✗"} ${event.command}`;
     case "review.completed":
-      return `  review #${event.round}: ${event.verdict}`;
+      return [
+        `  review #${event.round}: ${event.verdict}`,
+        ...(event.issues && event.issues.length > 0
+          ? event.issues.map((i) => `    ${i.id} [${i.severity}] ${i.problem}`)
+          : []),
+      ].join("\n");
+    case "workflow.outcome": {
+      const usageLine =
+        event.usage && Object.keys(event.usage).length > 0
+          ? `\n  tokens: ${Object.entries(event.usage)
+              .map(([role, u]) => `${role} ${u.input}/${u.output}`)
+              .join(" · ")}`
+          : "";
+      const reviewLine =
+        event.review && event.review.issues.length > 0
+          ? `\n  review issues: ${event.review.issues.map((i) => `${i.id}[${i.severity}]`).join(", ")}`
+          : "";
+      return `■ outcome: ${event.status}${event.reason ? ` — ${event.reason}` : ""}${event.summary ? `\n  ${event.summary}` : ""}${usageLine}${reviewLine}`;
+    }
     default:
       return `  ${event.type}`;
   }
@@ -338,7 +430,9 @@ function renderOutcome(outcome: FeatureOutcome): string {
         .filter(Boolean)
         .join("\n");
     case "needs_human":
-      return ["⚠ NEEDS HUMAN — " + outcome.reason, usageLine].filter(Boolean).join("\n");
+      return ["⚠ NEEDS HUMAN — " + outcome.reason, usageLine, "Full findings: /flow log", "Past runs: /flow log-all"]
+        .filter(Boolean)
+        .join("\n");
     default:
       return `cancelled at ${outcome.at}`;
   }

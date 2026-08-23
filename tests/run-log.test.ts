@@ -1,0 +1,100 @@
+/**
+ * Run-state log: the audit trail pi-brain owns. Run: `npm test`.
+ */
+
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, rmSync, utimesSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { RunLog, readRunLog, listRunIds, runLogPath, runsDir } from "../src/run-log.ts";
+import type { WorkflowEvent } from "../src/ports.ts";
+
+const fixture = (): string => mkdtempSync(join(tmpdir(), "pi-brain-runlog-"));
+
+test("events are appended as JSONL and read back in order", () => {
+  const root = fixture();
+  const log = RunLog.open(root, "run-1");
+  const events: WorkflowEvent[] = [
+    { type: "workflow.started", runId: "run-1", workflow: "feature" },
+    { type: "phase.started", runId: "run-1", phase: "discover" },
+    {
+      type: "review.completed",
+      runId: "run-1",
+      verdict: "changes_requested",
+      round: 2,
+      issues: [{ id: "R1", severity: "blocking", category: "bug", problem: "boom" }],
+    },
+    {
+      type: "workflow.outcome",
+      runId: "run-1",
+      status: "needs_human",
+      reason: "max rounds",
+      usage: { reviewer: { input: 42, output: 7 } },
+    },
+  ];
+  for (const event of events) log.append(event);
+
+  const read = readRunLog(root, "run-1");
+  assert.equal(read.length, 4);
+  assert.equal(read[0]!.type, "workflow.started");
+  assert.deepEqual((read[2] as { issues: unknown[] }).issues, [
+    { id: "R1", severity: "blocking", category: "bug", problem: "boom" },
+  ]);
+  assert.deepEqual((read[3] as { usage: unknown }).usage, { reviewer: { input: 42, output: 7 } });
+
+  // The outcome line is on disk verbatim — the incident that motivated this
+  // module was losing exactly this content to TUI scrolling.
+  const raw = readFileSync(runLogPath(root, "run-1"), "utf8");
+  assert.match(raw, /"status":"needs_human"/);
+  assert.match(raw, /"reason":"max rounds"/);
+});
+
+test("a missing log reads as empty, a torn final line is skipped", () => {
+  const root = fixture();
+  assert.deepEqual(readRunLog(root, "run-nope"), []);
+
+  RunLog.open(root, "run-2").append({ type: "workflow.started", runId: "run-2", workflow: "feature" });
+  // Simulate a crash mid-write: partial JSON on the last line.
+  const path = runLogPath(root, "run-2");
+  const good = readFileSync(path, "utf8");
+  writeFileSync(path, `${good}{"type":"workflow.outcome","runId":"run-2","sta`, "utf8");
+
+  const read = readRunLog(root, "run-2");
+  assert.equal(read.length, 1, "the torn line is skipped, the good one survives");
+});
+
+test("a broken filesystem degrades to no-op instead of killing the run", () => {
+  // The runs path collides with an existing FILE: mkdir fails, the sink breaks,
+  // append becomes a no-op — and nothing throws.
+  const root = fixture();
+  mkdirSync(join(root, ".pi", "pi-brain"), { recursive: true });
+  writeFileSync(join(root, ".pi", "pi-brain", "runs"), "not a directory", "utf8");
+  const log = RunLog.open(root, "run-3");
+  log.append({ type: "workflow.started", runId: "run-3", workflow: "feature" });
+  assert.deepEqual(readRunLog(root, "run-3"), []);
+});
+
+test("listRunIds returns persisted runs newest first", () => {
+  const root = fixture();
+  const a = RunLog.open(root, "run-a");
+  a.append({ type: "workflow.started", runId: "run-a", workflow: "feature" });
+  const b = RunLog.open(root, "run-b");
+  b.append({ type: "workflow.started", runId: "run-b", workflow: "feature" });
+  // Ensure distinct mtimes.
+  const future = new Date(Date.now() + 5000);
+  utimesSync(runLogPath(root, "run-b"), future, future);
+
+  assert.deepEqual(listRunIds(root), ["run-b", "run-a"]);
+  assert.deepEqual(listRunIds(fixture()), []);
+});
+
+test("run logs live under .pi/pi-brain/runs, cleaned up with the repo", () => {
+  const root = fixture();
+  RunLog.open(root, "run-x");
+  assert.match(runLogPath(root, "run-x"), /\.pi\/pi-brain\/runs\/run-x\.jsonl$/);
+  // .pi/ is untracked by convention; nothing here writes outside it.
+  mkdirSync(join(root, ".pi", "pi-brain", "runs"), { recursive: true });
+  rmSync(root, { recursive: true, force: true });
+});
