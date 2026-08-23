@@ -5,6 +5,9 @@ proves it. These notes exist so a future session does not re-derive them.
 
 ## Housekeeping: translate Italian artifacts to English
 
+**Status:** DONE 2026-08-23 (commit `5eb67ee`) — the workflow improvement plan
+is now English. No other Italian docs surfaced in repo artifacts.
+
 `docs/plans/agent-workflow-improvements.md` (504 lines, the W0–W5 workflow
 plan for main) predates the English-artifacts convention and was written in
 Italian on explicit user request. Translate to English before merging to
@@ -27,6 +30,27 @@ its category is admitted AND the stack profile contains it. UI/design skills
 are pinned to "stack" so they reach roles only via frontend profiles.
 Operational skills (setup included — it drives a whole session, not a child)
 never reach any pipeline role. `always` lists are gone.
+
+## Run-state log — validated in the field (2026-08-23)
+
+Operational note closing the loop on the 2026-08-22 escalation: a completed
+`/feature` run (booking deep links, search-flights) exercised the full
+pipeline — 2 review rounds, classified findings, per-role usage — and
+everything survived TUI scrolling via `/flow log`. The owned audit trail
+works; the two-incident data-loss gap is closed.
+
+**New observation for the review-loop design:** the same run ended
+`completed` with a warning finding (TEST-DEDiCATED-MISSING-HREF) that the
+reviewer repeated unchanged in both rounds and the developer never
+implemented. Root cause verified in code, not a model failure: by design
+`decideNextRound` (`src/review.ts`) forwards **blocking** issues only to the
+fix round, so warnings never reach the developer's prompt — round 2 had zero
+blocking issues and the loop completed, correctly surfacing the warning in
+the outcome for the human. Two cheap deterministic options if we want more:
+(1) carry unresolved warnings into the fix prompt marked as non-blocking
+("address if legitimate"), so they are not silently dropped; (2) treat a
+finding that maps to an explicitly required task in the approved tasks file
+as blocking. No decision yet — single occurrence.
 
 ## Triage orchestrator (entry router)
 

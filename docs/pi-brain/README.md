@@ -17,11 +17,12 @@ OpenCode/Codex through `setup.sh`.
 | | |
 |---|---|
 | Pi-free logic (profiles, stack, context routing, verification, review loop, run lock, workflow) | implemented, 46 tests green |
-| Pi SDK layer (`src/pi/`, `extensions/pi-brain.ts`) | typechecked against pi-coding-agent 0.84.2, **never executed end-to-end** |
+| Pi SDK layer (`src/pi/`, `extensions/pi-brain.ts`) | typechecked against pi-coding-agent 0.84.2, **exercised by real runs since 2026-08-21** |
 | Spike proving the Pi APIs | **passed 2026-08-17 on 0.84.2** — all checks, see [SPIKE.md](./SPIKE.md) |
+| Real `/feature` runs | several completed end-to-end (2026-08-21 → 2026-08-23): gates, ask_user mid-run, review rounds, classified warnings, run-state log persisted and read back via `/flow log` |
 
 The spike proves every Pi primitive pi-brain uses (including `ask_user` mid-run).
-`src/pi/` itself still has not run a real `/feature` — that is the next step.
+Real runs have since covered the whole pipeline on real features.
 
 ---
 
@@ -65,6 +66,21 @@ wins). Only what you want to change:
 
 Providers come from Pi (`/login`). pi-brain never reads or writes `auth.json`.
 JSON rather than YAML on purpose: keeps the package dependency-free.
+
+### What to commit under `.pi/`
+
+| Path | Commit? | Why |
+|---|---|---|
+| `.pi/pi-brain.json` | yes | project config: stack, verify commands, role overrides — shared with the repo |
+| `.pi/pi-brain.lock` | no (gitignore) | runtime state of the current run, machine-local |
+| `.pi/pi-brain/runs/` | no (gitignore) | per-run audit logs (`<runId>.jsonl`), machine-local history |
+
+Consuming projects should add:
+
+```gitignore
+.pi/pi-brain.lock
+.pi/pi-brain/
+```
 
 ## Layout
 
