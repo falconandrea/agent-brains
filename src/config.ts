@@ -47,7 +47,7 @@ export const DEFAULT_CONFIG: PiBrainConfig = {
   roles: {
     planner: { thinking: "medium" },
     developer: { provider: "zai", thinking: "high" },
-    reviewer: { provider: "openai", thinking: "high", readOnly: true },
+    reviewer: { provider: "openai-codex", thinking: "high", readOnly: true },
     "security-reviewer": { readOnly: true, enabled: false },
   },
   skillRoots: [],

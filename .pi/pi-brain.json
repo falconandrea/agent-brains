@@ -1,0 +1,4 @@
+{
+  "stack": "nodejs",
+  "verify": ["npm run typecheck", "npm test"]
+}
