@@ -68,8 +68,24 @@ export interface WorkflowEventSink {
 }
 
 export type WorkflowEvent =
-  | { type: "workflow.started"; runId: string; workflow: string }
-  | { type: "phase.started"; runId: string; phase: string }
+  | {
+      type: "workflow.started";
+      runId: string;
+      workflow: string;
+      /** User's original request (for resume mode). Optional for backward compatibility. */
+      description?: string;
+      /** Detected or configured stack at workflow start (for resume mode). Optional for backward compatibility. */
+      stack?: { primary: string; frameworks: string[] };
+      /** Git baseline snapshot commit (for resume mode diffSince). Optional for backward compatibility. */
+      baseline?: string;
+    }
+  | {
+      type: "phase.started";
+      runId: string;
+      phase: string;
+      /** SHA256 of the current patch when a review phase starts (for resume-mode change detection). */
+      patchSha?: string;
+    }
   | {
       type: "agent.started";
       runId: string;
@@ -94,7 +110,16 @@ export type WorkflowEvent =
       verdict: string;
       round: number;
       /** Blocking findings of this round, for persisted post-mortems. */
-      issues?: Array<{ id: string; severity: string; category: string; problem: string }>;
+      issues?: Array<{
+        id: string;
+        severity: string;
+        category: string;
+        problem: string;
+        /** Optional richer issue fields for better post-mortems. */
+        file?: string;
+        line?: number;
+        recommendation?: string;
+      }>;
     }
   | {
       /**
@@ -124,4 +149,10 @@ export type WorkflowEvent =
       usage?: Record<string, { input: number; output: number }>;
     }
   | { type: "workflow.completed"; runId: string; status: string }
-  | { type: "workflow.failed"; runId: string; error: string };
+  | { type: "workflow.failed"; runId: string; error: string }
+  | {
+      type: "workflow.resumed";
+      runId: string;
+      /** The phase at which the run resumes. */
+      phase: string;
+    };

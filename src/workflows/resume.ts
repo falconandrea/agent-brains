@@ -1,0 +1,328 @@
+/**
+ * Resume mode: replay a persisted event log to reconstruct run state and
+ * continue an interrupted /feature run from the first incomplete phase.
+ *
+ * Pure replay + precondition checks. No Pi — testable with hand-written
+ * events and fakes, like everything else under src/.
+ */
+
+import { createHash } from "node:crypto";
+import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { join } from "node:path";
+
+import type { WorkflowEvent, GitBaseline, GitService, HumanInput } from "../ports.ts";
+import type { ResumeState, UsageByRole } from "./feature.ts";
+import { descriptionMarker } from "./feature.ts";
+import type { ReviewIssue, ReviewResult } from "../review.ts";
+
+/**
+ * Refusal reasons for resume. Every resume path ends in either a ResumeState
+ * (success) or a Refusal (clean message to the user, no agent calls).
+ */
+export type Refusal =
+  | { type: "empty_log" }
+  | { type: "not_feature_workflow"; workflow: string }
+  | { type: "missing_workflow_started" }
+  | { type: "missing_baseline" }
+  | { type: "gate_not_approved" }
+  | { type: "terminal_outcome"; outcome: string }
+  | { type: "missing_artifacts" }
+  | { type: "unresolvable_baseline" };
+
+/**
+ * Replay result: either a reconstructed ResumeState or a Refusal.
+ */
+export type ReplayResult = { ok: true; state: ResumeState } | { ok: false; refusal: Refusal };
+
+const isDeveloperPhase = (phase: string): boolean =>
+  phase === "develop" || phase.startsWith("fix #");
+
+const asReviewResult = (
+  event: Extract<WorkflowEvent, { type: "review.completed" }>,
+): ReviewResult => ({
+  // The summary is not persisted in the event; the resumed run replaces it
+  // with the next review's summary before it can reach an outcome.
+  verdict: event.verdict as ReviewResult["verdict"],
+  summary: "",
+  issues: (event.issues ?? []).map((i) => ({
+    id: i.id,
+    severity: i.severity as ReviewIssue["severity"],
+    category: i.category as ReviewIssue["category"],
+    problem: i.problem,
+    ...(i.file !== undefined ? { file: i.file } : {}),
+    ...(i.line !== undefined ? { line: i.line } : {}),
+    ...(i.recommendation !== undefined ? { recommendation: i.recommendation } : {}),
+  })),
+});
+
+/**
+ * Pure replay: derive the re-entry phase, loop counters, fixes, last review,
+ * and usage from the event log. Returns a Refusal for any log that cannot be
+ * resumed (missing events, terminal outcomes, old format).
+ *
+ * Counting rules (must mirror how feature.ts consumes them):
+ * - `developerRuns` counts COMPLETED developer passes: the last phase.started
+ *   in the log is the interruption point, so an interrupted develop/fix is
+ *   not counted and is honestly re-run under the same phase name.
+ * - `reviewRound` counts review.completed events only: an interrupted review
+ *   round never consumed its budget, so it re-runs as the same round.
+ * - `verifyRetries` counts failed verification.completed events.
+ */
+export function replayRunLog(events: WorkflowEvent[]): ReplayResult {
+  if (events.length === 0) {
+    return { ok: false, refusal: { type: "empty_log" } };
+  }
+
+  // First event must be workflow.started with workflow="feature".
+  const started = events[0];
+  if (started?.type !== "workflow.started") {
+    return { ok: false, refusal: { type: "missing_workflow_started" } };
+  }
+  if (started.workflow !== "feature") {
+    return { ok: false, refusal: { type: "not_feature_workflow", workflow: started.workflow } };
+  }
+
+  // Resume requires the persisted baseline (written since the resume feature);
+  // old logs without it cannot reconstruct the original diff base.
+  if (!started.baseline) {
+    return { ok: false, refusal: { type: "missing_baseline" } };
+  }
+
+  // Terminal outcomes are not resumable — except workflow.failed, which is
+  // the very state resume exists for (provider crash, quota, Ctrl-C). A log
+  // may contain a workflow.failed followed by an earlier resume attempt's
+  // events; any COMPLETED outcome still refuses.
+  const terminal = events.find(
+    (e): e is Extract<WorkflowEvent, { type: "workflow.outcome" | "workflow.completed" }> =>
+      e.type === "workflow.outcome" || e.type === "workflow.completed",
+  );
+  if (terminal) {
+    return { ok: false, refusal: { type: "terminal_outcome", outcome: terminal.type } };
+  }
+
+  // Gate approval: any loop phase (develop/fix/verify/review) or a prior
+  // resume proves the spec gate was approved. Runs interrupted before the
+  // gate are not resumable — the planner must re-ask anyway, so a fresh
+  // /feature is the honest path.
+  const gateApproved = events.some(
+    (e) =>
+      (e.type === "phase.started" &&
+        (isDeveloperPhase(e.phase) || e.phase === "verify" || e.phase.startsWith("review #"))) ||
+      e.type === "workflow.resumed",
+  );
+  if (!gateApproved) {
+    return { ok: false, refusal: { type: "gate_not_approved" } };
+  }
+
+  // The last phase.started is the interruption point; every phase before it
+  // completed.
+  let lastPhaseIdx = -1;
+  events.forEach((e, i) => {
+    if (e.type === "phase.started") lastPhaseIdx = i;
+  });
+  const lastPhase = lastPhaseIdx >= 0 ? (events[lastPhaseIdx] as Extract<WorkflowEvent, { type: "phase.started" }>).phase : null;
+  if (lastPhase === null) {
+    return { ok: false, refusal: { type: "gate_not_approved" } };
+  }
+
+  let reviewRound = 0;
+  let verifyRetries = 0;
+  let developerRuns = 0;
+  let lastReviewCompleted = false;
+  // A developer pass (develop or fix #N) is COMPLETE only when a verify or
+  // review phase follows it. Consecutive developer phase.started events are
+  // the SAME logical pass re-run by an earlier resume — counting both would
+  // skip a fix round and mislabel the next one.
+  let pendingDeveloperPass = false;
+  const fixes: ReviewIssue[] = [];
+  const previousBlockingIds = new Set<string>();
+  let lastReview: ReviewResult | undefined;
+  let interruptedPatchSha: string | undefined;
+  const usage: UsageByRole = {};
+
+  events.forEach((event, i) => {
+    switch (event.type) {
+      case "agent.completed": {
+        if (event.usage) {
+          const current = usage[event.role] ?? { input: 0, output: 0 };
+          current.input += event.usage.input;
+          current.output += event.usage.output;
+          usage[event.role] = current;
+        }
+        break;
+      }
+      case "phase.started": {
+        lastReviewCompleted = false;
+        if (isDeveloperPhase(event.phase)) {
+          pendingDeveloperPass = true;
+        } else if (event.phase === "verify" || event.phase.startsWith("review #")) {
+          if (pendingDeveloperPass) {
+            developerRuns += 1;
+            pendingDeveloperPass = false;
+          }
+        }
+        if (event.phase.startsWith("review #") && i === lastPhaseIdx) {
+          interruptedPatchSha = event.patchSha;
+        }
+        break;
+      }
+      case "verification.completed": {
+        if (!event.passed) verifyRetries += 1;
+        break;
+      }
+      case "review.completed": {
+        lastReviewCompleted = true;
+        interruptedPatchSha = undefined;
+        lastReview = asReviewResult(event);
+        const blocking = (event.issues ?? []).filter((issue) => issue.severity === "blocking");
+        previousBlockingIds.clear();
+        fixes.length = 0;
+        for (const issue of blocking) {
+          previousBlockingIds.add(issue.id);
+          fixes.push({
+            id: issue.id,
+            severity: issue.severity as ReviewIssue["severity"],
+            category: issue.category as ReviewIssue["category"],
+            problem: issue.problem,
+            ...(issue.file !== undefined ? { file: issue.file } : {}),
+            ...(issue.line !== undefined ? { line: issue.line } : {}),
+            ...(issue.recommendation !== undefined ? { recommendation: issue.recommendation } : {}),
+          });
+        }
+        reviewRound += 1;
+        break;
+      }
+    }
+  });
+
+  // Derive the re-entry phase from the interruption point.
+  let phase: string;
+  if (isDeveloperPhase(lastPhase)) {
+    // Interrupted mid-developer: re-run it (an interrupted develop keeps the
+    // name "develop" because it never completed; developerRuns excludes it).
+    phase = developerRuns === 0 ? "develop" : `fix #${developerRuns}`;
+  } else if (lastPhase === "verify") {
+    phase = "verify";
+  } else if (lastPhase.startsWith("review #")) {
+    phase = lastReviewCompleted
+      ? // The review completed and its fix round is due — the developer runs.
+        developerRuns === 0
+        ? "develop"
+        : `fix #${developerRuns}`
+      : // The review round itself was interrupted: re-run the same round.
+        lastPhase;
+  } else {
+    // discover/spec interruptions are pre-gate: refused above in practice.
+    return { ok: false, refusal: { type: "gate_not_approved" } };
+  }
+
+  return {
+    ok: true,
+    state: {
+      phase,
+      reviewRound,
+      verifyRetries,
+      developerRuns,
+      fixes,
+      previousBlockingIds,
+      lastReview,
+      usage,
+      interruptedPatchSha,
+    },
+  };
+}
+
+/**
+ * Check whether a run is resumable based on its events.
+ * This is a lighter check than full replay — used for argument completions.
+ */
+export function isResumable(events: WorkflowEvent[]): boolean {
+  const result = replayRunLog(events);
+  return result.ok;
+}
+
+/**
+ * Validate resume preconditions:
+ * - PRD and tasks files exist with the description marker
+ * - Baseline commit is still resolvable via diffSince
+ *
+ * Returns a Refusal if validation fails, undefined if all checks pass.
+ */
+export async function validateResumePreconditions(
+  deps: {
+    cwd: string;
+    description: string;
+    git: GitService;
+    baseline: GitBaseline;
+  },
+): Promise<Refusal | undefined> {
+  const { cwd, description, git, baseline } = deps;
+
+  // The PRD carries the description marker on its first line; the tasks file
+  // lives beside it (written together by the original run).
+  const marker = descriptionMarker(description);
+  const featureDir = join(cwd, ".ai", "features");
+  if (!existsSync(featureDir)) {
+    return { type: "missing_artifacts" };
+  }
+
+  let found = false;
+  for (const entry of readdirSync(featureDir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const prdPath = join(featureDir, entry.name, `prd-${entry.name}.md`);
+    if (existsSync(prdPath) && readFileSync(prdPath, "utf8").startsWith(marker)) {
+      found = true;
+      break;
+    }
+  }
+  if (!found) {
+    return { type: "missing_artifacts" };
+  }
+
+  // The baseline snapshot must still be resolvable (git gc on a repo that
+  // dropped the dangling snapshot commit would break every diffSince).
+  try {
+    await git.diffSince(baseline);
+  } catch {
+    return { type: "unresolvable_baseline" };
+  }
+
+  return undefined;
+}
+
+/**
+ * Compare the current patch sha with the interrupted patch sha.
+ * Returns true if the patch has changed, false if unchanged.
+ * If no interruptedPatchSha is available (old format or non-review interruption),
+ * returns false (assume unchanged).
+ */
+export function hasPatchChanged(currentPatch: string, interruptedPatchSha: string | undefined): boolean {
+  if (!interruptedPatchSha) return false;
+  const currentSha = createHash("sha256").update(currentPatch).digest("hex");
+  return currentSha !== interruptedPatchSha;
+}
+
+/**
+ * Ask the user whether to resume with a changed diff or abort.
+ * Returns true if the user chooses to resume, false to abort.
+ */
+export async function askResumeWithChangedDiff(
+  human: HumanInput,
+): Promise<boolean> {
+  const choice = await human.select({
+    message: "The working diff has changed since the interruption. How would you like to proceed?",
+    options: [
+      {
+        label: "Resume with current diff",
+        value: "resume",
+        description: "Continue the review with the current (changed) diff",
+      },
+      {
+        label: "Abort",
+        value: "abort",
+        description: "Stop the resume. You can manually run /feature to start fresh",
+      },
+    ],
+  });
+  return choice === "resume";
+}

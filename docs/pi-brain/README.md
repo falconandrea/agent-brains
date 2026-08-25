@@ -40,11 +40,20 @@ Then, in any project:
 ```bash
 cd ~/projects/my-app
 pi
-> /stack            # what pi-brain thinks this project is
+> /stack                    # what pi-brain thinks this project is
 > /feature Add organization invitations
-> /flow status      # what's running
-> /flow stop        # cancel
+> /flow status              # what's running
+> /flow stop                # cancel
+> /flow log-all             # persisted runs in this repo
+> /flow resume <runId>      # continue an interrupted run from its log
 ```
+
+`/flow resume` replays `.pi/pi-brain/runs/<runId>.jsonl` and re-enters at the
+first incomplete phase (develop / verify / review) with counters, usage and the
+original git baseline restored. Runs that ended before the spec gate, runs
+already completed, and pre-resume logs without a persisted baseline are refused
+with a reason. If the working diff changed since an interrupted review, it asks
+restart-vs-resume first.
 
 ## Configure roles → models
 
@@ -56,7 +65,7 @@ wins). Only what you want to change:
   "roles": {
     "planner":   { "provider": "openrouter", "thinking": "medium" },
     "developer": { "provider": "zai", "model": "glm-4.6", "thinking": "high" },
-    "reviewer":  { "provider": "openai", "model": "gpt-5-codex", "thinking": "high", "readOnly": true }
+    "reviewer":  { "provider": "openai-codex", "model": "gpt-5-codex", "thinking": "high", "readOnly": true }
   },
   "stack": "laravel",
   "maxReviewRounds": 2,

@@ -65,7 +65,9 @@ class FakeVerifier implements VerifyRunner {
 class FakeGit implements GitService {
   patches = ["diff-1", "diff-2", "diff-3"];
   calls = 0;
+  baselineCalls = 0;
   async baseline(cwd: string): Promise<GitBaseline> {
+    this.baselineCalls += 1;
     return { repoRoot: cwd, branch: "main", headSha: "abc123", baseCommit: "snap-base" };
   }
   dirtySubmodules: string[] = [];
@@ -506,4 +508,179 @@ test("an aborted child run cancels instead of pressing on", async () => {
 
   assert.deepEqual(outcome, { status: "cancelled", at: "development", usage: {} });
   assert.equal(agents.calls.filter((c) => c.role === "reviewer").length, 0);
+});
+
+// -- resume re-entry (IDEAS.md "Resume mode for interrupted runs") -----------
+
+import { descriptionMarker, type ResumeState } from "../src/workflows/feature.ts";
+
+const DESCRIPTION = "add invitations";
+
+/** PRD/tasks on disk with the description marker, as the original run wrote them. */
+function seedFeatureArtifacts(cwd: string, description: string): void {
+  const dir = join(cwd, ".ai", "features", "add-invitations");
+  mkdirSync(dir, { recursive: true });
+  const marker = descriptionMarker(description);
+  writeFileSync(join(dir, "prd-add-invitations.md"), `${marker}\n## PRD\nbody\n`, "utf8");
+  writeFileSync(join(dir, "tasks-add-invitations.md"), `${marker}\n## TASKS\n- T1 do it\n`, "utf8");
+}
+
+const resumeStateOf = (overrides: Partial<ResumeState> = {}): ResumeState => ({
+  phase: "develop",
+  reviewRound: 0,
+  verifyRetries: 0,
+  developerRuns: 0,
+  fixes: [],
+  previousBlockingIds: new Set<string>(),
+  usage: {},
+  ...overrides,
+});
+
+const phaseTrace = (events: WorkflowEvent[]): string[] =>
+  events.filter((e): e is Extract<WorkflowEvent, { type: "phase.started" }> => e.type === "phase.started")
+    .map((e) => e.phase);
+
+test("resume mid-develop re-runs the developer, keeps the persisted baseline and skips the planner", async () => {
+  const { deps, cwd, agents, events } = harness(
+    (req) =>
+      req.role === "developer"
+        ? { ...devResult, usage: { input: 2000, output: 900 } }
+        : reviewOf({ verdict: "approved", summary: "ok", issues: [] }),
+  );
+  seedFeatureArtifacts(cwd, DESCRIPTION);
+  const baseline: GitBaseline = { repoRoot: cwd, branch: "resumed", headSha: "x", baseCommit: "persisted-base" };
+
+  const outcome = await runFeatureWorkflow(
+    deps,
+    DESCRIPTION,
+    "run-r1",
+    resumeStateOf({
+      phase: "develop",
+      usage: { developer: { input: 5000, output: 2500 } },
+      baseline,
+    }),
+  );
+
+  assert.equal(outcome.status, "completed");
+  assert.equal(agents.calls.filter((c) => c.role === "planner").length, 0, "no planner call on resume");
+  assert.deepEqual(
+    phaseTrace(events),
+    ["develop", "verify", "review #1"],
+    "the resumed run starts straight at the interrupted developer phase",
+  );
+  assert.ok(!events.some((e) => e.type === "workflow.started"), "workflow.started is not re-emitted");
+  assert.equal((deps.git as FakeGit).baselineCalls, 0, "the persisted baseline is reused, never re-snapshotted");
+  assert.deepEqual(outcome.usage, {
+    developer: { input: 7000, output: 3400 }, // 5000/2500 reconstructed + 2000/900 fresh
+  });
+});
+
+test("resume at review skips developer and verify, and reviews the ORIGINAL baseline diff", async () => {
+  const { deps, cwd, agents, verifier, events } = harness((req) =>
+    reviewOf({ verdict: "approved", summary: "ok", issues: [] }),
+  );
+  seedFeatureArtifacts(cwd, DESCRIPTION);
+
+  const outcome = await runFeatureWorkflow(
+    deps,
+    DESCRIPTION,
+    "run-r2",
+    resumeStateOf({
+      phase: "review #1",
+      developerRuns: 1,
+      usage: { developer: { input: 5000, output: 2500 } },
+    }),
+  );
+
+  assert.equal(outcome.status, "completed");
+  assert.deepEqual(agents.calls.map((c) => c.role), ["reviewer"], "only the reviewer runs");
+  assert.equal((verifier as FakeVerifier).calls, 0, "verify already passed before the interruption");
+  assert.deepEqual(phaseTrace(events), ["review #1"]);
+});
+
+test("resume at review with changes_requested runs the fix round instead of looping forever", async () => {
+  // Regression: the resumed entry used to be name-matched against every
+  // iteration and never consumed — a changes_requested verdict on the resumed
+  // round spun the loop without ever calling an agent again.
+  let reviewIndex = 0;
+  const { deps, cwd, agents, events } = harness((req) => {
+    if (req.role === "developer") return devResult;
+    reviewIndex += 1;
+    return reviewOf(
+      reviewIndex === 1
+        ? {
+            verdict: "changes_requested",
+            summary: "one bug",
+            issues: [{ id: "R9", severity: "blocking", category: "bug", problem: "off by one" }],
+          }
+        : { verdict: "approved", summary: "ok", issues: [] },
+    );
+  });
+  seedFeatureArtifacts(cwd, DESCRIPTION);
+
+  const outcome = await runFeatureWorkflow(
+    deps,
+    DESCRIPTION,
+    "run-r3",
+    resumeStateOf({ phase: "review #1", developerRuns: 1 }),
+  );
+
+  assert.equal(outcome.status, "completed");
+  assert.deepEqual(agents.calls.map((c) => c.role), ["reviewer", "developer", "reviewer"]);
+  assert.deepEqual(phaseTrace(events), ["review #1", "fix #1", "verify", "review #2"]);
+  const fixPrompt = agents.calls.find((c) => c.role === "developer")!.prompt;
+  assert.ok(fixPrompt.includes("R9"), "the fix round prompt carries the resumed review's blocking finding");
+});
+
+test("resume at verify skips the developer and re-runs the deterministic checks", async () => {
+  const { deps, cwd, agents, verifier, events } = harness((req) =>
+    req.role === "developer" ? devResult : reviewOf({ verdict: "approved", summary: "ok", issues: [] }),
+  );
+  seedFeatureArtifacts(cwd, DESCRIPTION);
+
+  const outcome = await runFeatureWorkflow(
+    deps,
+    DESCRIPTION,
+    "run-r4",
+    resumeStateOf({ phase: "verify", developerRuns: 1 }),
+  );
+
+  assert.equal(outcome.status, "completed");
+  assert.deepEqual(agents.calls.map((c) => c.role), ["reviewer"]);
+  assert.equal((verifier as FakeVerifier).calls, 1);
+  assert.deepEqual(phaseTrace(events), ["verify", "review #1"]);
+});
+
+test("resume at review #2 respects the review budget and escalates", async () => {
+  const { deps, cwd, agents } = harness((req) =>
+    reviewOf({
+      verdict: "changes_requested",
+      summary: "still broken",
+      issues: [{ id: "R1", severity: "blocking", category: "bug", problem: "off by one" }],
+    }),
+  );
+  seedFeatureArtifacts(cwd, DESCRIPTION);
+
+  const outcome = await runFeatureWorkflow(
+    deps,
+    DESCRIPTION,
+    "run-r5",
+    resumeStateOf({ phase: "review #2", reviewRound: 1, developerRuns: 1 }),
+  );
+
+  assert.equal(outcome.status, "needs_human");
+  assert.match(outcome.status === "needs_human" ? outcome.reason ?? "" : "", /max review rounds/);
+  assert.equal(agents.calls.filter((c) => c.role === "reviewer").length, 1, "no third round past the budget");
+});
+
+test("resume without matching artifacts escalates to needs_human", async () => {
+  const { deps, cwd } = harness((req) => devResult);
+
+  const outcome = await runFeatureWorkflow(deps, DESCRIPTION, "run-r6", resumeStateOf());
+
+  assert.equal(outcome.status, "needs_human");
+  assert.match(
+    outcome.status === "needs_human" ? outcome.reason ?? "" : "",
+    /cannot find PRD\/tasks/,
+  );
 });

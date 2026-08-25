@@ -25,6 +25,7 @@ import { acquireRunLock, describeLock, type AcquireResult } from "../src/run-loc
 import { PiHumanInput, UserDismissedError } from "../src/pi/human-input.ts";
 import { PiAgentRunner } from "../src/pi/pi-agent-runner.ts";
 import { runFeatureWorkflow, type FeatureOutcome, type UsageByRole } from "../src/workflows/feature.ts";
+import { replayRunLog, validateResumePreconditions, hasPatchChanged, askResumeWithChangedDiff, type Refusal } from "../src/workflows/resume.ts";
 import type { WorkflowEvent } from "../src/ports.ts";
 import { RunLog, readRunLog, listRunIds } from "../src/run-log.ts";
 
@@ -223,19 +224,35 @@ export default function piBrain(pi: ExtensionAPI): void {
   // -- /flow -----------------------------------------------------------------
   pi.registerCommand("flow", {
     description: "pi-brain run status: status | log | stop",
-    getArgumentCompletions: () =>
-      [
+    getArgumentCompletions: () => {
+      return [
         { value: "status", label: "status", description: "current phase and run id" },
         { value: "log", label: "log", description: "event trace for this run (persisted)" },
         { value: "log-all", label: "log-all", description: "all persisted runs in this repo" },
         { value: "stop", label: "stop", description: "cancel the active run" },
-      ],
+        { value: "resume", label: "resume", description: "resume an interrupted /feature run" },
+      ];
+    },
     handler: async (args: string, ctx: ExtensionCommandContext) => {
+      const trimmed = args.trim();
+      const [subcommand, ...rest] = trimmed.split(/\s+/);
+
+      // Handle resume separately — it doesn't require an active run
+      if (subcommand === "resume") {
+        const runId = rest[0];
+        if (!runId) {
+          ctx.ui.notify("Usage: /flow resume <runId>", "warning");
+          return;
+        }
+        await handleResume(runId, ctx, pi, () => active);
+        return;
+      }
+
       if (!active) {
         ctx.ui.notify("pi-brain: no run in this session.");
         return;
       }
-      switch (args.trim() || "status") {
+      switch (subcommand || "status") {
         case "stop":
           active.abort.abort();
           active.status = "cancelled";
@@ -304,6 +321,241 @@ export default function piBrain(pi: ExtensionAPI): void {
       }
     },
   });
+
+  // -- /flow resume helper --------------------------------------------------
+  async function handleResume(
+    runId: string,
+    ctx: ExtensionCommandContext,
+    pi: ExtensionAPI,
+    getActive: () => ActiveRun | null,
+  ): Promise<void> {
+    const cwd = repoRootOf(ctx.cwd);
+    const events = readRunLog(cwd, runId);
+    if (events.length === 0) {
+      ctx.ui.notify(`pi-brain: unknown run ${runId}`, "warning");
+      return;
+    }
+
+    // Replay the log to get resume state or refusal
+    const replay = replayRunLog(events);
+    if (!replay.ok) {
+      ctx.ui.notify(`pi-brain: cannot resume ${runId} — ${refusalMessage(replay.refusal)}`, "warning");
+      return;
+    }
+
+    const state = replay.state;
+
+    // Check if there's already an active run
+    if (getActive()?.status === "running") {
+      ctx.ui.notify("pi-brain: another run is active in this session. Use /flow stop first.", "warning");
+      return;
+    }
+
+    const { config, warnings } = loadConfig(cwd);
+    for (const warning of warnings) ctx.ui.notify(`pi-brain config: ${warning}`, "warning");
+
+    const abort = new AbortController();
+
+    // Replay guarantees events[0] is workflow.started; description and the
+    // original baseline are what the artifacts lookup and diff reconstruction
+    // hang on — without them the resume cannot be honest.
+    const started = events[0] as Extract<WorkflowEvent, { type: "workflow.started" }>;
+    const description = started.description;
+    if (!description) {
+      ctx.ui.notify(`pi-brain: cannot resume ${runId} — missing description in log`, "warning");
+      return;
+    }
+    if (!started.baseline) {
+      ctx.ui.notify(`pi-brain: cannot resume ${runId} — missing baseline in log (old format)`, "warning");
+      return;
+    }
+
+    // diffSince consumes only repoRoot and baseCommit; branch/headSha are
+    // informational and the original values were never persisted.
+    const baseline = {
+      repoRoot: cwd,
+      branch: "resumed",
+      headSha: "unknown",
+      baseCommit: started.baseline,
+    };
+
+    // Validate preconditions
+    const preconditionFailure = await validateResumePreconditions({
+      cwd,
+      description,
+      git: new RealGitService(),
+      baseline,
+    });
+    if (preconditionFailure) {
+      ctx.ui.notify(`pi-brain: cannot resume ${runId} — ${refusalMessage(preconditionFailure)}`, "warning");
+      return;
+    }
+
+    // Acquire lock
+    let lock;
+    try {
+      lock = acquireRunLock(cwd, { runId, workflow: "feature" });
+    } catch (err) {
+      ctx.ui.notify(`pi-brain: cannot create the run lock in ${cwd}/.pi — ${(err as Error).message}`, "error");
+      return;
+    }
+    if (!lock.ok) {
+      ctx.ui.notify(lockRefusal(lock), "warning");
+      return;
+    }
+
+    // Check for changed diff if resuming at review phase
+    if (state.phase.startsWith("review #") && state.interruptedPatchSha) {
+      const git = new RealGitService();
+      const diff = await git.diffSince(baseline);
+      if (hasPatchChanged(diff.patch, state.interruptedPatchSha)) {
+        const human = new PiHumanInput(() => ctx, "live");
+        const shouldResume = await askResumeWithChangedDiff(human);
+        if (!shouldResume) {
+          ctx.ui.notify(`pi-brain: resume aborted by user`, "warning");
+          lock.release();
+          return;
+        }
+      }
+    }
+
+    // Create agents
+    let agents;
+    try {
+      agents = await PiAgentRunner.create({
+        cwd,
+        askUser: (q) => new PiHumanInput(() => ctx, "live").askFromChild(q),
+        onEvent: (e) => new PiHumanInput(() => ctx, "live").status(`${e.role}: ${e.type}${e.detail ? ` ${e.detail}` : ""}`),
+      });
+    } catch (err) {
+      lock.release();
+      ctx.ui.notify(`pi-brain: could not start the agent runtime — ${(err as Error).message}`, "error");
+      return;
+    }
+
+    const human = new PiHumanInput(() => ctx, "live");
+
+    // Open the audit log only once every refusal path is past: a refused
+    // resume must not append anything to the run's log.
+    const runLog = RunLog.open(cwd, runId);
+
+    // Set up the active run
+    const run: ActiveRun = {
+      runId,
+      workflow: "feature",
+      phase: state.phase,
+      status: "running",
+      events: [],
+      abort,
+    };
+    (active as ActiveRun) = run;
+
+    const eventsSink = {
+      emit(event: WorkflowEvent) {
+        run.events.push(event);
+        pi.appendEntry("pi-brain.event", event);
+        runLog.append(event);
+        if (event.type === "phase.started") {
+          run.phase = event.phase;
+          human.status(`${run.workflow}: ${event.phase}`);
+        }
+      },
+    };
+
+    // Emit workflow.resumed event
+    eventsSink.emit({ type: "workflow.resumed", runId, phase: state.phase });
+
+    // Run detached
+    void (async () => {
+      try {
+        const outcome = await runFeatureWorkflow(
+          {
+            cwd,
+            profilesDir: PROFILES_DIR,
+            availableSkills: availableSkills(),
+            config,
+            agents,
+            human,
+            verifier: new ShellVerifyRunner(cwd),
+            git: new RealGitService(),
+            events: eventsSink,
+            signal: abort.signal,
+          },
+          description,
+          runId,
+          // The persisted baseline is part of the resume state: without it
+          // the workflow would re-baseline and hide the interrupted work.
+          { ...state, baseline },
+        );
+        run.status = outcome.status;
+        eventsSink.emit({
+          type: "workflow.outcome",
+          runId,
+          status: outcome.status,
+          ...("reason" in outcome && outcome.reason !== undefined ? { reason: outcome.reason } : {}),
+          ...("summary" in outcome && outcome.summary !== undefined ? { summary: outcome.summary } : {}),
+          ...("files" in outcome && outcome.files !== undefined ? { files: outcome.files } : {}),
+          ...("review" in outcome && outcome.review !== undefined
+            ? {
+                review: {
+                  verdict: outcome.review.verdict,
+                  summary: outcome.review.summary,
+                  issues: outcome.review.issues.map((i) => ({
+                    id: i.id,
+                    severity: i.severity,
+                    category: i.category,
+                    problem: i.problem,
+                    ...(i.file !== undefined ? { file: i.file } : {}),
+                    ...(i.line !== undefined ? { line: i.line } : {}),
+                    ...(i.recommendation !== undefined ? { recommendation: i.recommendation } : {}),
+                  })),
+                },
+              }
+            : {}),
+          usage: Object.fromEntries(
+            Object.entries(outcome.usage).map(([role, u]) => [
+              role,
+              { input: u?.input ?? 0, output: u?.output ?? 0 },
+            ]),
+          ),
+        });
+        ctx.ui.notify(renderOutcome(outcome), outcome.status === "completed" ? "info" : "warning");
+        if (config.notifications.bell) process.stdout.write("\x07");
+      } catch (err) {
+        run.status = err instanceof UserDismissedError ? "cancelled" : "failed";
+        const message = (err as Error).message;
+        eventsSink.emit({ type: "workflow.failed", runId, error: message });
+        ctx.ui.notify(`pi-brain: ${message}`, "error");
+      } finally {
+        lock.release();
+        human.status(undefined);
+      }
+    })();
+    ctx.ui.notify(`pi-brain: ${runId} resumed from ${state.phase} — /flow status, /flow log, /flow stop.`);
+  }
+
+  function refusalMessage(refusal: Refusal): string {
+    switch (refusal.type) {
+      case "empty_log":
+        return "run log not found";
+      case "not_feature_workflow":
+        return `not a feature workflow (it's ${refusal.workflow})`;
+      case "missing_workflow_started":
+        return "log missing workflow.started event";
+      case "missing_baseline":
+        return "log missing baseline (old format, cannot resume)";
+      case "gate_not_approved":
+        return "spec gate was not approved";
+      case "terminal_outcome":
+        return `run already ended with status: ${refusal.outcome}`;
+      case "missing_artifacts":
+        return "PRD or tasks files are missing or have wrong marker";
+      case "unresolvable_baseline":
+        return "baseline commit is no longer accessible";
+      default:
+        return "unknown refusal";
+    }
+  }
 
   // -- /stack ----------------------------------------------------------------
   pi.registerCommand("stack", {

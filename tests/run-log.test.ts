@@ -98,3 +98,101 @@ test("run logs live under .pi/pi-brain/runs, cleaned up with the repo", () => {
   mkdirSync(join(root, ".pi", "pi-brain", "runs"), { recursive: true });
   rmSync(root, { recursive: true, force: true });
 });
+
+test("new optional fields round-trip through JSONL", () => {
+  const root = fixture();
+  const log = RunLog.open(root, "run-new-fields");
+  const events: WorkflowEvent[] = [
+    {
+      type: "workflow.started",
+      runId: "run-new-fields",
+      workflow: "feature",
+      description: "add user auth",
+      stack: { primary: "nodejs", frameworks: ["express"] },
+      baseline: "abc123def456",
+    },
+    {
+      type: "phase.started",
+      runId: "run-new-fields",
+      phase: "review #1",
+      patchSha: "sha256-hash-of-patch",
+    },
+    {
+      type: "review.completed",
+      runId: "run-new-fields",
+      verdict: "changes_requested",
+      round: 1,
+      issues: [
+        {
+          id: "R1",
+          severity: "blocking",
+          category: "bug",
+          problem: "off by one",
+          file: "src/auth.ts",
+          line: 42,
+          recommendation: "use <= instead of <",
+        },
+      ],
+    },
+    {
+      type: "workflow.resumed",
+      runId: "run-new-fields",
+      phase: "develop",
+    },
+  ];
+  for (const event of events) log.append(event);
+
+  const read = readRunLog(root, "run-new-fields");
+  assert.equal(read.length, 4);
+
+  const started = read[0] as { type: "workflow.started"; description?: string; stack?: unknown; baseline?: string };
+  assert.equal(started.description, "add user auth");
+  assert.deepEqual(started.stack, { primary: "nodejs", frameworks: ["express"] });
+  assert.equal(started.baseline, "abc123def456");
+
+  const phase = read[1] as { type: "phase.started"; patchSha?: string };
+  assert.equal(phase.patchSha, "sha256-hash-of-patch");
+
+  const review = read[2] as { type: "review.completed"; issues?: unknown[] };
+  assert.deepEqual(review.issues, [
+    {
+      id: "R1",
+      severity: "blocking",
+      category: "bug",
+      problem: "off by one",
+      file: "src/auth.ts",
+      line: 42,
+      recommendation: "use <= instead of <",
+    },
+  ]);
+
+  const resumed = read[3] as { type: "workflow.resumed"; phase: string };
+  assert.equal(resumed.phase, "develop");
+});
+
+test("old-format events without new fields still parse correctly", () => {
+  const root = fixture();
+  const log = RunLog.open(root, "run-old-format");
+  // Events without the new optional fields (backward compatibility).
+  const events: WorkflowEvent[] = [
+    { type: "workflow.started", runId: "run-old-format", workflow: "feature" },
+    { type: "phase.started", runId: "run-old-format", phase: "develop" },
+    {
+      type: "review.completed",
+      runId: "run-old-format",
+      verdict: "approved",
+      round: 1,
+      issues: [{ id: "R1", severity: "blocking", category: "bug", problem: "boom" }],
+    },
+  ];
+  for (const event of events) log.append(event);
+
+  const read = readRunLog(root, "run-old-format");
+  assert.equal(read.length, 3);
+  const started = read[0] as { type: "workflow.started"; description?: string };
+  assert.equal(started.description, undefined); // optional, not present
+  const phase = read[1] as { type: "phase.started"; patchSha?: string };
+  assert.equal(phase.patchSha, undefined); // optional, not present
+  const review = read[2] as { type: "review.completed"; issues?: unknown[] };
+  assert.equal((review.issues?.[0] as { file?: string }).file, undefined); // optional, not present
+});

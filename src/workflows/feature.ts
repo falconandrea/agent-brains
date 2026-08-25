@@ -10,6 +10,7 @@
 
 import { readFileSync, existsSync, mkdirSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
 import type { AgentRunner } from "../agent.ts";
 import type {
   GitService,
@@ -31,6 +32,7 @@ import {
   type ReviewResult,
 } from "../review.ts";
 import { REVIEW_TOOL, PLANNER_PROMPT, DEVELOPER_PROMPT, REVIEWER_PROMPT } from "./feature-prompts.ts";
+import type { WorkflowEvent } from "../ports.ts";
 
 export interface FeatureDeps {
   cwd: string;
@@ -59,18 +61,68 @@ export type FeatureOutcome =
   | { status: "needs_human"; reason: string; review?: ReviewResult; usage: UsageByRole }
   | { status: "cancelled"; at: string; usage: UsageByRole };
 
+/**
+ * State reconstructed by resume mode from a persisted event log.
+ * When present, the workflow enters the developer/verify/review loop
+ * at the first incomplete phase with seeded counters and usage.
+ */
+export interface ResumeState {
+  /** The phase the run re-enters at ("develop", "fix #N", "verify", or "review #N"). */
+  phase: string;
+  /** Reconstructed loop counters from the log. */
+  reviewRound: number;
+  verifyRetries: number;
+  developerRuns: number;
+  /** Blocking issues from the last completed review. */
+  fixes: ReviewIssue[];
+  /** Blocking issue ids from the last completed review, for no-progress detection. */
+  previousBlockingIds: Set<string>;
+  /** The last review result, if any. */
+  lastReview?: ReviewResult;
+  /** Cumulative token usage reconstructed from agent.completed events in the log. */
+  usage: UsageByRole;
+  /** The patch sha recorded when the interrupted review phase started (if applicable). */
+  interruptedPatchSha?: string;
+  /**
+   * The ORIGINAL git baseline persisted in workflow.started. Without it a
+   * resumed run would re-baseline from the current tree and hand the reviewer
+   * a diff missing everything the interrupted develop phase wrote.
+   */
+  baseline?: GitBaseline;
+}
+
 export async function runFeatureWorkflow(
   deps: FeatureDeps,
   description: string,
   runId: string,
+  resume?: ResumeState,
 ): Promise<FeatureOutcome> {
-  const { human, events, config } = deps;
-  events.emit({ type: "workflow.started", runId, workflow: "feature" });
+  const { human, events, config, git } = deps;
+
+  // --- Phase A: discovery (must happen before workflow.started for resume mode) --
+  const stack = await resolveStack(deps);
+  // A resumed run MUST keep the ORIGINAL baseline: a fresh snapshot would
+  // swallow everything the interrupted develop phase already wrote.
+  const baseline = resume?.baseline ?? (await git.baseline(deps.cwd));
+  human.notify(`stack: ${stack.primary} (${stack.frameworks.join(", ") || "no framework"})`);
+
+  // In resume mode, workflow.started was already emitted — skip it.
+  if (!resume) {
+    events.emit({
+      type: "workflow.started",
+      runId,
+      workflow: "feature",
+      description,
+      stack: { primary: stack.primary, frameworks: stack.frameworks },
+      baseline: baseline.baseCommit,
+    });
+  }
 
   // Token accounting: every agent result folds in here and ships with the
   // outcome, whatever way the run ends. A missing usage (fake runners, a
   // provider that reports nothing) simply does not add.
-  const usage: UsageByRole = {};
+  // In resume mode, we seed with reconstructed usage from the log.
+  const usage: UsageByRole = resume ? { ...resume.usage } : {};
   const recordUsage = (role: string, u?: { input?: number; output?: number; cost?: number }): void => {
     if (u === undefined) return;
     const input = u.input ?? 0;
@@ -85,15 +137,16 @@ export async function runFeatureWorkflow(
   };
 
   // --- Phase A: discovery --------------------------------------------------
-  events.emit({ type: "phase.started", runId, phase: "discover" });
-  const stack = await resolveStack(deps);
-  const baseline = await deps.git.baseline(deps.cwd);
-  human.notify(`stack: ${stack.primary} (${stack.frameworks.join(", ") || "no framework"})`);
+  if (!resume) events.emit({ type: "phase.started", runId, phase: "discover" });
 
   // --- Phase B+C: planner, then hard approval gate -------------------------
-  events.emit({ type: "phase.started", runId, phase: "spec" });
-  const planner = selectSkills(deps.profilesDir, stack.primary, "planner", deps.availableSkills);
-  const plannerCfg = roleConfig(config, "planner");
+  // Skip planner and spec in resume mode - they were already completed.
+  let prdPath: string;
+  let tasksPath: string;
+  if (!resume) {
+    events.emit({ type: "phase.started", runId, phase: "spec" });
+    const planner = selectSkills(deps.profilesDir, stack.primary, "planner", deps.availableSkills);
+    const plannerCfg = roleConfig(config, "planner");
     events.emit({
       type: "agent.started",
       runId,
@@ -102,49 +155,65 @@ export async function runFeatureWorkflow(
       skills: planner.skills,
     });
 
-  const plan = await deps.agents.run({
-    runId,
-    role: "planner",
-    cwd: deps.cwd,
-    prompt: PLANNER_PROMPT({ description, stack }),
-    model: plannerCfg,
-    skills: planner.skills,
-    tools: ["read", "grep", "find", "ls"],
-    contextFiles: routeContext({ cwd: deps.cwd, role: "planner", task: description, stack }).files,
-    signal: deps.signal,
-  });
-  events.emit({
-    type: "agent.completed",
-    runId,
-    role: "planner",
-    ...(plan.usage ? { usage: { input: plan.usage.input ?? 0, output: plan.usage.output ?? 0 } } : {}),
-  });
-  recordUsage("planner", plan.usage);
-  if (plan.aborted || deps.signal?.aborted) return { status: "cancelled", at: "planning", usage };
+    const plan = await deps.agents.run({
+      runId,
+      role: "planner",
+      cwd: deps.cwd,
+      prompt: PLANNER_PROMPT({ description, stack }),
+      model: plannerCfg,
+      skills: planner.skills,
+      tools: ["read", "grep", "find", "ls"],
+      contextFiles: routeContext({ cwd: deps.cwd, role: "planner", task: description, stack }).files,
+      signal: deps.signal,
+    });
+    events.emit({
+      type: "agent.completed",
+      runId,
+      role: "planner",
+      ...(plan.usage ? { usage: { input: plan.usage.input ?? 0, output: plan.usage.output ?? 0 } } : {}),
+    });
+    recordUsage("planner", plan.usage);
+    if (plan.aborted || deps.signal?.aborted) return { status: "cancelled", at: "planning", usage };
 
-  // The planner is read-only by design: it returns the documents as text and the
-  // orchestrator writes them. Always write this run's output — reusing files
-  // left by an earlier, possibly rejected, run would hand the developer a plan
-  // the user never approved. The slug comes from the planner's English TITLE
-  // (falling back to the raw description); a rerun of the same request reuses
-  // its earlier directory, found via the description marker — which also
-  // covers reruns whose TITLE gets worded differently.
-  const { title, prd, tasks } = splitPlannerOutput(plan.text);
-  const slug = findExistingFeatureSlug(deps.cwd, description) ?? featureSlug(deps.cwd, title ?? description);
-  const featureDir = join(deps.cwd, ".ai", "features", slug);
-  const prdPath = join(featureDir, `prd-${slug}.md`);
-  const tasksPath = join(featureDir, `tasks-${slug}.md`);
-  mkdirSync(featureDir, { recursive: true });
-  const marker = descriptionMarker(description);
-  writeFileSync(prdPath, `${marker}\n${prd}`, "utf8");
-  writeFileSync(tasksPath, `${marker}\n${tasks}`, "utf8");
+    // The planner is read-only by design: it returns the documents as text and the
+    // orchestrator writes them. Always write this run's output — reusing files
+    // left by an earlier, possibly rejected, run would hand the developer a plan
+    // the user never approved. The slug comes from the planner's English TITLE
+    // (falling back to the raw description); a rerun of the same request reuses
+    // its earlier directory, found via the description marker — which also
+    // covers reruns whose TITLE gets worded differently.
+    const { title, prd, tasks } = splitPlannerOutput(plan.text);
+    const slug = findExistingFeatureSlug(deps.cwd, description) ?? featureSlug(deps.cwd, title ?? description);
+    const featureDir = join(deps.cwd, ".ai", "features", slug);
+    prdPath = join(featureDir, `prd-${slug}.md`);
+    tasksPath = join(featureDir, `tasks-${slug}.md`);
+    mkdirSync(featureDir, { recursive: true });
+    const marker = descriptionMarker(description);
+    writeFileSync(prdPath, `${marker}\n${prd}`, "utf8");
+    writeFileSync(tasksPath, `${marker}\n${tasks}`, "utf8");
 
-  const approved = await human.confirm({
-    message: `Approve the plan for '${slug}' and start implementation?`,
-    detail: `${prdPath}\n${tasksPath}`,
-    defaultValue: false,
-  });
-  if (!approved) return { status: "cancelled", at: "spec approval", usage };
+    const approved = await human.confirm({
+      message: `Approve the plan for '${slug}' and start implementation?`,
+      detail: `${prdPath}\n${tasksPath}`,
+      defaultValue: false,
+    });
+    if (!approved) {
+      return { status: "cancelled", at: "spec approval", usage };
+    }
+  } else {
+    // In resume mode, re-locate the PRD/tasks files from the description marker.
+    const slug = findExistingFeatureSlug(deps.cwd, description);
+    if (!slug) {
+      return {
+        status: "needs_human",
+        reason: "resume: cannot find PRD/tasks files with the description marker",
+        usage,
+      };
+    }
+    const featureDir = join(deps.cwd, ".ai", "features", slug);
+    prdPath = join(featureDir, `prd-${slug}.md`);
+    tasksPath = join(featureDir, `tasks-${slug}.md`);
+  }
 
   // --- Phase D..G: develop / verify / review loop --------------------------
   const developerCfg = roleConfig(config, "developer");
@@ -166,91 +235,114 @@ export async function runFeatureWorkflow(
 
   // Two independent budgets: a run that keeps failing its own test suite must
   // not silently burn the review budget and finish without ever being reviewed.
-  let reviewRound = 0;
-  let verifyRetries = 0;
-  let developerRuns = 0;
-  let fixes: ReviewIssue[] = [];
-  let previousBlockingIds = new Set<string>();
-  let previousPatch = "";
-  let lastReview: ReviewResult | undefined;
+  let reviewRound = resume?.reviewRound ?? 0;
+  let verifyRetries = resume?.verifyRetries ?? 0;
+  let developerRuns = resume?.developerRuns ?? 0;
+  let fixes: ReviewIssue[] = resume?.fixes ?? [];
+  let previousBlockingIds = resume?.previousBlockingIds ?? new Set<string>();
+  let previousPatch = ""; // Reset on resume: we can't recover the historical patch
+  let lastReview: ReviewResult | undefined = resume?.lastReview;
+
+  // Resume re-entry: `entry` names the phase the run re-enters at. It gates
+  // ONLY the first loop pass — developer/verify are skipped when the log
+  // proves a previous pass already completed them — and is consumed
+  // immediately, so every later iteration is the standard
+  // develop → verify → review loop. Without the consumption, the name
+  // matching below can never align on the second pass and the loop spins
+  // forever without ever calling an agent.
+  let entry = resume?.phase;
 
   for (;;) {
     if (deps.signal?.aborted) return { status: "cancelled", at: `round ${reviewRound}`, usage };
+    const resumeEntry = entry;
+    entry = undefined;
 
     // developer
-    events.emit({
-      type: "phase.started",
-      runId,
-      phase: developerRuns === 0 ? "develop" : `fix #${developerRuns}`,
-    });
-    developerRuns += 1;
-    events.emit({
-      type: "agent.started",
-      runId,
-      role: "developer",
-      model: modelLabel(developerCfg.provider, developerCfg.model),
-      skills: devSkills.skills,
-    });
-    const devRun = await deps.agents.run({
-      runId,
-      role: "developer",
-      cwd: deps.cwd,
-      prompt: DEVELOPER_PROMPT({
-        prd: read(prdPath),
-        tasks: read(tasksPath),
-        stack,
-        fixes,
-      }),
-      model: developerCfg,
-      skills: devSkills.skills,
-      contextFiles: devContext(),
-      signal: deps.signal,
-    });
-    events.emit({
-      type: "agent.completed",
-      runId,
-      role: "developer",
-      ...(devRun.usage ? { usage: { input: devRun.usage.input ?? 0, output: devRun.usage.output ?? 0 } } : {}),
-    });
-    recordUsage("developer", devRun.usage);
-    if (devRun.aborted || deps.signal?.aborted) return { status: "cancelled", at: "development", usage };
+    const phaseName = developerRuns === 0 ? "develop" : `fix #${developerRuns}`;
+    // On a resumed pass, skip the developer when the entry point is past it
+    // (interrupted during verify or review: that work is already on disk).
+    if (resumeEntry === undefined || !(resumeEntry === "verify" || resumeEntry.startsWith("review #"))) {
+      events.emit({
+        type: "phase.started",
+        runId,
+        phase: phaseName,
+      });
+      developerRuns += 1;
+      events.emit({
+        type: "agent.started",
+        runId,
+        role: "developer",
+        model: modelLabel(developerCfg.provider, developerCfg.model),
+        skills: devSkills.skills,
+      });
+      const devRun = await deps.agents.run({
+        runId,
+        role: "developer",
+        cwd: deps.cwd,
+        prompt: DEVELOPER_PROMPT({
+          prd: read(prdPath),
+          tasks: read(tasksPath),
+          stack,
+          fixes,
+        }),
+        model: developerCfg,
+        skills: devSkills.skills,
+        contextFiles: devContext(),
+        signal: deps.signal,
+      });
+      events.emit({
+        type: "agent.completed",
+        runId,
+        role: "developer",
+        ...(devRun.usage ? { usage: { input: devRun.usage.input ?? 0, output: devRun.usage.output ?? 0 } } : {}),
+      });
+      recordUsage("developer", devRun.usage);
+      if (devRun.aborted || deps.signal?.aborted) return { status: "cancelled", at: "development", usage };
+    }
 
     // deterministic verification BEFORE spending reviewer tokens (§24)
-    events.emit({ type: "phase.started", runId, phase: "verify" });
-    const commands = resolveVerifyCommands(deps.cwd, stack, config.verify);
-    const results = await deps.verifier.run(commands, deps.signal);
-    for (const r of results)
-      events.emit({ type: "command.completed", runId, command: r.command, exitCode: r.exitCode });
+    // On a resumed pass, skip the checks only when re-entering straight at
+    // review: the interrupted review round never consumed fresh results, and
+    // the diff — not the verify output — is what the reviewer judges.
+    let results: { command: string; exitCode: number; output: string }[] = [];
+    if (resumeEntry === undefined || !resumeEntry.startsWith("review #")) {
+      events.emit({ type: "phase.started", runId, phase: "verify" });
+      const commands = resolveVerifyCommands(deps.cwd, stack, config.verify);
+      results = await deps.verifier.run(commands, deps.signal);
+      for (const r of results)
+        events.emit({ type: "command.completed", runId, command: r.command, exitCode: r.exitCode });
 
-    const blockingFailures = results.filter(
-      (r, i) => r.exitCode !== 0 && (commands[i]?.blocking ?? true),
-    );
-    events.emit({ type: "verification.completed", runId, passed: blockingFailures.length === 0 });
+      const blockingFailures = results.filter(
+        (r, i) => r.exitCode !== 0 && (commands[i]?.blocking ?? true),
+      );
+      events.emit({ type: "verification.completed", runId, passed: blockingFailures.length === 0 });
 
-    if (blockingFailures.length > 0) {
-      if (verifyRetries >= config.maxVerifyRetries) {
-        return {
-          status: "needs_human",
-          reason: `verification still failing after ${verifyRetries} developer retries: ${blockingFailures
-            .map((f) => f.command)
-            .join(", ")}`,
-          usage,
-        };
+      if (blockingFailures.length > 0) {
+        if (verifyRetries >= config.maxVerifyRetries) {
+          return {
+            status: "needs_human",
+            reason: `verification still failing after ${verifyRetries} developer retries: ${blockingFailures
+              .map((f) => f.command)
+              .join(", ")}`,
+            usage,
+          };
+        }
+        verifyRetries += 1;
+        fixes = blockingFailures.map((f, i) => ({
+          id: `verify-${verifyRetries}-${i}`,
+          severity: "blocking" as const,
+          category: "tests" as const,
+          problem: `\`${f.command}\` exited ${f.exitCode}:\n${tail(f.output)}`,
+        }));
+        continue; // back to the developer — the reviewer is NOT called
       }
-      verifyRetries += 1;
-      fixes = blockingFailures.map((f, i) => ({
-        id: `verify-${verifyRetries}-${i}`,
-        severity: "blocking" as const,
-        category: "tests" as const,
-        problem: `\`${f.command}\` exited ${f.exitCode}:\n${tail(f.output)}`,
-      }));
-      continue; // back to the developer — the reviewer is NOT called
     }
 
     // review
     reviewRound += 1;
-    events.emit({ type: "phase.started", runId, phase: `review #${reviewRound}` });
     const diff = await deps.git.diffSince(baseline);
+    const patchSha = createHash("sha256").update(diff.patch).digest("hex");
+    events.emit({ type: "phase.started", runId, phase: `review #${reviewRound}`, patchSha });
 
     // Deterministic escalation, before a single reviewer token is spent: the
     // reviewer cannot see inside a submodule, so nothing may approve that code.
@@ -321,6 +413,9 @@ export async function runFeatureWorkflow(
         severity: i.severity,
         category: i.category,
         problem: i.problem,
+        ...(i.file !== undefined ? { file: i.file } : {}),
+        ...(i.line !== undefined ? { line: i.line } : {}),
+        ...(i.recommendation !== undefined ? { recommendation: i.recommendation } : {}),
       })),
     });
 
@@ -388,9 +483,9 @@ const modelLabel = (provider?: string, model?: string): string =>
 
 const tail = (s: string, lines = 40): string => s.split("\n").slice(-lines).join("\n");
 
-const DESCRIPTION_MARKER = "<!-- pi-brain:feature ";
+export const DESCRIPTION_MARKER = "<!-- pi-brain:feature ";
 
-const descriptionMarker = (description: string): string =>
+export const descriptionMarker = (description: string): string =>
   `${DESCRIPTION_MARKER}${JSON.stringify(description)} -->`;
 
 /**
