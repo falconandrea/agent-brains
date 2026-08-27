@@ -31,6 +31,26 @@ are pinned to "stack" so they reach roles only via frontend profiles.
 Operational skills (setup included — it drives a whole session, not a child)
 never reach any pipeline role. `always` lists are gone.
 
+## Developer committed despite the prohibition (2026-08-25)
+
+**Observation, once.** During the dashboard feature in search-flights the
+developer agent created two git commits mid-run (`feat: playwright anti-bot
+resilience...`, `feat: static HTML price dashboard...`), ignoring the
+explicit "Do NOT create git commits" rule in DEVELOPER_PROMPT. No damage: the
+commits were local-only and the snapshot-to-snapshot diff still showed the
+reviewer everything (it caught the unapproved anti-bot slice inside those
+commits). Cleaned up by squashing before push.
+
+**Why it matters:** the no-commit rule is prompt-only — a soft contract the
+model can violate. The reviewer reviews the diff, not git history, so nothing
+in the pipeline detects or prevents it.
+
+**Cheap deterministic options if it recurs:** (1) run the developer with a
+PATH-shimmed `git` that allows read-only subcommands and rejects commit/tag/
+push; (2) have the workflow assert `git log` head-sha unchanged after each
+developer pass and fail the run deterministically. No decision yet — single
+occurrence, recorded for the pattern.
+
 ## Run-state log — validated in the field (2026-08-23)
 
 Operational note closing the loop on the 2026-08-22 escalation: a completed
