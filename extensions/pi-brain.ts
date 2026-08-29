@@ -142,7 +142,13 @@ export default function piBrain(pi: ExtensionAPI): void {
       const events = {
         emit(event: WorkflowEvent) {
           run.events.push(event);
-          pi.appendEntry("pi-brain.event", event); // pi-side history (unreliable — see run-log.ts)
+          try {
+            pi.appendEntry("pi-brain.event", event); // pi-side history (unreliable — see run-log.ts)
+          } catch {
+            // Best-effort by contract: a replaced/stale Pi context must not
+            // stop OUR audit trail, nor make the failure handler below lose
+            // its workflow.failed event by throwing again.
+          }
           runLog.append(event); // OUR audit trail: survives crashes and scrolling
           if (event.type === "phase.started") {
             run.phase = event.phase;
@@ -339,6 +345,20 @@ export default function piBrain(pi: ExtensionAPI): void {
     // Replay the log to get resume state or refusal
     const replay = replayRunLog(events);
     if (!replay.ok) {
+      if (replay.refusal.type === "already_decided") {
+        // The last review already decided the run; only the outcome events
+        // were lost to the crash. Heal the audit trail deterministically —
+        // no agent runs, nothing to resume.
+        const status = replay.refusal.status;
+        const heal = RunLog.open(cwd, runId);
+        heal.append({ type: "workflow.outcome", runId, status, reason: "outcome reconstructed from the last review verdict after a crash" });
+        heal.append({ type: "workflow.completed", runId, status });
+        ctx.ui.notify(
+          `pi-brain: ${runId} had already been ${status === "completed" ? "approved" : "escalated to a human"} before the interruption — outcome recorded, nothing to resume.`,
+          "info",
+        );
+        return;
+      }
       ctx.ui.notify(`pi-brain: cannot resume ${runId} — ${refusalMessage(replay.refusal)}`, "warning");
       return;
     }
@@ -404,24 +424,26 @@ export default function piBrain(pi: ExtensionAPI): void {
       return;
     }
 
-    // Check for changed diff if resuming at review phase
-    if (state.phase.startsWith("review #") && state.interruptedPatchSha) {
-      const git = new RealGitService();
-      const diff = await git.diffSince(baseline);
-      if (hasPatchChanged(diff.patch, state.interruptedPatchSha)) {
-        const human = new PiHumanInput(() => ctx, "live");
-        const shouldResume = await askResumeWithChangedDiff(human);
-        if (!shouldResume) {
-          ctx.ui.notify(`pi-brain: resume aborted by user`, "warning");
-          lock.release();
-          return;
-        }
-      }
-    }
-
-    // Create agents
+    // From here to the detached runner, ANY throw (git failure, dialog
+    // error, runtime creation) must release the lock — otherwise it stays
+    // held by a live pid until this terminal closes, blocking the repo.
     let agents;
     try {
+      // Check for changed diff if resuming at review phase
+      if (state.phase.startsWith("review #") && state.interruptedPatchSha) {
+        const git = new RealGitService();
+        const diff = await git.diffSince(baseline);
+        if (hasPatchChanged(diff.patch, state.interruptedPatchSha)) {
+          const human = new PiHumanInput(() => ctx, "live");
+          const shouldResume = await askResumeWithChangedDiff(human);
+          if (!shouldResume) {
+            ctx.ui.notify(`pi-brain: resume aborted by user`, "warning");
+            lock.release();
+            return;
+          }
+        }
+      }
+
       agents = await PiAgentRunner.create({
         cwd,
         askUser: (q) => new PiHumanInput(() => ctx, "live").askFromChild(q),
@@ -429,7 +451,7 @@ export default function piBrain(pi: ExtensionAPI): void {
       });
     } catch (err) {
       lock.release();
-      ctx.ui.notify(`pi-brain: could not start the agent runtime — ${(err as Error).message}`, "error");
+      ctx.ui.notify(`pi-brain: could not resume ${runId} — ${(err as Error).message}`, "error");
       return;
     }
 
@@ -453,7 +475,11 @@ export default function piBrain(pi: ExtensionAPI): void {
     const eventsSink = {
       emit(event: WorkflowEvent) {
         run.events.push(event);
-        pi.appendEntry("pi-brain.event", event);
+        try {
+          pi.appendEntry("pi-brain.event", event);
+        } catch {
+          // Best-effort: the run log below is the source of truth.
+        }
         runLog.append(event);
         if (event.type === "phase.started") {
           run.phase = event.phase;
@@ -548,6 +574,8 @@ export default function piBrain(pi: ExtensionAPI): void {
         return "spec gate was not approved";
       case "terminal_outcome":
         return `run already ended with status: ${refusal.outcome}`;
+      case "already_decided":
+        return `run already decided (${refusal.status}) — outcome reconstructed instead`;
       case "missing_artifacts":
         return "PRD or tasks files are missing or have wrong marker";
       case "unresolvable_baseline":
@@ -671,7 +699,8 @@ function renderOutcome(outcome: FeatureOutcome): string {
   switch (outcome.status) {
     case "completed":
       return [
-        `✓ FEATURE COMPLETE — ${outcome.files.length} files changed, no commit created.`,
+        `✓ FEATURE COMPLETE (automated review) — ${outcome.files.length} files changed, no commit created. ` +
+        `Inspect git diff before committing: the human commit IS the final gate.`,
         outcome.summary,
         outcome.review.issues.length > 0
           ? `${outcome.review.issues.length} non-blocking note(s) left by the reviewer.`

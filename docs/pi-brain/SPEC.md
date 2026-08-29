@@ -86,8 +86,14 @@ developer fixes findings
     ↓
 review again
     ↓
-final human review
+automated outcome (no second gate)
 ```
+
+The single hard gate is the spec approval before development. There is no
+second mandatory dialog after the automated review: pi-brain never commits,
+so the human inspection of `git diff` and the commit itself ARE the final
+gate — adding another modal step would double the ceremony without adding
+control the commit doesn't already provide.
 
 While it is running I should be able to see:
 
@@ -1056,7 +1062,7 @@ Logic:
 ```text
 review approved
     ↓
-final human gate
+automated outcome (completed) — the human commit IS the final gate
 ```
 
 or:
@@ -1963,7 +1969,10 @@ Git safety conflict
 
 A verification failure is often normal workflow feedback, not a fatal orchestration error.
 
-A malformed reviewer response may be repaired/retried once, then escalated.
+A malformed reviewer response escalates immediately to the human (decision
+2026-08-25: an auto-repair round was rejected — a reviewer that failed to fill
+the result schema once will not fill a repair prompt more reliably, and the
+human sees the raw validation errors instead).
 
 Do not retry arbitrary write operations blindly.
 

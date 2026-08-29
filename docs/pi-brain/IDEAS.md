@@ -31,6 +31,28 @@ are pinned to "stack" so they reach roles only via frontend profiles.
 Operational skills (setup included — it drives a whole session, not a child)
 never reach any pipeline role. `always` lists are gone.
 
+## Pre-merge hardening (2026-08-25, external review fix-then-merge set)
+
+Applied before the pi-brain → main merge, from an independent external
+review: developer runs with NO shell (tool allowlist, prompt-only rules are
+not enforcement — a real incident had the developer commit anyway); reviewer
+readOnly is a code invariant, not config; approved PRD/tasks content is
+frozen via sha256 in a `spec.approved` event and re-verified every loop
+iteration (tamper → needs_human); ignore-rule changes in the diff are
+annotated to the reviewer prompt; post-lock resume paths are try/catch with
+best-effort lock release; RunLog.open heals a torn final line; a resumed
+verify re-observation does not consume a retry; an approved/needs_human
+review without outcome events reconstructs the terminal outcome instead of
+inventing a fix round; invalid reviewer output escalates immediately
+(documented against SPEC §34's dropped repair-attempt promise).
+
+**Residual risks, accepted:** logs written before the spec freeze resume
+without a tamper check; ignore-rule concealment is surfaced to the reviewer,
+not structurally prevented (a snapshot that force-includes newly-ignored
+files would be the full fix); the developer without bash gets test feedback
+only through the deterministic verify loop, which may cost one extra fix
+round per run. Revisit only on observed abuse.
+
 ## Developer committed despite the prohibition (2026-08-25)
 
 **Observation, once.** During the dashboard feature in search-flights the

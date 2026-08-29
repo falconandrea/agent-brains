@@ -207,11 +207,19 @@ export function acquireRunLock(
  */
 export function releaseRunLock(repoRoot: string, runId: string, inode?: number | null): void {
   const path = lockPath(repoRoot);
-  if (!existsSync(path)) return;
-  if (inode != null && inodeOf(path) !== inode) return; // replaced while we ran
-  const held = readLock(path);
-  if (held && (held.runId !== runId || held.pid !== process.pid)) return;
-  rmSync(path, { force: true });
+  try {
+    if (!existsSync(path)) return;
+    if (inode != null && inodeOf(path) !== inode) return; // replaced while we ran
+    const held = readLock(path);
+    if (held && (held.runId !== runId || held.pid !== process.pid)) return;
+    rmSync(path, { force: true });
+  } catch (err) {
+    // Cleanup is best-effort by contract: a release that throws (fs error,
+    // raced replacement) would surface in a finally{} block and mask the
+    // run's real outcome. A leftover lock is recovered by stale-takeover.
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`pi-brain: could not release the run lock (${path}): ${message}`);
+  }
 }
 
 export function describeLock(info: LockInfo): string {

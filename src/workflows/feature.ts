@@ -84,12 +84,30 @@ export interface ResumeState {
   /** The patch sha recorded when the interrupted review phase started (if applicable). */
   interruptedPatchSha?: string;
   /**
+   * Content hashes of the approved PRD/tasks, replayed from the spec.approved
+   * event. Absent for logs predating the spec freeze: those resumed runs get
+   * no tamper check (documented residual).
+   */
+  spec?: { prdSha: string; tasksSha: string };
+  /**
    * The ORIGINAL git baseline persisted in workflow.started. Without it a
    * resumed run would re-baseline from the current tree and hand the reviewer
    * a diff missing everything the interrupted develop phase wrote.
    */
   baseline?: GitBaseline;
 }
+
+/** Built-in tools the developer is allowed: everything except bash. */
+export const DEVELOPER_TOOLS = ["read", "grep", "find", "ls", "edit", "write"] as const;
+
+/** sha256 of a file's content; empty string when unreadable. */
+const fileSha = (path: string): string => {
+  try {
+    return createHash("sha256").update(readFileSync(path, "utf8")).digest("hex");
+  } catch {
+    return "";
+  }
+};
 
 export async function runFeatureWorkflow(
   deps: FeatureDeps,
@@ -143,6 +161,7 @@ export async function runFeatureWorkflow(
   // Skip planner and spec in resume mode - they were already completed.
   let prdPath: string;
   let tasksPath: string;
+  let specGuard: { prdSha: string; tasksSha: string } | undefined;
   if (!resume) {
     events.emit({ type: "phase.started", runId, phase: "spec" });
     const planner = selectSkills(deps.profilesDir, stack.primary, "planner", deps.availableSkills);
@@ -200,6 +219,11 @@ export async function runFeatureWorkflow(
     if (!approved) {
       return { status: "cancelled", at: "spec approval", usage };
     }
+    // Freeze the approved content: the hashes persist in the event log so a
+    // later mutation of PRD/tasks (e.g. by the developer making its own work
+    // look conformant) is detected before any agent trusts the files again.
+    specGuard = { prdSha: fileSha(prdPath), tasksSha: fileSha(tasksPath) };
+    events.emit({ type: "spec.approved", runId, ...specGuard });
   } else {
     // In resume mode, re-locate the PRD/tasks files from the description marker.
     const slug = findExistingFeatureSlug(deps.cwd, description);
@@ -213,11 +237,17 @@ export async function runFeatureWorkflow(
     const featureDir = join(deps.cwd, ".ai", "features", slug);
     prdPath = join(featureDir, `prd-${slug}.md`);
     tasksPath = join(featureDir, `tasks-${slug}.md`);
+    // Hashes replayed from the log's spec.approved event; absent for logs
+    // predating the freeze (no tamper check for those runs).
+    specGuard = resume?.spec;
   }
 
   // --- Phase D..G: develop / verify / review loop --------------------------
   const developerCfg = roleConfig(config, "developer");
   const reviewerCfg = roleConfig(config, "reviewer");
+  if (reviewerCfg.readOnly === false) {
+    human.notify("pi-brain: roles.reviewer.readOnly=false is ignored — the reviewer is read-only by design.");
+  }
   const devSkills = selectSkills(deps.profilesDir, stack.primary, "developer", deps.availableSkills);
   const revSkills = selectSkills(deps.profilesDir, stack.primary, "reviewer", deps.availableSkills);
 
@@ -251,11 +281,33 @@ export async function runFeatureWorkflow(
   // matching below can never align on the second pass and the loop spins
   // forever without ever calling an agent.
   let entry = resume?.phase;
+  // A resumed run that re-enters at verify re-observes a failure the original
+  // run already counted (and already banked the fix for): that re-observation
+  // must not consume a second retry from the budget.
+  let resumedVerifyPending = resume?.phase === "verify";
 
   for (;;) {
     if (deps.signal?.aborted) return { status: "cancelled", at: `round ${reviewRound}`, usage };
     const resumeEntry = entry;
     entry = undefined;
+
+    // Spec tamper guard: the PRD/tasks on disk must still hash to what the
+    // user approved at the gate. A mutation means some agent (or human) edited
+    // the spec the reviewer would judge against — never proceed on it.
+    if (
+      specGuard !== undefined &&
+      (fileSha(prdPath) !== specGuard.prdSha || fileSha(tasksPath) !== specGuard.tasksSha)
+    ) {
+      events.emit({ type: "workflow.completed", runId, status: "needs_human" });
+      return {
+        status: "needs_human",
+        reason:
+          "the approved PRD/tasks were modified after the gate (content hash mismatch) — " +
+          "restore them or re-run /feature",
+        review: lastReview,
+        usage,
+      };
+    }
 
     // developer
     const phaseName = developerRuns === 0 ? "develop" : `fix #${developerRuns}`;
@@ -287,6 +339,11 @@ export async function runFeatureWorkflow(
         }),
         model: developerCfg,
         skills: devSkills.skills,
+        // No shell for the developer, ever: the no-commit/no-push invariant
+        // must be enforced by the tool allowlist, not by the prompt (a real
+        // incident showed prompt-only rules get ignored). Test feedback
+        // arrives deterministically from the verify phase below.
+        tools: [...DEVELOPER_TOOLS],
         contextFiles: devContext(),
         signal: deps.signal,
       });
@@ -316,18 +373,25 @@ export async function runFeatureWorkflow(
         (r, i) => r.exitCode !== 0 && (commands[i]?.blocking ?? true),
       );
       events.emit({ type: "verification.completed", runId, passed: blockingFailures.length === 0 });
+      if (blockingFailures.length === 0) resumedVerifyPending = false; // only the first observation is free
 
       if (blockingFailures.length > 0) {
-        if (verifyRetries >= config.maxVerifyRetries) {
-          return {
-            status: "needs_human",
-            reason: `verification still failing after ${verifyRetries} developer retries: ${blockingFailures
-              .map((f) => f.command)
-              .join(", ")}`,
-            usage,
-          };
+        if (resumedVerifyPending) {
+          // This failure was already counted before the crash and its fix was
+          // already banked: re-observing it must not double-charge the budget.
+          resumedVerifyPending = false;
+        } else {
+          if (verifyRetries >= config.maxVerifyRetries) {
+            return {
+              status: "needs_human",
+              reason: `verification still failing after ${verifyRetries} developer retries: ${blockingFailures
+                .map((f) => f.command)
+                .join(", ")}`,
+              usage,
+            };
+          }
+          verifyRetries += 1;
         }
-        verifyRetries += 1;
         fixes = blockingFailures.map((f, i) => ({
           id: `verify-${verifyRetries}-${i}`,
           severity: "blocking" as const,
@@ -357,6 +421,19 @@ export async function runFeatureWorkflow(
         usage,
       };
     }
+    // Ignore-rule evasion: files created under ignore rules added DURING the
+    // run are invisible to the snapshot diff — the reviewer must know the
+    // rules changed so it can judge whether the change hides work (a legit
+    // .gitignore edit is common; concealment is the risk).
+    const ignoreRulesChanged = diff.files.some(
+      (f) => f === ".gitignore" || f.endsWith("/.gitignore") || f === ".git/info/exclude",
+    );
+    if (ignoreRulesChanged) {
+      human.notify(
+        "pi-brain: ignore rules changed during the run — the reviewer has been told to scrutinize it.",
+      );
+    }
+
     events.emit({
       type: "agent.started",
       runId,
@@ -376,10 +453,15 @@ export async function runFeatureWorkflow(
         diff: diff.patch,
         files: diff.files,
         verification: results,
+        ignoreRulesChanged,
       }),
       model: reviewerCfg,
       skills: revSkills.skills,
-      readOnly: reviewerCfg.readOnly ?? true,
+      // Read-only is an INVARIANT of the reviewer role, not a config option:
+      // config values are honored everywhere else, but a reviewer that can
+      // write cannot be an independent reviewer (and could forge the spec
+      // tamper guard).
+      readOnly: true,
       resultTool: REVIEW_TOOL,
       contextFiles: reviewContext(),
       signal: deps.signal,
@@ -395,7 +477,10 @@ export async function runFeatureWorkflow(
 
     const validated = validateReviewResult(raw.structured);
     if (!validated.ok) {
-      // One repair attempt, then escalate (§34).
+      // Invalid structured output escalates immediately — no auto-repair
+      // attempt (decision recorded against SPEC §34's "repaired/retried
+      // once": a reviewer that cannot fill one schema reliably will not fill
+      // a repair prompt better, and the human sees the raw errors instead).
       return {
         status: "needs_human",
         reason: `reviewer returned an invalid result: ${validated.errors.join("; ")}`,

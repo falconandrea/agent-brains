@@ -9,6 +9,7 @@ import { mkdtempSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
 
 import { DEFAULT_CONFIG, type PiBrainConfig } from "../src/config.ts";
 import { FakeAgentRunner, type AgentRunRequest, type AgentRunResult } from "../src/agent.ts";
@@ -64,6 +65,7 @@ class FakeVerifier implements VerifyRunner {
 
 class FakeGit implements GitService {
   patches = ["diff-1", "diff-2", "diff-3"];
+  filesList = ["src/a.ts"];
   calls = 0;
   baselineCalls = 0;
   async baseline(cwd: string): Promise<GitBaseline> {
@@ -73,8 +75,9 @@ class FakeGit implements GitService {
   dirtySubmodules: string[] = [];
   async diffSince(): Promise<{ patch: string; files: string[]; dirtySubmodules: string[] }> {
     const patch = this.patches[Math.min(this.calls, this.patches.length - 1)]!;
+    const files = this.filesList;
     this.calls += 1;
-    return { patch, files: ["src/a.ts"], dirtySubmodules: this.dirtySubmodules };
+    return { patch, files, dirtySubmodules: this.dirtySubmodules };
   }
 }
 
@@ -682,5 +685,102 @@ test("resume without matching artifacts escalates to needs_human", async () => {
   assert.match(
     outcome.status === "needs_human" ? outcome.reason ?? "" : "",
     /cannot find PRD\/tasks/,
+  );
+});
+
+// -- pre-merge hardening (external review fix-then-merge set) ----------------
+
+test("the developer runs WITHOUT shell access and the reviewer is read-only even when configured otherwise", async () => {
+  const { deps, agents, events } = harness(
+    (req) =>
+      req.role === "developer"
+        ? devResult
+        : reviewOf({ verdict: "approved", summary: "ok", issues: [] }),
+    { config: { roles: { reviewer: { readOnly: false } } } as Partial<PiBrainConfig> },
+  );
+
+  const outcome = await runFeatureWorkflow(deps, DESCRIPTION, "run-tools");
+
+  assert.equal(outcome.status, "completed");
+  const devCall = agents.calls.find((c) => c.role === "developer")!;
+  assert.deepEqual(devCall.tools, ["read", "grep", "find", "ls", "edit", "write"], "no bash for the developer, ever");
+  const revCall = agents.calls.find((c) => c.role === "reviewer")!;
+  assert.equal(revCall.readOnly, true, "readOnly is an invariant, config cannot disable it");
+  assert.ok(
+    events.some((e) => e.type === "spec.approved"),
+    "the gate approval persists the spec content hashes",
+  );
+});
+
+test("tampering with the approved PRD/tasks mid-run escalates to needs_human", async () => {
+  const { deps, cwd, agents } = harness(
+    (req) =>
+      req.role === "developer"
+        ? devResult
+        : reviewOf({ verdict: "approved", summary: "ok", issues: [] }),
+  );
+  seedFeatureArtifacts(cwd, DESCRIPTION);
+
+  const outcome = await runFeatureWorkflow(
+    deps,
+    DESCRIPTION,
+    "run-tamper",
+    resumeStateOf({
+      phase: "review #1",
+      developerRuns: 1,
+      spec: {
+        prdSha: createHash("sha256").update("## PRD\nbody\n", "utf8").digest("hex"),
+        tasksSha: createHash("sha256").update("TAMPER-FREE\n", "utf8").digest("hex"),
+      },
+    }),
+  );
+
+  assert.equal(outcome.status, "needs_human");
+  assert.match(
+    outcome.status === "needs_human" ? outcome.reason ?? "" : "",
+    /modified after the gate/,
+  );
+  assert.equal(agents.calls.length, 0, "no agent runs against a mutated spec");
+});
+
+test("a resumed verify failure re-observed after the crash does not consume a retry", async () => {
+  // Crash sequence: fail #1 -> budget banked for fix#1 -> crash.
+  // Resume at verify: the identical failure must NOT escalate (maxVerifyRetries
+  // already at 1) — the banked fix round runs first.
+  const { deps, cwd, agents } = harness((req) => devResult, {
+    verifier: new FakeVerifier([1, 1]),
+    config: { maxVerifyRetries: 1 } as Partial<PiBrainConfig>,
+  });
+  seedFeatureArtifacts(cwd, DESCRIPTION);
+
+  const outcome = await runFeatureWorkflow(
+    deps,
+    DESCRIPTION,
+    "run-vbudget",
+    resumeStateOf({ phase: "verify", developerRuns: 1, verifyRetries: 1 }),
+  );
+
+  assert.equal(outcome.status, "needs_human", "the SECOND genuine failure (after the fix) escalates");
+  assert.match(outcome.status === "needs_human" ? outcome.reason ?? "" : "", /after 1 developer retries/);
+  assert.equal(agents.calls.filter((c) => c.role === "developer").length, 1, "fix #1 ran — the crash had already paid for it");
+});
+
+test("ignore rules changed during the run are surfaced to the reviewer prompt", async () => {
+  const { deps, cwd, agents, human } = harness((req) =>
+    req.role === "developer"
+      ? devResult
+      : reviewOf({ verdict: "approved", summary: "ok", issues: [] }),
+  );
+  seedFeatureArtifacts(cwd, DESCRIPTION);
+  (deps.git as FakeGit).filesList = [".gitignore", "src/a.ts"];
+
+  const outcome = await runFeatureWorkflow(deps, DESCRIPTION, "run-ignore");
+
+  assert.equal(outcome.status, "completed");
+  const revCall = agents.calls.find((c) => c.role === "reviewer")!;
+  assert.match(revCall.prompt, /IGNORE RULES CHANGED/, "the reviewer is told the diff touches ignore rules");
+  assert.ok(
+    human.notices.some((n) => n.includes("ignore rules changed")),
+    `the user is notified too: ${human.notices.join(" | ")}`,
   );
 });

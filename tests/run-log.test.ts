@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 
 import { RunLog, readRunLog, listRunIds, runLogPath, runsDir } from "../src/run-log.ts";
 import type { WorkflowEvent } from "../src/ports.ts";
@@ -168,6 +168,27 @@ test("new optional fields round-trip through JSONL", () => {
 
   const resumed = read[3] as { type: "workflow.resumed"; phase: string };
   assert.equal(resumed.phase, "develop");
+});
+
+test("open heals a torn final line so the NEXT appended event survives", () => {
+  const root = fixture();
+  const path = `${root}/.pi/pi-brain/runs/run-torn.jsonl`;
+  mkdirSync(dirname(path), { recursive: true });
+  // Simulate a crash mid-append: a valid first event, then a partial JSON
+  // line with NO trailing newline.
+  const first = JSON.stringify({ type: "workflow.started", runId: "run-torn", workflow: "feature" });
+  writeFileSync(path, `${first}\n{"type":"phase.star`, "utf8");
+
+  // A resume opens the log and appends its marker event.
+  const log = RunLog.open(root, "run-torn");
+  log.append({ type: "workflow.resumed", runId: "run-torn", phase: "develop" });
+
+  const events = readRunLog(root, "run-torn");
+  // The torn event is lost (it was lost when the process died) — but the
+  // resumed event MUST parse instead of being fused into the torn line.
+  assert.equal(events.length, 2);
+  assert.equal(events[0]!.type, "workflow.started");
+  assert.equal(events[1]!.type, "workflow.resumed");
 });
 
 test("old-format events without new fields still parse correctly", () => {

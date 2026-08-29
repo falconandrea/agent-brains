@@ -35,6 +35,17 @@ export class RunLog {
     const log = new RunLog(runLogPath(repoRoot, runId));
     try {
       mkdirSync(runsDir(repoRoot), { recursive: true });
+      // Heal a torn final line: a crash mid-append leaves a partial JSON
+      // without its newline, and the NEXT append would concatenate onto it,
+      // destroying that event too (readRunLog drops the whole merged line).
+      // Appending the missing newline first confines the loss to the event
+      // that was already being lost when the process died.
+      try {
+        const raw = readFileSync(log.#path);
+        if (raw.length > 0 && raw[raw.length - 1] !== 0x0a) appendFileSync(log.#path, "\n", "utf8");
+      } catch {
+        // Missing file (first open) or unreadable: the touch below handles creation.
+      }
       appendFileSync(log.#path, "", "utf8"); // touch: create even before the first event
     } catch (err) {
       log.#fail(err);

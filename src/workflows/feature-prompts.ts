@@ -73,6 +73,14 @@ export const DEVELOPER_PROMPT = (a: {
   stack: ProjectStack;
   fixes: ReviewIssue[];
 }): string => {
+  const noShell = `Rules:
+- You have NO shell access: you cannot run any command (no tests, no git,
+  nothing). Edit files with your editor tools only. The orchestrator runs
+  verification deterministically right after your pass and feeds every
+  failure back to you as a fix item — that is how you get test feedback.
+- Never touch .git, never create commits, never modify the PRD/tasks files
+  or .gitignore.`;
+
   if (a.fixes.length > 0) {
     return `You are the DEVELOPER on a ${stackLine(a.stack)} project. A previous round of your
 work was checked and these BLOCKING items came back. Fix them and nothing else.
@@ -81,10 +89,9 @@ ${a.fixes
   .map((f) => `### ${f.id} [${f.category}] ${f.file ?? ""}${f.line ? `:${f.line}` : ""}\n${f.problem}${f.recommendation ? `\n\nSuggested: ${f.recommendation}` : ""}`)
   .join("\n\n")}
 
-Rules:
+${noShell}
 - Do not change the approved spec to make a finding go away. If a finding is
   wrong or conflicts with the spec, say so in your final message instead.
-- Do not commit anything.
 
 Approved spec, for reference:
 ${a.prd}`;
@@ -93,15 +100,13 @@ ${a.prd}`;
   return `You are the DEVELOPER on a ${stackLine(a.stack)} project. Implement the approved
 plan below, task by task.
 
-Rules:
+${noShell}
 - Inspect existing patterns before inventing abstractions; match the codebase.
 - Keep changes focused on the tasks. No opportunistic refactors.
-- Run proportional checks as you go (targeted tests, typecheck).
 - Do not ask permission for routine implementation choices — just do them. Use
   ask_user only when a decision materially changes product behaviour, scope or
   compatibility.
 - Report any deviation from the plan in your final message.
-- Do NOT create git commits.
 
 ## APPROVED PRD
 ${a.prd}
@@ -117,6 +122,7 @@ export const REVIEWER_PROMPT = (a: {
   diff: string;
   files: string[];
   verification: CommandResult[];
+  ignoreRulesChanged?: boolean;
 }): string => `You are an INDEPENDENT REVIEWER on a ${stackLine(a.stack)} project. You did not
 write this code and you have no access to the developer's reasoning. Judge only
 what is in the diff.
@@ -130,7 +136,17 @@ Review on two axes:
 
 Deterministic checks already ran, so do not re-report what they cover:
 ${a.verification.map((v) => `- ${v.command} -> exit ${v.exitCode}`).join("\n") || "- (none configured)"}
-
+${
+  a.ignoreRulesChanged
+    ? `
+⚠ IGNORE RULES CHANGED IN THIS DIFF: a .gitignore or exclude rule was modified
+during the run. Files created under the NEW rules would be INVISIBLE in the
+diff you are reading. Judge whether the change is legitimate (build output,
+local caches) or conceals work — if you cannot rule out concealment, say so
+and request changes or human review.
+`
+    : ""
+}
 You are read-only. When done you MUST call submit_review exactly once. Reserve
 "blocking" for things that are actually wrong, not for preferences.
 

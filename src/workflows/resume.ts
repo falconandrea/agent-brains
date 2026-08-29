@@ -26,6 +26,14 @@ export type Refusal =
   | { type: "missing_baseline" }
   | { type: "gate_not_approved" }
   | { type: "terminal_outcome"; outcome: string }
+  | {
+      /**
+       * The last completed review already decided the run (approved or
+       * needs_human) but the outcome events were never written (crash in the
+       * synchronous window after review.completed). Nothing to resume: the
+       * caller should reconstruct and persist the terminal outcome instead.
+       */
+      type: "already_decided"; status: "completed" | "needs_human" }
   | { type: "missing_artifacts" }
   | { type: "unresolvable_baseline" };
 
@@ -138,6 +146,7 @@ export function replayRunLog(events: WorkflowEvent[]): ReplayResult {
   const previousBlockingIds = new Set<string>();
   let lastReview: ReviewResult | undefined;
   let interruptedPatchSha: string | undefined;
+  let spec: ResumeState["spec"];
   const usage: UsageByRole = {};
 
   events.forEach((event, i) => {
@@ -170,6 +179,10 @@ export function replayRunLog(events: WorkflowEvent[]): ReplayResult {
         if (!event.passed) verifyRetries += 1;
         break;
       }
+      case "spec.approved": {
+        spec = { prdSha: event.prdSha, tasksSha: event.tasksSha };
+        break;
+      }
       case "review.completed": {
         lastReviewCompleted = true;
         interruptedPatchSha = undefined;
@@ -194,6 +207,22 @@ export function replayRunLog(events: WorkflowEvent[]): ReplayResult {
       }
     }
   });
+
+  // A completed review whose verdict already decided the run (approved, or
+  // needs_human — both are terminal in decideNextRound) with no outcome
+  // events after it means the process died in the synchronous window between
+  // review.completed and workflow.completed. The honest resume is none at
+  // all: reconstruct the outcome, do not re-run anything.
+  if (
+    lastReviewCompleted &&
+    lastReview !== undefined &&
+    (lastReview.verdict === "approved" || lastReview.verdict === "needs_human")
+  ) {
+    return {
+      ok: false,
+      refusal: { type: "already_decided", status: lastReview.verdict === "approved" ? "completed" : "needs_human" },
+    };
+  }
 
   // Derive the re-entry phase from the interruption point.
   let phase: string;
@@ -228,6 +257,7 @@ export function replayRunLog(events: WorkflowEvent[]): ReplayResult {
       lastReview,
       usage,
       interruptedPatchSha,
+      ...(spec !== undefined ? { spec } : {}),
     },
   };
 }
@@ -259,7 +289,9 @@ export async function validateResumePreconditions(
   const { cwd, description, git, baseline } = deps;
 
   // The PRD carries the description marker on its first line; the tasks file
-  // lives beside it (written together by the original run).
+  // lives beside it (written together by the original run) and must survive
+  // too — a resume that re-enters the loop without tasks would hand every
+  // agent an empty plan.
   const marker = descriptionMarker(description);
   const featureDir = join(cwd, ".ai", "features");
   if (!existsSync(featureDir)) {
@@ -270,7 +302,13 @@ export async function validateResumePreconditions(
   for (const entry of readdirSync(featureDir, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
     const prdPath = join(featureDir, entry.name, `prd-${entry.name}.md`);
-    if (existsSync(prdPath) && readFileSync(prdPath, "utf8").startsWith(marker)) {
+    const tasksPath = join(featureDir, entry.name, `tasks-${entry.name}.md`);
+    if (
+      existsSync(prdPath) &&
+      existsSync(tasksPath) &&
+      readFileSync(prdPath, "utf8").startsWith(marker) &&
+      readFileSync(tasksPath, "utf8").startsWith(marker)
+    ) {
       found = true;
       break;
     }

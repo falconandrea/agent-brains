@@ -150,9 +150,15 @@ export type WorkflowEvent =
     }
   | { type: "workflow.completed"; runId: string; status: string }
   | { type: "workflow.failed"; runId: string; error: string }
+  | { type: "workflow.resumed"; runId: string; phase: string }
   | {
-      type: "workflow.resumed";
+      /**
+       * The spec gate was approved. The hashes freeze the PRD/tasks content the
+       * user approved: any later mutation of those files (e.g. by the developer
+       * making its own work look conformant) is detected and escalates.
+       */
+      type: "spec.approved";
       runId: string;
-      /** The phase at which the run resumes. */
-      phase: string;
+      prdSha: string;
+      tasksSha: string;
     };

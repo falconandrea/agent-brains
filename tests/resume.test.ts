@@ -354,6 +354,7 @@ test("validateResumePreconditions returns unresolvable_baseline when diffSince f
   mkdirSync(featureDir, { recursive: true });
   const marker = `<!-- pi-brain:feature ${JSON.stringify(description)} -->`;
   writeFileSync(join(featureDir, "prd-test-feature.md"), `${marker}\n# PRD`, "utf8");
+  writeFileSync(join(featureDir, "tasks-test-feature.md"), `${marker}\n# Tasks`, "utf8");
 
   // Create a git that throws on diffSince
   const git = new FakeGit();
@@ -440,4 +441,69 @@ test("review completed with fix due resumes at the fix round", () => {
   assert.equal(result.state.reviewRound, 1);
   assert.equal(result.state.fixes[0]?.id, "R1");
   assert.ok(result.state.previousBlockingIds.has("R1"));
+});
+
+test("an approved review without outcome is already_decided, not a new fix round", () => {
+  // Crash in the synchronous window between review.completed and
+  // workflow.completed: the replay must refuse and point at the verdict
+  // instead of inventing a developer pass over approved code.
+  const events: WorkflowEvent[] = [
+    { type: "workflow.started", runId: "run-1", workflow: "feature", baseline: "abc123" },
+    { type: "phase.started", runId: "run-1", phase: "develop" },
+    { type: "phase.started", runId: "run-1", phase: "verify" },
+    { type: "verification.completed", runId: "run-1", passed: true },
+    { type: "phase.started", runId: "run-1", phase: "review #1" },
+    { type: "review.completed", runId: "run-1", verdict: "approved", round: 1, issues: [] },
+  ];
+  const result = replayRunLog(events);
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.refusal, { type: "already_decided", status: "completed" });
+});
+
+test("a needs_human review verdict without outcome is already_decided too", () => {
+  const events: WorkflowEvent[] = [
+    { type: "workflow.started", runId: "run-1", workflow: "feature", baseline: "abc123" },
+    { type: "phase.started", runId: "run-1", phase: "develop" },
+    { type: "phase.started", runId: "run-1", phase: "verify" },
+    { type: "phase.started", runId: "run-1", phase: "review #1" },
+    { type: "review.completed", runId: "run-1", verdict: "needs_human", round: 1, issues: [] },
+  ];
+  const result = replayRunLog(events);
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.refusal, { type: "already_decided", status: "needs_human" });
+});
+
+test("replay extracts the spec.approved hashes for the tamper guard", () => {
+  const events: WorkflowEvent[] = [
+    { type: "workflow.started", runId: "run-1", workflow: "feature", baseline: "abc123" },
+    { type: "spec.approved", runId: "run-1", prdSha: "aaa", tasksSha: "bbb" },
+    { type: "phase.started", runId: "run-1", phase: "develop" },
+    // Interrupted mid-develop
+  ];
+  const result = replayRunLog(events);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.state.spec, { prdSha: "aaa", tasksSha: "bbb" });
+});
+
+test("validateResumePreconditions requires the tasks file too", async () => {
+  const root = fixture();
+  const git = new FakeGit();
+  const baseline = await git.baseline(root);
+  const description = "test feature";
+
+  // PRD with the right marker, but NO tasks file beside it.
+  const featureDir = join(root, ".ai", "features", "test-feature");
+  mkdirSync(featureDir, { recursive: true });
+  const marker = `<!-- pi-brain:feature ${JSON.stringify(description)} -->`;
+  writeFileSync(join(featureDir, "prd-test-feature.md"), `${marker}\n# PRD`, "utf8");
+
+  const result = await validateResumePreconditions({
+    cwd: root,
+    description,
+    git,
+    baseline,
+  });
+
+  assert.equal(result?.type, "missing_artifacts");
+  rmSync(root, { recursive: true, force: true });
 });
