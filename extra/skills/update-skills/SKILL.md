@@ -79,20 +79,25 @@ This skill lives in `extra/skills/` on purpose: it maintains this repo's canonic
 d. **Smoke test** (fail-fast — run for `common`, `frontend`, and the affected stack profiles, at minimum `laravel` and `nextjs`):
 
 ```bash
+failed=0
 for p in common frontend laravel nextjs; do
     TMP=$(mktemp -d)
-    OUT=$(./setup.sh "$TMP" "$p" 2>&1)
+    OUT=$(./setup.sh "$TMP" "$p" 2>&1); RC=$?
     rm -rf "$TMP"
-    if echo "$OUT" | grep -q "⚠️"; then
+    if [ "$RC" -ne 0 ] || echo "$OUT" | grep -q "⚠️"; then
         echo "FAIL $p:"; echo "$OUT"
+        failed=1
     else
         echo "PASS $p"
     fi
 done
+exit "$failed"
 ```
 
 `setup.sh` exits 0 even when it skips missing skills, so the `⚠️` grep is the
-only real failure signal. Any FAIL blocks the report until fixed.
+only real failure signal there; the `RC` check catches hard errors (unknown
+profile, missing manifest). The loop exits non-zero if any profile fails. Any
+FAIL blocks the report until fixed.
 
 ### 6. Report and ask
 
