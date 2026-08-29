@@ -1,170 +1,170 @@
-# Confronto skill UI/UX per landing page anti-slop
+# UI/UX skill comparison for anti-slop landing pages
 
-Data: 2026-08-29
+Date: 2026-08-29
 
-## Sintesi
+## Summary
 
-Le skill UI/UX già presenti coprono quasi tutto il ciclo necessario:
+The UI/UX skills we already have cover almost the entire needed lifecycle:
 
-- `frontend-design`: direzione artistica, brief, tipografia, layout distintivo e autocritica anti-template.
-- `ui-ux-pro-max`: esplorazione strutturata di product type, stili, palette, font, landing pattern e UX; può generare e persistere un design system.
-- `designer`: gerarchia, coerenza, stati, accessibilità e requisito di leggere prima il design system del progetto.
-- `tailwind-design-system`: token, componenti e responsive design con Tailwind v4.
-- `emil-design-eng`: criteri per decidere se animare, durata, easing, performance, accessibilità e motion restraint.
-- `web-design-guidelines`: revisione finale contro le linee guida web aggiornate.
-- `webapp-testing` e `pagespeed-optimizer`: verifica visuale, browser, performance e responsive.
+- `frontend-design`: art direction, brief, typography, distinctive layout, and anti-template self-critique.
+- `ui-ux-pro-max`: structured exploration of product types, styles, palettes, fonts, landing patterns, and UX; can generate and persist a design system.
+- `designer`: hierarchy, consistency, states, accessibility, and the requirement to read the project's design system first.
+- `tailwind-design-system`: tokens, components, and responsive design with Tailwind v4.
+- `emil-design-eng`: criteria for deciding whether to animate, duration, easing, performance, accessibility, and motion restraint.
+- `web-design-guidelines`: final review against up-to-date web guidelines.
+- `webapp-testing` and `pagespeed-optimizer`: visual, browser, performance, and responsive verification.
 
-Per una landing nuova non serve installare un secondo grande “design brain”. Serve soprattutto un workflow che componga bene queste skill e renda obbligatorie esplorazione, scelta motivata, asset reali e verifica desktop/mobile.
+For a new landing page there is no need to install a second large "design brain". What is needed is mostly a workflow that composes these skills well and makes exploration, motivated choices, real assets, and desktop/mobile verification mandatory.
 
-## Risorse esaminate
+## Resources examined
 
 ### UI Skills
 
-Il sito è un catalogo/registry, non una singola skill. Elenca diverse skill già presenti localmente, tra cui `frontend-design`, `ui-ux-pro-max`, `improve-animations` e `web-design-guidelines`, oltre a possibili aggiunte come `better-ui`, `design-lab`, `impeccable` e `create-design-md`.
+The site is a catalog/registry, not a single skill. It lists several skills we already have locally, including `frontend-design`, `ui-ux-pro-max`, `improve-animations`, and `web-design-guidelines`, plus possible additions such as `better-ui`, `design-lab`, `impeccable`, and `create-design-md`.
 
-Fonte: [UI Skills](https://www.ui-skills.com/)
+Source: [UI Skills](https://www.ui-skills.com/)
 
 ### `better-ui`
 
-È un buon complemento di craft: raggi dei bordi concentrici, allineamento ottico, uso di bordi vs ombre, transizioni interruptible, stroke delle icone e micro-interazioni con valori precisi. È più utile nella rifinitura di componenti che nella definizione della direzione di una landing. Alcune aree sono delegate a skill sorelle (`better-typography`, `better-accessibility`, `better-layout`).
+It is a good craft complement: concentric border radii, optical alignment, borders vs shadows, interruptible transitions, icon strokes, and micro-interactions with precise values. It is more useful for refining components than for setting a landing page's direction. Some areas are delegated to sibling skills (`better-typography`, `better-accessibility`, `better-layout`).
 
-Fonte: [better-ui](https://www.ui-skills.com/skills/jakubkrehel/better-ui)
+Source: [better-ui](https://www.ui-skills.com/skills/jakubkrehel/better-ui)
 
 ### `impeccable`
 
-È il candidato più interessante se si desidera un unico sistema operativo per design e review: distingue modalità `Persuade` per landing/marketing, propone `shape`, `critique`, `audit`, `polish`, `bolder`, `quieter`, `distill` e `animate`, e usa artefatti come `PRODUCT.md` e `DESIGN.md`. È però molto sovrapposto a `frontend-design` + `designer` + `web-design-guidelines`; adottarlo insieme senza una gerarchia chiara può creare conflitti di processo e di naming dei documenti.
+It is the most interesting candidate if you want a single operating system for design and review: it distinguishes a `Persuade` mode for landing/marketing, offers `shape`, `critique`, `audit`, `polish`, `bolder`, `quieter`, `distill`, and `animate`, and uses artifacts such as `PRODUCT.md` and `DESIGN.md`. However it overlaps heavily with `frontend-design` + `designer` + `web-design-guidelines`; adopting it alongside them without a clear hierarchy can create process conflicts and document naming conflicts.
 
-Fonte: [impeccable](https://www.ui-skills.com/skills/pbakaus/impeccable)
+Source: [impeccable](https://www.ui-skills.com/skills/pbakaus/impeccable)
 
 ### `design-lab`
 
-È utile per esplorare varianti e raccogliere feedback: preflight, inferenza dello stile esistente, intervista, generazione di variazioni e raffinamento. È un workflow interattivo più che una fonte di regole estetiche. Ha senso quando bisogna confrontare 2–3 direzioni; è sovradimensionato per una modifica piccola.
+It is useful for exploring variants and gathering feedback: preflight, inference of the existing style, interview, variation generation, and refinement. It is an interactive workflow more than a source of aesthetic rules. It makes sense when you need to compare 2–3 directions; it is overkill for a small change.
 
-Fonte: [design-lab](https://www.ui-skills.com/skills/0xdesign/design-lab)
+Source: [design-lab](https://www.ui-skills.com/skills/0xdesign/design-lab)
 
 ### `create-design-md`
 
-È molto utile per estrarre un linguaggio visuale da un repository o da un sito esistente, usando evidenze come token, CSS computato, componenti e comportamento desktop/mobile. Per una landing greenfield non sostituisce la fase di art direction: non c'è ancora un sistema da estrarre. È invece un buon modello per migliorare la disciplina con cui generiamo il nostro `DESIGN_SYSTEM.md`.
+It is very useful for extracting a visual language from an existing repository or site, using evidence such as tokens, computed CSS, components, and desktop/mobile behavior. For a greenfield landing it does not replace the art direction phase: there is no system to extract yet. It is instead a good model for improving the discipline with which we generate our own `DESIGN_SYSTEM.md`.
 
-Fonte: [create-design-md](https://www.ui-skills.com/skills/ibelick/create-design-md)
+Source: [create-design-md](https://www.ui-skills.com/skills/ibelick/create-design-md)
 
 ### `design-taste-frontend` / `gpt-taste`
 
-Ha buone intenzioni e alcuni controlli validi: legge il brief, esplicita audience e riferimenti, introduce dials per variance/motion/density, evita meta-label generiche e prevede una pre-flight checklist.
+It has good intentions and some valid checks: it reads the brief, makes audience and references explicit, introduces dials for variance/motion/density, avoids generic meta-labels, and includes a pre-flight checklist.
 
-Non lo userei però così com'è. Impone randomizzazione pseudo-casuale, AIDA, H1 di massimo 2–3 righe, bento senza celle vuote, grandi padding e soprattutto GSAP/motion obbligatori. Sono euristiche valide solo in alcuni casi; applicate sempre diventano un nuovo template “Awwwards”, con possibili problemi di performance, accessibilità e conversione.
+I would not use it as is, though. It imposes pseudo-random randomization, AIDA, H1s of at most 2–3 lines, bento with no empty cells, large padding, and above all mandatory GSAP/motion. These are heuristics that only apply in some cases; applied always, they become a new "Awwwards" template, with potential performance, accessibility, and conversion problems.
 
-Fonte: [design-taste-frontend](https://www.skills.sh/leonxlnx/taste-skill/design-taste-frontend) e [gpt-taste nel catalogo UI Skills](https://www.ui-skills.com/skills/leonxlnx/gpt-tasteskill)
+Source: [design-taste-frontend](https://www.skills.sh/leonxlnx/taste-skill/design-taste-frontend) and [gpt-taste in the UI Skills catalog](https://www.ui-skills.com/skills/leonxlnx/gpt-tasteskill)
 
 ### `designsystemchecklist.com`
 
-È una checklist di fondazioni, linguaggio, componenti e manutenzione, non una skill operativa per creare una landing. Le fondazioni includono colore, layout, tipografia, elevation, motion e iconografia; il catalogo componenti copre anche button, card, carousel, form, modal, tabs, toast e altri pattern. Il repository richiede inoltre riferimenti per ogni nuovo item.
+It is a checklist of foundations, language, components, and maintenance, not an operational skill for creating a landing page. The foundations include color, layout, typography, elevation, motion, and iconography; the component catalog also covers buttons, cards, carousels, forms, modals, tabs, toasts, and other patterns. The repository also requires references for every new item.
 
-Fonte: [repository Design System Checklist](https://github.com/ardakaracizmeli/design-system-checklist), [fondazioni](https://raw.githubusercontent.com/ardakaracizmeli/design-system-checklist/master/src/data/designFoundations.js), [linguaggio](https://raw.githubusercontent.com/ardakaracizmeli/design-system-checklist/master/src/data/designLanguage.js)
+Source: [Design System Checklist repository](https://github.com/ardakaracizmeli/design-system-checklist), [foundations](https://raw.githubusercontent.com/ardakaracizmeli/design-system-checklist/master/src/data/designFoundations.js), [language](https://raw.githubusercontent.com/ardakaracizmeli/design-system-checklist/master/src/data/designLanguage.js)
 
-La userei come reference/checklist di audit, non come skill sempre attiva. Se serve una nuova skill locale, sarebbe più utile una `design-system-audit` focalizzata su token, componenti, accessibilità e consistenza del progetto, con output evidence-based.
+I would use it as an audit reference/checklist, not as an always-on skill. If a new local skill is needed, a more useful one would be a `design-system-audit` focused on the project's tokens, components, accessibility, and consistency, with evidence-based output.
 
-### Articolo di Emil Kowalski
+### Emil Kowalski's article
 
-Non è principalmente una skill da installare: è una regola decisionale sul motion. I criteri centrali sono scopo, frequenza d'uso, velocità percepita e assenza di animazione quando l'interazione è ripetuta o keyboard-driven; come regola generale indica di restare sotto 300 ms per le animazioni UI. Questi principi sono già rappresentati da `emil-design-eng`, `review-animations` e `improve-animations` locali.
+It is not primarily a skill to install: it is a decision rule about motion. The central criteria are purpose, frequency of use, perceived speed, and the absence of animation when the interaction is repeated or keyboard-driven; as a general rule it suggests staying under 300 ms for UI animations. These principles are already represented by the local `emil-design-eng`, `review-animations`, and `improve-animations`.
 
-Fonte: [You Don't Need Animations](https://emilkowal.ski/ui/you-dont-need-animations)
+Source: [You Don't Need Animations](https://emilkowal.ski/ui/you-dont-need-animations)
 
-## Decisione consigliata
+## Recommended decision
 
-1. Non installare tutto il catalogo UI Skills.
-2. Non aggiungere ora `design-system-checklist` come skill autonoma.
-3. Valutare `impeccable` solo come alternativa/coordinatore principale, non in parallelo pieno con le skill creative già presenti.
-4. Prendere da `better-ui` i principi di craft che mancano, oppure installarlo soltanto se la landing richiederà una rifinitura intensa di micro-interazioni e componenti.
-5. Usare `design-lab` solo quando serve davvero confrontare varianti con feedback.
-6. Per il futuro, creare una skill locale `landing-page-design` che orchestra il set esistente: brief → 2–3 direzioni → design system evidence-based → implementazione → screenshot desktop/mobile → audit finale.
+1. Do not install the whole UI Skills catalog.
+2. Do not add `design-system-checklist` as a standalone skill now.
+3. Consider `impeccable` only as an alternative/main coordinator, not in full parallel with the creative skills we already have.
+4. Take the missing craft principles from `better-ui`, or install it only if the landing will require intensive micro-interaction and component refinement.
+5. Use `design-lab` only when comparing variants with feedback is genuinely needed.
+6. For the future, create a local `landing-page-design` skill that orchestrates the existing set: brief → 2–3 directions → evidence-based design system → implementation → desktop/mobile screenshots → final audit.
 
-## Stack operativo consigliato per la prossima landing
+## Recommended operating stack for the next landing page
 
-- Direzione e anti-slop: `frontend-design`.
-- Palette/font/layout alternativi motivati: `ui-ux-pro-max`.
-- Design contract persistente: `designer` + `DESIGN_SYSTEM.md` coerente con il progetto.
-- Token e componenti: `tailwind-design-system` se il progetto usa Tailwind.
-- Motion solo se serve: `emil-design-eng`.
+- Direction and anti-slop: `frontend-design`.
+- Motivated alternative palettes/fonts/layouts: `ui-ux-pro-max`.
+- Persistent design contract: `designer` + a `DESIGN_SYSTEM.md` consistent with the project.
+- Tokens and components: `tailwind-design-system` if the project uses Tailwind.
+- Motion only when needed: `emil-design-eng`.
 - QA: `web-design-guidelines`, `webapp-testing`, `pagespeed-optimizer`.
 
-## Workflow a ruoli per le landing page
+## Role-based workflow for landing pages
 
-La direzione più utile non è attivare tutte le skill insieme, ma separare quattro responsabilità. Gli agenti devono avere output, limiti e momenti di attivazione diversi.
+The most useful direction is not activating all the skills at once, but separating four responsibilities. The agents should have different outputs, limits, and activation moments.
 
-| Ruolo | Responsabilità | Limite |
+| Role | Responsibility | Limit |
 | --- | --- | --- |
-| `landing-art-director` / Awwwards | Generare 2–3 direzioni visive specifiche, con concept, hero, tipografia, palette, layout, asset, motion e signature element. | Non scrive subito codice e non impone AIDA, bento, GSAP o altri pattern se non motivati dal brief. |
-| `design-system-author` | Trasformare la direzione approvata in un design system persistente e utilizzabile dal coding agent. | Non inventa una nuova direzione estetica. |
-| `impeccable-reviewer` | Verificare brief, gerarchia, coerenza visuale, UX, responsive e qualità percepita; produce finding con evidenze. | Non rifà il layout secondo il proprio gusto e non modifica il codice senza mandato. |
-| `design-system-auditor` | Controllare in modo meccanico token, componenti, stati, accessibilità, motion e responsive. | Non decide se il design è “bello”: controlla completezza e coerenza. |
+| `landing-art-director` / Awwwards | Generate 2–3 specific visual directions, with concept, hero, typography, palette, layout, assets, motion, and signature element. | Does not write code right away and does not impose AIDA, bento, GSAP, or other patterns unless motivated by the brief. |
+| `design-system-author` | Turn the approved direction into a persistent design system usable by the coding agent. | Does not invent a new aesthetic direction. |
+| `impeccable-reviewer` | Verify brief, hierarchy, visual consistency, UX, responsiveness, and perceived quality; produces evidence-backed findings. | Does not redo the layout to its own taste and does not modify code without a mandate. |
+| `design-system-auditor` | Mechanically check tokens, components, states, accessibility, motion, and responsiveness. | Does not decide whether the design is "beautiful": it checks completeness and consistency. |
 
-### Workflow completo per una landing nuova
+### Full workflow for a new landing page
 
 ```text
 brief
   → landing-art-director
-  → scelta umana di una direzione
+  → human choice of one direction
   → design-system-author
-  → implementazione frontend
+  → frontend implementation
   → impeccable-reviewer
   → design-system-auditor
   → web-design-guidelines + screenshot/performance QA
 ```
 
-La scelta umana dopo le direzioni visive è un gate obbligatorio. Il sistema non deve passare automaticamente da esplorazione a implementazione.
+The human choice after the visual directions is a mandatory gate. The system must not move automatically from exploration to implementation.
 
-### Scenari
+### Scenarios
 
-1. **Landing greenfield**: eseguire il workflow completo.
-2. **Sito esistente con brand**: usare prima `create-design-md`, poi limitare l’art direction al linguaggio visuale estratto.
-3. **Landing già pronta ma piatta**: usare direttamente `impeccable-reviewer`, eventualmente con una modalità “bolder”.
-4. **Landing con molto motion**: aggiungere `emil-design-eng` solo dopo aver deciso che il motion ha uno scopo.
-5. **Confronto tra varianti**: usare opzionalmente `design-lab` per esplorazione e feedback.
+1. **Greenfield landing**: run the full workflow.
+2. **Existing site with a brand**: use `create-design-md` first, then constrain art direction to the extracted visual language.
+3. **Finished but flat landing**: go straight to `impeccable-reviewer`, possibly in "bolder" mode.
+4. **Motion-heavy landing**: add `emil-design-eng` only after deciding the motion has a purpose.
+5. **Comparing variants**: optionally use `design-lab` for exploration and feedback.
 
-### Ruolo di `impeccable`
+### Role of `impeccable`
 
-`impeccable` può funzionare da validatore qualitativo. Va eseguito contro tre fonti, in questo ordine:
+`impeccable` can work as a quality validator. It should be run against three sources, in this order:
 
-1. brief e obiettivo della pagina;
-2. design system approvato;
-3. implementazione e screenshot desktop/mobile.
+1. the brief and the page's goal;
+2. the approved design system;
+3. the implementation and desktop/mobile screenshots.
 
-Il suo output dovrebbe essere una tabella di finding con severità, evidenza, impatto e correzione proposta. Non deve diventare un secondo art director che sostituisce la direzione scelta.
+Its output should be a findings table with severity, evidence, impact, and proposed fix. It must not become a second art director that overrides the chosen direction.
 
-### Ruolo della checklist
+### Role of the checklist
 
-La checklist è un gate di completezza separato dalla review estetica. Deve rispondere a domande binarie come:
+The checklist is a completeness gate separate from the aesthetic review. It should answer binary questions such as:
 
-- esistono token semantici per colori, tipografia, spaziatura e radius?
-- sono coperti hover, focus, active, disabled e loading?
-- le immagini hanno aspect ratio, dimensioni e alt text?
-- sono rispettati contrasto, touch target, reduced motion e responsive behavior?
-- il sistema evita valori hardcoded e componenti duplicati?
+- do semantic tokens exist for colors, typography, spacing, and radius?
+- are hover, focus, active, disabled, and loading covered?
+- do images have aspect ratio, dimensions, and alt text?
+- are contrast, touch targets, reduced motion, and responsive behavior respected?
+- does the system avoid hardcoded values and duplicated components?
 
-### Artefatto canonico
+### Canonical artifact
 
-Non creare contemporaneamente `DESIGN.md` e `.ai/context/DESIGN_SYSTEM.md`. La skill locale `designer` legge oggi `.ai/context/DESIGN_SYSTEM.md`, mentre `create-design-md` usa `DESIGN.md`. La V1 dovrebbe scegliere un solo formato; la scelta consigliata è `.ai/context/DESIGN_SYSTEM.md`, con eventuale supporto a `DESIGN.md` come fallback.
+Do not create `DESIGN.md` and `.ai/context/DESIGN_SYSTEM.md` at the same time. The local `designer` skill currently reads `.ai/context/DESIGN_SYSTEM.md`, while `create-design-md` uses `DESIGN.md`. V1 should pick a single format; the recommended choice is `.ai/context/DESIGN_SYSTEM.md`, with possible support for `DESIGN.md` as a fallback.
 
-Il documento dovrebbe contenere almeno:
+The document should contain at least:
 
-- audience, obiettivo e tesi visiva;
-- font, scala tipografica e regole di wrapping;
-- palette con token semantici;
-- container, griglia, spacing e breakpoint;
-- componenti e stati principali;
-- regole per immagini, icone e asset;
-- motion budget e reduced-motion behavior;
+- audience, goal, and visual thesis;
+- fonts, type scale, and wrapping rules;
+- palette with semantic tokens;
+- container, grid, spacing, and breakpoints;
+- main components and states;
+- rules for images, icons, and assets;
+- motion budget and reduced-motion behavior;
 - responsive behavior;
-- anti-pattern espliciti specifici del progetto.
+- project-specific explicit anti-patterns.
 
-### V1 consigliata
+### Recommended V1
 
-Non creare subito quattro agenti autonomi esposti separatamente. Creare un unico workflow user-facing, per esempio `landing-page`, con modalità:
+Do not immediately create four separate autonomous agents. Create a single user-facing workflow, for example `landing-page`, with modes:
 
-- `concept`: attiva l’art director;
-- `document`: crea o aggiorna il design system;
-- `review`: attiva la review qualitativa;
-- `audit`: esegue checklist e QA tecnico.
+- `concept`: activates the art director;
+- `document`: creates or updates the design system;
+- `review`: activates the qualitative review;
+- `audit`: runs the checklist and technical QA.
 
-In questo modo gli agenti restano specializzati, ma l’utente segue un percorso unico e non deve sapere quale skill combinare manualmente. Aggiungere agenti separati solo quando il workflow viene riutilizzato abbastanza da giustificare il costo di manutenzione.
+This way the agents stay specialized, but the user follows a single path and does not need to know which skills to combine manually. Add separate agents only once the workflow is reused enough to justify the maintenance cost.
