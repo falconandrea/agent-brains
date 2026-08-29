@@ -137,6 +137,155 @@ in the agent-workflow improvements plan on `main` (process depth proportional
 to task size) — here applied at the entry point instead of inside the feature
 flow.
 
+## Herdr-native Pi runtime and feature observability
+
+**Status:** next candidate; direction agreed 2026-08-29, not designed or
+implemented yet.
+
+**Decision direction.** Make pi-brain a Pi + Herdr tool rather than a
+multi-backend wrapper. Pi becomes the only normal agent runtime; Herdr becomes
+the persistent terminal/workspace layer and the visual control surface. Routine
+OpenCode and Codex CLI execution paths are out of scope. Different providers or
+models may still be selected through Pi.
+
+**Target UX.** Running `/feature <description>` from an `orchestrator` Pi tab
+creates or reuses a project/feature workspace with role tabs such as:
+
+- `orchestrator` — the parent Pi session and workflow control;
+- `researcher` — optional read-only reconnaissance;
+- `planner` — PRD/tasks and the hard human approval gate;
+- `developer` — implementation and bounded fix rounds;
+- `reviewer` — independent read-only review;
+- `verify` or `shell` — tests, logs, git and other manual commands.
+
+The Herdr sidebar should aggregate every agent from every project workspace so
+the user can immediately see which agents are working, done, blocked or waiting
+for attention. The `+` action remains available for ordinary terminal panes.
+Herdr already provides workspace/tab/pane persistence, agent state rollups and
+custom display metadata; pi-brain should report its own workflow phase through
+that surface rather than inventing a second dashboard.
+
+**What must remain authoritative.** The existing `runFeatureWorkflow` remains
+the owner of phase transitions and safety policy: spec approval, one-writer
+lock, baseline/diff accounting, deterministic verification, reviewer
+read-only enforcement, bounded review/fix loops, structured results and resume
+logs. Herdr is an execution and observability adapter, not a second workflow
+engine. Do not replace `/feature` with a package's independent `/plan`,
+`/worktree` or orchestration workflow.
+
+**Technical shape.** Add a Herdr-backed implementation of the existing
+`AgentRunner` port, plus a small Herdr workspace/status adapter. Each logical
+role that must be inspectable runs as a real Pi process in a Herdr pane. The
+existing `WorkflowEventSink` already emits the events needed to update pane
+names, semantic states and metadata such as `phase`, `model`, `task` and
+`last_action`. Keep the current in-memory `PiAgentRunner` as a fallback while
+the Herdr runner is proven.
+
+**Thinking visibility.** A real interactive Pi child pane can show the thinking
+blocks, tool calls and tool output that Pi/provider exposes to its TUI. This is
+not a promise to expose hidden chain-of-thought. The current SDK runner uses
+in-memory sessions, forwards only limited operational events and disposes the
+session after each call, so installing Herdr alone will not make its thinking
+visible. The Herdr runner must either preserve the child TUI or explicitly
+stream Pi `thinking_delta` events to a dedicated pane.
+
+**Non-negotiable constraints.** Launching a normal unrestricted `pi` child is
+not sufficient: role-specific tool allowlists, the developer's no-shell/no-
+commit policy, reviewer read-only mode, structured review submission and
+single-writer Git safety must survive the pane boundary. Worktrees need a
+separate design because the current workflow reviews the diff in the parent
+checkout; moving the developer to a worktree without an explicit handoff would
+break that contract.
+
+**Phased spike.**
+
+1. Report `/feature` phases and agent metadata to the current Herdr workspace,
+   without changing execution.
+2. Create stable role tabs/panes and run one role at a time through a
+   Herdr-backed `AgentRunner`; prove result delivery and cancellation.
+3. Stream visible Pi thinking/tool activity and verification output; prove the
+   existing safety invariants with workflow tests and one real feature run.
+4. Add multi-project navigation, pane cleanup/resume behavior and optional
+   worktree support only after the single-checkout path is reliable.
+
+**Package evaluation.** `pi-herdr-agents` may be useful as a reference or
+low-level Pi-child spawning layer, but it must not own pi-brain's feature state
+machine. Review its source before use, and avoid introducing two competing
+orchestrators or duplicate `/plan` semantics.
+
+## Reliability research: Atomic patterns and Pi ecosystem watchlist
+
+**Status:** next analysis track; raised 2026-08-29. No adoption decisions yet.
+
+**Problem.** As pi-brain grows beyond `/feature`, the main risk is not only
+orchestration complexity: child agents may receive stale or excessive context,
+drift from the approved objective, return prose that cannot be validated, edit
+the same checkout concurrently, or hand incomplete information to the next
+stage. We should study mature implementations before adding more workflows.
+
+**Reference project.** Inspect [bastani-inc/atomic](https://github.com/bastani-inc/atomic)
+and its primary documentation, especially workflows, subagents, intercom,
+skills, context engineering and evaluation/gates. Atomic is a Pi-derived
+runtime with explicit TypeScript workflow graphs, tracked stages, artifacts,
+typed inputs/outputs, human gates, checks, retries, resume, fresh/forked
+contexts and worktree-isolated parallel work. These are patterns to evaluate,
+not an architecture or runtime dependency to copy.
+
+**Patterns worth comparing with pi-brain.**
+
+- Treat every stage as a local contract: objective, acceptance criteria, scope,
+  tools, inputs, outputs and stop conditions.
+- Pass typed, schema-validated results and named artifacts between stages;
+  avoid using the parent transcript as the data bus.
+- Use fresh context for research and independent review; use forked context only
+  when a writer genuinely needs the parent conversation.
+- Preserve the approved contract across handoffs and compaction. Only the human
+  may amend scope; an agent's adjacent discovery becomes deferred work unless
+  explicitly accepted.
+- Prefer files/artifacts for large research, logs and review bundles, while
+  passing concise summaries plus paths downstream.
+- Make verification executable and evidence-based: tests, typechecks, linters,
+  schemas, review rubrics and bounded repair loops.
+- Isolate concurrent writers with worktrees and explicit ownership; isolate
+  inter-agent messages by group or run where cross-talk could corrupt context.
+- Persist stage/run identity, outcomes, failures, usage and checkpoints so a
+  restart can resume or explain what happened rather than replaying blindly.
+
+**Comparison questions.** Before implementing new workflow primitives, compare
+Atomic's behavior with the existing ports and invariants in pi-brain: run lock,
+baseline/diff, context router, result tool, reviewer independence, ask-user
+bridge, run log and resume. Record what we adopt, reject or deliberately keep
+different. A useful output is a small reliability matrix mapping each failure
+mode to a deterministic prevention, detection or human escalation.
+
+**Pi plugin watchlist.** Review these only when a concrete workflow need justifies
+them; do not install overlapping orchestration packages globally by default:
+
+- [`pi-web-access`](https://pi.dev/packages/pi-web-access) — web search, URL
+  extraction and optional curator/browser-assisted access. Candidate for a
+  bounded `researcher` role, with explicit source/provenance and network/secret
+  policy.
+- [`@earendil-works/pi-tui`](https://pi.dev/docs/latest/tui) — the official Pi
+  TUI component library rather than a normal workflow plugin. Candidate for a
+  compact context/usage bar, workflow phase widget, agent activity panel or
+  structured gate UI inside the orchestrator tab.
+- [`pi-subagents`](https://pi.dev/packages/pi-subagents) — child Pi sessions,
+  background/parallel delegation, saved workflows and bundled roles. Compare
+  its context modes, tool allowlists, result delivery, lifecycle and worktree
+  behavior with our `AgentRunner`; avoid creating a second feature orchestrator.
+- [`pi-mcp-adapter`](https://pi.dev/packages/pi-mcp-adapter) — MCP server
+  discovery/configuration and runtime registration. Evaluate it for
+  role-scoped tools (especially researcher/developer access), child-session
+  propagation, approvals, output limits and credential boundaries.
+- `pi-herdr-agents` — visible Herdr child panes, asynchronous supervision and
+  worktree support; evaluate only as the Herdr execution layer underneath our
+  deterministic workflow.
+
+**Research deliverable.** Keep the detailed source-backed comparison in
+`docs/pi-brain/research/atomic-and-pi-ecosystem.md`. This idea remains open
+until at least one small reliability spike demonstrates a measurable benefit
+without weakening existing safety invariants.
+
 ## Third reviewer provider (Gemini)
 
 **Status:** blocked on Pi support. Not actionable now.
@@ -299,4 +448,3 @@ the user's ordinary pi sessions web search. Keep in mind for the triage
 orchestrator idea: if its "research" route ever materializes, web tools for
 children become a real requirement and we would wire a custom tool through
 pi-agent-runner rather than install the extension.
-
