@@ -61,21 +61,38 @@ For every name found, check a directory exists in `.agents/skills/`. This is how
 
 b. **Tracker config exists**: `.ai/agents/issue-tracker.md` is present.
 
-c. **Profile orphans** (installed skills no profile will ship):
+c. **Profile integrity (bidirectional — both directions must come back empty):**
 
 ```bash
 ls .agents/skills/ | sed 's:/$::' | sort > /tmp/a.txt
 grep -h -v "^#\|@include" profiles/*.list | sed '/^$/d' | sort -u > /tmp/p.txt
-comm -23 /tmp/a.txt /tmp/p.txt
+comm -23 /tmp/a.txt /tmp/p.txt   # installed but unprofiled (orphans)
+comm -13 /tmp/a.txt /tmp/p.txt   # profiled but not installed (broken manifest)
 ```
+
+The second direction is the dangerous one: `setup.sh` warns and skips missing
+skills instead of failing, so a typo'd or stale entry silently ships less than
+the manifest promises.
 
 This skill lives in `extra/skills/` on purpose: it maintains this repo's canonical store and never ships to scaffolded projects (nothing in `extra/` is profiled or symlinked by `setup.sh`).
 
-d. **Smoke test** (optional, when the profiles changed or a new skill was added):
+d. **Smoke test** (fail-fast — run for `common`, `frontend`, and the affected stack profiles, at minimum `laravel` and `nextjs`):
 
 ```bash
-TMP=$(mktemp -d) && ./setup.sh "$TMP" common && ls "$TMP/.agents/skills/" | wc -l && rm -rf "$TMP"
+for p in common frontend laravel nextjs; do
+    TMP=$(mktemp -d)
+    OUT=$(./setup.sh "$TMP" "$p" 2>&1)
+    rm -rf "$TMP"
+    if echo "$OUT" | grep -q "⚠️"; then
+        echo "FAIL $p:"; echo "$OUT"
+    else
+        echo "PASS $p"
+    fi
+done
 ```
+
+`setup.sh` exits 0 even when it skips missing skills, so the `⚠️` grep is the
+only real failure signal. Any FAIL blocks the report until fixed.
 
 ### 6. Report and ask
 
