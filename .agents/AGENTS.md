@@ -17,3 +17,14 @@
 2. Run `./vendor/bin/pint` to ensure code style compliance
 3. Run `./vendor/bin/phpstan analyse --memory-limit=2G` to ensure code quality
 4. The user will run `php artisan boost:update` to sync the root `agents.md`
+
+## Matt Pocock skills: local path remap
+
+The `mattpocock/skills` skills in `.agents/skills/` are patched to use this repo's `.ai/` layout instead of Matt's defaults:
+
+- `CONTEXT.md` (root glossary) → `.ai/context/GLOSSARY.md`
+- `docs/adr/` → `.ai/adr/` (created lazily on first ADR)
+- `docs/agents/issue-tracker.md` → `.ai/agents/issue-tracker.md`
+- `.scratch/<feature>/` (local tickets) → `.ai/features/<feature>/`
+
+`npx skills update` overwrites local edits to skill files: re-apply this remap after every update.
