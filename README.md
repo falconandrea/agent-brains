@@ -30,7 +30,8 @@ Centralized repository for AI agent configurations, skills, and project template
 ├── templates/              # → Copied to projects (project-specific context)
 │   ├── AGENTS.md            #   Project-level agent guidance
 │   └── .ai/
-│       ├── context/        #   PRD, APP_FLOW, TECH_STACK, ROADMAP, DB schema
+│       ├── agents/         #   issue-tracker.md (local tracker convention)
+│       ├── context/        #   PRD, GLOSSARY, APP_FLOW, TECH_STACK, ROADMAP, DB schema
 │       ├── features/       #   Feature tracking template
 │       └── memory/         #   lessons.md, progress.md
 │
@@ -132,6 +133,35 @@ How you update depends on the tool:
   ```
 
 This keeps one canonical version shared across all projects.
+
+### Updating installed skills — the `.ai/` path remap
+
+Skills from `mattpocock/skills` are patched to use this repo's `.ai/` layout
+instead of their upstream defaults:
+
+| Upstream | This repo |
+| --- | --- |
+| `CONTEXT.md` (root glossary) | `.ai/context/GLOSSARY.md` |
+| `docs/adr/` | `.ai/adr/` (lazy: created on first ADR) |
+| `docs/agents/issue-tracker.md` | `.ai/agents/issue-tracker.md` |
+| `.scratch/<feature>/` (local tickets) | `.ai/features/<feature>/` |
+
+The tracker convention (shipped by `scaffold.sh`): issues and specs are local
+markdown under `.ai/features/<feature-slug>/` — `spec.md` plus one file per
+ticket in `issues/NN-<slug>.md`. `to-spec`, `to-tickets` and `code-review`
+read this from `.ai/agents/issue-tracker.md`.
+
+**Warning:** `npx skills update` overwrites local edits with upstream content —
+no warning, no conflict (verified empirically; the lock's `computedHash` does
+not protect modified files). After any update the remap must be re-applied.
+
+That is the job of the `update-skills` maintenance skill
+(`extra/skills/update-skills/`): it runs the update, re-applies the remap with
+its deterministic script (`scripts/remap-matt-paths.sh`), hand-fixes the prose
+the script cannot, checks for broken skill dependencies (skills invoking
+uninstalled skills), missing tracker config, and profile orphans, then reports
+and asks before installing or committing anything. The remap is also documented
+in `.agents/AGENTS.md`.
 
 ### Profiles → curated subset per project
 
