@@ -1,2 +1,6 @@
 # agents-skills-custom repo files
 .DS_Store
+
+# local pi/node plumbing (ignored on all branches)
+node_modules/
+.pi/
