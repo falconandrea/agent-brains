@@ -342,8 +342,11 @@ export default function piBrain(pi: ExtensionAPI): void {
       return;
     }
 
+    const { config, warnings } = loadConfig(cwd);
+    for (const warning of warnings) ctx.ui.notify(`pi-brain config: ${warning}`, "warning");
+
     // Replay the log to get resume state or refusal
-    const replay = replayRunLog(events);
+    const replay = replayRunLog(events, { maxReviewRounds: config.maxReviewRounds });
     if (!replay.ok) {
       if (replay.refusal.type === "already_decided") {
         // The last review already decided the run; only the outcome events
@@ -351,7 +354,30 @@ export default function piBrain(pi: ExtensionAPI): void {
         // no agent runs, nothing to resume.
         const status = replay.refusal.status;
         const heal = RunLog.open(cwd, runId);
-        heal.append({ type: "workflow.outcome", runId, status, reason: "outcome reconstructed from the last review verdict after a crash" });
+        const review = replay.refusal.review;
+        heal.append({
+          type: "workflow.outcome",
+          runId,
+          status,
+          reason: "outcome reconstructed from the last review verdict after a crash",
+          ...(review !== undefined
+            ? {
+                summary: review.summary,
+                review: {
+                  verdict: review.verdict,
+                  summary: review.summary,
+                  issues: review.issues,
+                },
+              }
+            : {}),
+          ...(replay.refusal.files !== undefined ? { files: replay.refusal.files } : {}),
+          usage: Object.fromEntries(
+            Object.entries(replay.refusal.usage).map(([role, usage]) => [
+              role,
+              { input: usage?.input ?? 0, output: usage?.output ?? 0 },
+            ]),
+          ),
+        });
         heal.append({ type: "workflow.completed", runId, status });
         ctx.ui.notify(
           `pi-brain: ${runId} had already been ${status === "completed" ? "approved" : "escalated to a human"} before the interruption — outcome recorded, nothing to resume.`,
@@ -370,9 +396,6 @@ export default function piBrain(pi: ExtensionAPI): void {
       ctx.ui.notify("pi-brain: another run is active in this session. Use /flow stop first.", "warning");
       return;
     }
-
-    const { config, warnings } = loadConfig(cwd);
-    for (const warning of warnings) ctx.ui.notify(`pi-brain config: ${warning}`, "warning");
 
     const abort = new AbortController();
 
@@ -397,6 +420,9 @@ export default function piBrain(pi: ExtensionAPI): void {
       branch: "resumed",
       headSha: "unknown",
       baseCommit: started.baseline,
+      ...(started.ignoreRulesDigest !== undefined
+        ? { ignoreRulesDigest: started.ignoreRulesDigest }
+        : {}),
     };
 
     // Validate preconditions

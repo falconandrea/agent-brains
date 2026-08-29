@@ -22,7 +22,7 @@ import type {
   WorkflowEvent,
 } from "../src/ports.ts";
 import type { ReviewResult } from "../src/review.ts";
-import { runFeatureWorkflow, type FeatureDeps } from "../src/workflows/feature.ts";
+import { hasValidTaskList, runFeatureWorkflow, type FeatureDeps } from "../src/workflows/feature.ts";
 import { mkdirSync, writeFileSync } from "node:fs";
 
 const PROFILES_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "profiles");
@@ -32,8 +32,10 @@ const PLAN = "## PRD\nBuild the thing.\n\n## TASKS\n- T1 do it\n";
 
 class FakeHuman implements HumanInput {
   approve = true;
+  confirmCalls = 0;
   readonly notices: string[] = [];
   async confirm(): Promise<boolean> {
+    this.confirmCalls += 1;
     return this.approve;
   }
   async select(q: { options: Array<{ value: string }> }): Promise<string> {
@@ -476,6 +478,91 @@ test("the planner's English TITLE names the directory, not the raw request", asy
   );
 });
 
+test("the planner's TASKS validator rejects placeholders and duplicate ids", () => {
+  assert.equal(hasValidTaskList("## TASKS\n- T1 implement it\n- T2 test it"), true);
+  assert.equal(hasValidTaskList("## TASKS\n- TODO"), false);
+  assert.equal(hasValidTaskList("## TASKS\n- T1 first\n- T1 duplicate"), false);
+});
+
+test("a planner response without granular TASKS is escalated before the gate", async () => {
+  const { deps, agents, human } = harness((req) =>
+    req.role === "planner"
+      ? { role: "planner", text: "## PRD\nA plan with no executable tasks.\n", aborted: false }
+      : devResult,
+  );
+
+  const outcome = await runFeatureWorkflow(deps, DESCRIPTION, "run-no-tasks");
+
+  assert.equal(outcome.status, "needs_human");
+  assert.match(outcome.status === "needs_human" ? outcome.reason : "", /valid granular TASKS/);
+  assert.equal(agents.calls.length, 1, "only the planner may run");
+  assert.equal(human.confirmCalls, 0, "the approval gate was never opened");
+});
+
+test("a developer cannot mutate the approved spec before verification or review", async () => {
+  const { deps, cwd, agents } = harness((req) => {
+    if (req.role === "developer") {
+      writeFileSync(
+        join(cwd, ".ai", "features", "add-invitations", "prd-add-invitations.md"),
+        "tampered plan\n",
+        "utf8",
+      );
+      return devResult;
+    }
+    return req.role === "planner"
+      ? plannerResult
+      : reviewOf({ verdict: "approved", summary: "ok", issues: [] });
+  });
+
+  const outcome = await runFeatureWorkflow(deps, DESCRIPTION, "run-same-round-tamper");
+
+  assert.equal(outcome.status, "needs_human");
+  assert.match(outcome.status === "needs_human" ? outcome.reason : "", /modified after the gate/);
+  assert.equal(agents.calls.filter((c) => c.role === "reviewer").length, 0);
+});
+
+test("a spec mutation during diff collection is caught before the reviewer", async () => {
+  const { deps, cwd, agents } = harness((req) =>
+    req.role === "planner"
+      ? plannerResult
+      : req.role === "developer"
+        ? devResult
+        : reviewOf({ verdict: "approved", summary: "ok", issues: [] }),
+  );
+  const git = deps.git as FakeGit;
+  git.diffSince = async () => {
+    writeFileSync(
+      join(cwd, ".ai", "features", "add-invitations", "tasks-add-invitations.md"),
+      "tampered during diff\n",
+      "utf8",
+    );
+    return { patch: "diff-1", files: ["src/a.ts"], dirtySubmodules: [] };
+  };
+
+  const outcome = await runFeatureWorkflow(deps, DESCRIPTION, "run-diff-tamper");
+
+  assert.equal(outcome.status, "needs_human");
+  assert.equal(agents.calls.filter((c) => c.role === "reviewer").length, 0);
+});
+
+test("a spec mutation during review invalidates the verdict", async () => {
+  const { deps, cwd, agents } = harness((req) => {
+    if (req.role === "planner") return plannerResult;
+    if (req.role === "developer") return devResult;
+    writeFileSync(
+      join(cwd, ".ai", "features", "add-invitations", "prd-add-invitations.md"),
+      "tampered during review\n",
+      "utf8",
+    );
+    return reviewOf({ verdict: "approved", summary: "ok", issues: [] });
+  });
+
+  const outcome = await runFeatureWorkflow(deps, DESCRIPTION, "run-review-tamper");
+
+  assert.equal(outcome.status, "needs_human");
+  assert.equal(agents.calls.filter((c) => c.role === "reviewer").length, 1);
+});
+
 test("a rerun whose TITLE is worded differently reuses its earlier directory", async () => {
   let titleNo = 0;
   const { deps, cwd } = harness((req) =>
@@ -693,9 +780,11 @@ test("resume without matching artifacts escalates to needs_human", async () => {
 test("the developer runs WITHOUT shell access and the reviewer is read-only even when configured otherwise", async () => {
   const { deps, agents, events } = harness(
     (req) =>
-      req.role === "developer"
-        ? devResult
-        : reviewOf({ verdict: "approved", summary: "ok", issues: [] }),
+      req.role === "planner"
+        ? plannerResult
+        : req.role === "developer"
+          ? devResult
+          : reviewOf({ verdict: "approved", summary: "ok", issues: [] }),
     { config: { roles: { reviewer: { readOnly: false } } } as Partial<PiBrainConfig> },
   );
 
@@ -757,7 +846,7 @@ test("a resumed verify failure re-observed after the crash does not consume a re
     deps,
     DESCRIPTION,
     "run-vbudget",
-    resumeStateOf({ phase: "verify", developerRuns: 1, verifyRetries: 1 }),
+    resumeStateOf({ phase: "verify", developerRuns: 1, verifyRetries: 1, verifyRetryBanked: true }),
   );
 
   assert.equal(outcome.status, "needs_human", "the SECOND genuine failure (after the fix) escalates");
@@ -765,11 +854,31 @@ test("a resumed verify failure re-observed after the crash does not consume a re
   assert.equal(agents.calls.filter((c) => c.role === "developer").length, 1, "fix #1 ran — the crash had already paid for it");
 });
 
+test("a resumed verify phase with no persisted result charges its first failure", async () => {
+  const { deps, cwd, agents } = harness((req) => devResult, {
+    verifier: new FakeVerifier([1, 1]),
+    config: { maxVerifyRetries: 1 } as Partial<PiBrainConfig>,
+  });
+  seedFeatureArtifacts(cwd, DESCRIPTION);
+
+  const outcome = await runFeatureWorkflow(
+    deps,
+    DESCRIPTION,
+    "run-vbudget-no-result",
+    resumeStateOf({ phase: "verify", developerRuns: 1, verifyRetries: 0, verifyRetryBanked: false }),
+  );
+
+  assert.equal(outcome.status, "needs_human");
+  assert.equal(agents.calls.filter((c) => c.role === "developer").length, 1);
+});
+
 test("ignore rules changed during the run are surfaced to the reviewer prompt", async () => {
   const { deps, cwd, agents, human } = harness((req) =>
-    req.role === "developer"
-      ? devResult
-      : reviewOf({ verdict: "approved", summary: "ok", issues: [] }),
+    req.role === "planner"
+      ? plannerResult
+      : req.role === "developer"
+        ? devResult
+        : reviewOf({ verdict: "approved", summary: "ok", issues: [] }),
   );
   seedFeatureArtifacts(cwd, DESCRIPTION);
   (deps.git as FakeGit).filesList = [".gitignore", "src/a.ts"];

@@ -18,10 +18,10 @@
  */
 
 import { execFile } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { rmSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import type { CommandResult, GitBaseline, GitService, VerifyRunner } from "./ports.ts";
 import type { VerifyCommand } from "./verify.ts";
@@ -53,6 +53,48 @@ async function git(
 
 /** NUL-separated output: the only form that survives newlines and quoting in paths. */
 const splitZ = (out: string): string[] => out.split("\0").filter((s) => s !== "");
+
+function fileForDigest(path: string): Buffer | string {
+  try {
+    return existsSync(path) ? readFileSync(path) : "<missing>";
+  } catch {
+    return "<unreadable>";
+  }
+}
+
+/**
+ * Digest the ignore rules that influence snapshotTree(). The repository's
+ * .gitignore files are tracked by Git, but .git/info/exclude and the optional
+ * global excludes file are not; keeping them in the digest makes changes to
+ * those files visible to the workflow as well.
+ */
+export async function ignoreRulesDigest(repoRoot: string): Promise<string> {
+  const tracked = splitZ(await git(repoRoot, ["ls-files", "-z"]))
+    .filter((path) => path === ".gitignore" || path.endsWith("/.gitignore"))
+    .sort();
+  const gitDirRaw = (await git(repoRoot, ["rev-parse", "--git-dir"])).trim();
+  const gitDir = isAbsolute(gitDirRaw) ? gitDirRaw : resolve(repoRoot, gitDirRaw);
+  const entries: Array<[string, string]> = tracked.map((path) => [path, join(repoRoot, path)]);
+  entries.push([".git/info/exclude", join(gitDir, "info", "exclude")]);
+
+  try {
+    const configured = (await git(repoRoot, ["config", "--path", "--get", "core.excludesFile"])).trim();
+    if (configured !== "") {
+      entries.push([
+        "core.excludesFile",
+        isAbsolute(configured) ? configured : resolve(repoRoot, configured),
+      ]);
+    }
+  } catch {
+    // No global excludes file configured is the normal case.
+  }
+
+  const hash = createHash("sha256");
+  for (const [label, path] of entries.sort(([a], [b]) => a.localeCompare(b))) {
+    hash.update(label).update("\0").update(fileForDigest(path)).update("\0");
+  }
+  return hash.digest("hex");
+}
 
 async function headSha(repoRoot: string): Promise<string | null> {
   try {
@@ -167,19 +209,26 @@ export class RealGitService implements GitService {
     const repoRoot = (await git(cwd, ["rev-parse", "--show-toplevel"])).trim();
     const branch = (await git(repoRoot, ["rev-parse", "--abbrev-ref", "HEAD"])).trim();
     const headSha = (await git(repoRoot, ["rev-parse", "HEAD"])).trim();
+    const ignoreRules = await ignoreRulesDigest(repoRoot);
 
     // A failure here is fatal on purpose: silently falling back to HEAD would
     // hand the reviewer the user's pre-existing work as if the run had made it.
     const baseCommit = await snapshot(repoRoot, "baseline");
 
-    return { repoRoot, branch, headSha, baseCommit };
+    return { repoRoot, branch, headSha, baseCommit, ignoreRulesDigest: ignoreRules };
   }
 
   async diffSince(
     baseline: GitBaseline,
-  ): Promise<{ patch: string; files: string[]; dirtySubmodules: string[] }> {
+  ): Promise<{
+    patch: string;
+    files: string[];
+    dirtySubmodules: string[];
+    ignoreRulesChanged?: boolean;
+  }> {
     const root = baseline.repoRoot;
     const current = await snapshot(root, "current");
+    const currentIgnoreRules = await ignoreRulesDigest(root);
 
     const files = splitZ(
       await git(root, [
@@ -197,7 +246,14 @@ export class RealGitService implements GitService {
         ? await git(root, ["diff", "--find-renames", baseline.baseCommit, current, "--"])
         : "";
 
-    return { patch, files, dirtySubmodules: await dirtySubmodules(root) };
+    return {
+      patch,
+      files,
+      dirtySubmodules: await dirtySubmodules(root),
+      ...(baseline.ignoreRulesDigest !== undefined
+        ? { ignoreRulesChanged: currentIgnoreRules !== baseline.ignoreRulesDigest }
+        : {}),
+    };
   }
 }
 

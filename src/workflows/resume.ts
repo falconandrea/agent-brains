@@ -10,9 +10,10 @@ import { createHash } from "node:crypto";
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
+import { DEFAULT_MAX_REVIEW_ROUNDS } from "../config.ts";
 import type { WorkflowEvent, GitBaseline, GitService, HumanInput } from "../ports.ts";
 import type { ResumeState, UsageByRole } from "./feature.ts";
-import { descriptionMarker } from "./feature.ts";
+import { descriptionMarker, hasValidTaskList } from "./feature.ts";
 import type { ReviewIssue, ReviewResult } from "../review.ts";
 
 /**
@@ -33,7 +34,12 @@ export type Refusal =
        * synchronous window after review.completed). Nothing to resume: the
        * caller should reconstruct and persist the terminal outcome instead.
        */
-      type: "already_decided"; status: "completed" | "needs_human" }
+      type: "already_decided";
+      status: "completed" | "needs_human";
+      review?: ReviewResult;
+      files?: string[];
+      usage: UsageByRole;
+    }
   | { type: "missing_artifacts" }
   | { type: "unresolvable_baseline" };
 
@@ -42,16 +48,20 @@ export type Refusal =
  */
 export type ReplayResult = { ok: true; state: ResumeState } | { ok: false; refusal: Refusal };
 
+export interface ReplayOptions {
+  /** Needed to reconstruct a max-round escalation before workflow.completed. */
+  maxReviewRounds?: number;
+}
+
 const isDeveloperPhase = (phase: string): boolean =>
   phase === "develop" || phase.startsWith("fix #");
 
 const asReviewResult = (
   event: Extract<WorkflowEvent, { type: "review.completed" }>,
 ): ReviewResult => ({
-  // The summary is not persisted in the event; the resumed run replaces it
-  // with the next review's summary before it can reach an outcome.
+  // Older logs omitted summary; newer events preserve it for crash recovery.
   verdict: event.verdict as ReviewResult["verdict"],
-  summary: "",
+  summary: event.summary ?? "",
   issues: (event.issues ?? []).map((i) => ({
     id: i.id,
     severity: i.severity as ReviewIssue["severity"],
@@ -74,9 +84,11 @@ const asReviewResult = (
  *   not counted and is honestly re-run under the same phase name.
  * - `reviewRound` counts review.completed events only: an interrupted review
  *   round never consumed its budget, so it re-runs as the same round.
- * - `verifyRetries` counts failed verification.completed events.
+ * - `verifyRetries` counts retry-consuming failed verification.completed
+ *   events; the one re-observation of a failed verify after each resume is
+ *   free because that retry was already banked before the crash.
  */
-export function replayRunLog(events: WorkflowEvent[]): ReplayResult {
+export function replayRunLog(events: WorkflowEvent[], options: ReplayOptions = {}): ReplayResult {
   if (events.length === 0) {
     return { ok: false, refusal: { type: "empty_log" } };
   }
@@ -95,6 +107,7 @@ export function replayRunLog(events: WorkflowEvent[]): ReplayResult {
   if (!started.baseline) {
     return { ok: false, refusal: { type: "missing_baseline" } };
   }
+  const maxReviewRounds = options.maxReviewRounds ?? DEFAULT_MAX_REVIEW_ROUNDS;
 
   // Terminal outcomes are not resumable — except workflow.failed, which is
   // the very state resume exists for (provider crash, quota, Ctrl-C). A log
@@ -116,7 +129,8 @@ export function replayRunLog(events: WorkflowEvent[]): ReplayResult {
     (e) =>
       (e.type === "phase.started" &&
         (isDeveloperPhase(e.phase) || e.phase === "verify" || e.phase.startsWith("review #"))) ||
-      e.type === "workflow.resumed",
+      e.type === "workflow.resumed" ||
+      e.type === "spec.approved",
   );
   if (!gateApproved) {
     return { ok: false, refusal: { type: "gate_not_approved" } };
@@ -145,8 +159,19 @@ export function replayRunLog(events: WorkflowEvent[]): ReplayResult {
   const fixes: ReviewIssue[] = [];
   const previousBlockingIds = new Set<string>();
   let lastReview: ReviewResult | undefined;
+  let lastReviewFiles: string[] | undefined;
+  let currentReviewPatchSha: string | undefined;
+  let previousCompletedReviewPatchSha: string | undefined;
+  let lastReviewNoProgress = false;
   let interruptedPatchSha: string | undefined;
   let spec: ResumeState["spec"];
+  let activePhase: string | undefined;
+  let verifyObservation: "passed" | "failed" | undefined;
+  // A resumed run re-observes a failed verify phase once before continuing to
+  // its already-bankrolled fix. That observation is persisted as a normal
+  // verification.completed event, but must not consume another retry when the
+  // concatenated log is replayed later (including after a second crash).
+  let freeVerifyObservation = false;
   const usage: UsageByRole = {};
 
   events.forEach((event, i) => {
@@ -161,7 +186,15 @@ export function replayRunLog(events: WorkflowEvent[]): ReplayResult {
         break;
       }
       case "phase.started": {
+        activePhase = event.phase;
         lastReviewCompleted = false;
+        if (event.phase === "verify") verifyObservation = undefined;
+        if (event.phase !== "verify") freeVerifyObservation = false;
+        if (event.phase.startsWith("review #")) {
+          currentReviewPatchSha = event.patchSha;
+        } else {
+          currentReviewPatchSha = undefined;
+        }
         if (isDeveloperPhase(event.phase)) {
           pendingDeveloperPass = true;
         } else if (event.phase === "verify" || event.phase.startsWith("review #")) {
@@ -176,7 +209,16 @@ export function replayRunLog(events: WorkflowEvent[]): ReplayResult {
         break;
       }
       case "verification.completed": {
-        if (!event.passed) verifyRetries += 1;
+        if (activePhase === "verify") verifyObservation = event.passed ? "passed" : "failed";
+        if (!event.passed) {
+          if (freeVerifyObservation) {
+            freeVerifyObservation = false;
+          } else {
+            verifyRetries += 1;
+          }
+        } else {
+          freeVerifyObservation = false;
+        }
         break;
       }
       case "spec.approved": {
@@ -187,7 +229,18 @@ export function replayRunLog(events: WorkflowEvent[]): ReplayResult {
         lastReviewCompleted = true;
         interruptedPatchSha = undefined;
         lastReview = asReviewResult(event);
+        lastReviewFiles = event.files;
         const blocking = (event.issues ?? []).filter((issue) => issue.severity === "blocking");
+        const repeatedBlocking =
+          blocking.length > 0 &&
+          previousBlockingIds.size > 0 &&
+          blocking.every((issue) => previousBlockingIds.has(issue.id));
+        lastReviewNoProgress =
+          repeatedBlocking &&
+          currentReviewPatchSha !== undefined &&
+          previousCompletedReviewPatchSha !== undefined &&
+          currentReviewPatchSha === previousCompletedReviewPatchSha;
+        previousCompletedReviewPatchSha = currentReviewPatchSha;
         previousBlockingIds.clear();
         fixes.length = 0;
         for (const issue of blocking) {
@@ -205,23 +258,44 @@ export function replayRunLog(events: WorkflowEvent[]): ReplayResult {
         reviewRound += 1;
         break;
       }
+      case "workflow.resumed": {
+        // Mirror feature.ts: a new live run resets previousPatch, so the
+        // first review after a resume cannot be classified as no-progress
+        // against a review from the interrupted run.
+        previousCompletedReviewPatchSha = undefined;
+        // Only a resume from a persisted failed verify gets a free
+        // re-observation. A crash during verify before its result exists must
+        // charge the failure normally.
+        freeVerifyObservation = event.phase === "verify" && verifyObservation === "failed";
+        break;
+      }
     }
   });
 
-  // A completed review whose verdict already decided the run (approved, or
-  // needs_human — both are terminal in decideNextRound) with no outcome
-  // events after it means the process died in the synchronous window between
-  // review.completed and workflow.completed. The honest resume is none at
-  // all: reconstruct the outcome, do not re-run anything.
-  if (
-    lastReviewCompleted &&
-    lastReview !== undefined &&
-    (lastReview.verdict === "approved" || lastReview.verdict === "needs_human")
-  ) {
-    return {
-      ok: false,
-      refusal: { type: "already_decided", status: lastReview.verdict === "approved" ? "completed" : "needs_human" },
-    };
+  // Reconstruct the same terminal decision as decideNextRound. In particular,
+  // "approved" with blocking issues is NOT terminal: it must resume at the
+  // fix round (or escalate when the review budget is exhausted).
+  if (lastReviewCompleted && lastReview !== undefined) {
+    const hasBlocking = lastReview.issues.some((issue) => issue.severity === "blocking");
+    const decidedStatus =
+      lastReview.verdict === "needs_human" ||
+      (hasBlocking && (reviewRound >= maxReviewRounds || lastReviewNoProgress))
+        ? "needs_human"
+        : !hasBlocking
+          ? "completed"
+          : undefined;
+    if (decidedStatus !== undefined) {
+      return {
+        ok: false,
+        refusal: {
+          type: "already_decided",
+          status: decidedStatus,
+          review: lastReview,
+          ...(lastReviewFiles !== undefined ? { files: lastReviewFiles } : {}),
+          usage,
+        },
+      };
+    }
   }
 
   // Derive the re-entry phase from the interruption point.
@@ -232,6 +306,10 @@ export function replayRunLog(events: WorkflowEvent[]): ReplayResult {
     phase = developerRuns === 0 ? "develop" : `fix #${developerRuns}`;
   } else if (lastPhase === "verify") {
     phase = "verify";
+  } else if (lastPhase === "spec" && spec !== undefined) {
+    // The human gate was approved, but the process died before the first loop
+    // phase was emitted.
+    phase = "develop";
   } else if (lastPhase.startsWith("review #")) {
     phase = lastReviewCompleted
       ? // The review completed and its fix round is due — the developer runs.
@@ -249,6 +327,7 @@ export function replayRunLog(events: WorkflowEvent[]): ReplayResult {
     ok: true,
     state: {
       phase,
+      verifyRetryBanked: lastPhase === "verify" && verifyObservation === "failed",
       reviewRound,
       verifyRetries,
       developerRuns,
@@ -307,7 +386,8 @@ export async function validateResumePreconditions(
       existsSync(prdPath) &&
       existsSync(tasksPath) &&
       readFileSync(prdPath, "utf8").startsWith(marker) &&
-      readFileSync(tasksPath, "utf8").startsWith(marker)
+      readFileSync(tasksPath, "utf8").startsWith(marker) &&
+      hasValidTaskList(readFileSync(tasksPath, "utf8"))
     ) {
       found = true;
       break;

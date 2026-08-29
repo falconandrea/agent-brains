@@ -43,6 +43,8 @@ export interface PiBrainConfig {
   notifications: { bell: boolean; os: boolean };
 }
 
+export const DEFAULT_MAX_REVIEW_ROUNDS = 2;
+
 export const DEFAULT_CONFIG: PiBrainConfig = {
   roles: {
     planner: { thinking: "medium" },
@@ -51,7 +53,7 @@ export const DEFAULT_CONFIG: PiBrainConfig = {
     "security-reviewer": { readOnly: true, enabled: false },
   },
   skillRoots: [],
-  maxReviewRounds: 2,
+  maxReviewRounds: DEFAULT_MAX_REVIEW_ROUNDS,
   maxVerifyRetries: 2,
   verify: [],
   verbosity: "normal",

@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, renameSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, renameSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -122,6 +122,16 @@ test("a clean tree diffs against HEAD", async () => {
   const { patch, files } = await git.diffSince(baseline);
   assert.deepEqual(files, []);
   assert.equal(patch, "");
+});
+
+test("changes to .git/info/exclude are visible even though Git does not track the file", async () => {
+  const dir = initRepo();
+  const baseline = await git.baseline(dir);
+  const exclude = join(dir, ".git", "info", "exclude");
+  writeFileSync(exclude, `${readFileSync(exclude, "utf8")}\n# changed by pi-brain test\n`, "utf8");
+
+  const diff = await git.diffSince(baseline);
+  assert.equal(diff.ignoreRulesChanged, true);
 });
 
 test("a git failure surfaces instead of degrading to an empty patch", async () => {

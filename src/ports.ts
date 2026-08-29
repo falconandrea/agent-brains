@@ -51,6 +51,8 @@ export interface GitBaseline {
    * cancels out on both sides and only the run's own changes remain.
    */
   baseCommit: string;
+  /** Digest of tracked .gitignore files and Git exclude files at baseline. */
+  ignoreRulesDigest?: string;
 }
 
 export interface GitService {
@@ -60,6 +62,8 @@ export interface GitService {
     files: string[];
     /** Submodules with modified contents — their inner diff is NOT in `patch`. */
     dirtySubmodules: string[];
+    /** True when ignore rules changed since this baseline. */
+    ignoreRulesChanged?: boolean;
   }>;
 }
 
@@ -78,6 +82,8 @@ export type WorkflowEvent =
       stack?: { primary: string; frameworks: string[] };
       /** Git baseline snapshot commit (for resume mode diffSince). Optional for backward compatibility. */
       baseline?: string;
+      /** Digest of ignore rules at workflow start, for resume-safe concealment detection. */
+      ignoreRulesDigest?: string;
     }
   | {
       type: "phase.started";
@@ -109,6 +115,9 @@ export type WorkflowEvent =
       runId: string;
       verdict: string;
       round: number;
+      /** Persisted so a crash-reconstructed outcome retains the review. */
+      summary?: string;
+      files?: string[];
       /** Blocking findings of this round, for persisted post-mortems. */
       issues?: Array<{
         id: string;

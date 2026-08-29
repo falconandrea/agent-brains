@@ -69,6 +69,8 @@ export type FeatureOutcome =
 export interface ResumeState {
   /** The phase the run re-enters at ("develop", "fix #N", "verify", or "review #N"). */
   phase: string;
+  /** True only when a failed verification event was persisted after the last verify phase. */
+  verifyRetryBanked?: boolean;
   /** Reconstructed loop counters from the log. */
   reviewRound: number;
   verifyRetries: number;
@@ -133,6 +135,9 @@ export async function runFeatureWorkflow(
       description,
       stack: { primary: stack.primary, frameworks: stack.frameworks },
       baseline: baseline.baseCommit,
+      ...(baseline.ignoreRulesDigest !== undefined
+        ? { ignoreRulesDigest: baseline.ignoreRulesDigest }
+        : {}),
     });
   }
 
@@ -202,6 +207,13 @@ export async function runFeatureWorkflow(
     // its earlier directory, found via the description marker — which also
     // covers reruns whose TITLE gets worded differently.
     const { title, prd, tasks } = splitPlannerOutput(plan.text);
+    if (!hasValidTaskList(tasks)) {
+      return {
+        status: "needs_human",
+        reason: "planner returned no valid granular TASKS section; the plan cannot be approved safely",
+        usage,
+      };
+    }
     const slug = findExistingFeatureSlug(deps.cwd, description) ?? featureSlug(deps.cwd, title ?? description);
     const featureDir = join(deps.cwd, ".ai", "features", slug);
     prdPath = join(featureDir, `prd-${slug}.md`);
@@ -284,7 +296,23 @@ export async function runFeatureWorkflow(
   // A resumed run that re-enters at verify re-observes a failure the original
   // run already counted (and already banked the fix for): that re-observation
   // must not consume a second retry from the budget.
-  let resumedVerifyPending = resume?.phase === "verify";
+  let resumedVerifyPending = resume?.phase === "verify" && resume.verifyRetryBanked === true;
+
+  const specWasModified = (): boolean =>
+    specGuard !== undefined &&
+    (fileSha(prdPath) !== specGuard.prdSha || fileSha(tasksPath) !== specGuard.tasksSha);
+
+  const stopForSpecTamper = (): FeatureOutcome => {
+    events.emit({ type: "workflow.completed", runId, status: "needs_human" });
+    return {
+      status: "needs_human",
+      reason:
+        "the approved PRD/tasks were modified after the gate (content hash mismatch) — " +
+        "restore them or re-run /feature",
+      review: lastReview,
+      usage,
+    };
+  };
 
   for (;;) {
     if (deps.signal?.aborted) return { status: "cancelled", at: `round ${reviewRound}`, usage };
@@ -294,20 +322,7 @@ export async function runFeatureWorkflow(
     // Spec tamper guard: the PRD/tasks on disk must still hash to what the
     // user approved at the gate. A mutation means some agent (or human) edited
     // the spec the reviewer would judge against — never proceed on it.
-    if (
-      specGuard !== undefined &&
-      (fileSha(prdPath) !== specGuard.prdSha || fileSha(tasksPath) !== specGuard.tasksSha)
-    ) {
-      events.emit({ type: "workflow.completed", runId, status: "needs_human" });
-      return {
-        status: "needs_human",
-        reason:
-          "the approved PRD/tasks were modified after the gate (content hash mismatch) — " +
-          "restore them or re-run /feature",
-        review: lastReview,
-        usage,
-      };
-    }
+    if (specWasModified()) return stopForSpecTamper();
 
     // developer
     const phaseName = developerRuns === 0 ? "develop" : `fix #${developerRuns}`;
@@ -357,6 +372,11 @@ export async function runFeatureWorkflow(
       if (devRun.aborted || deps.signal?.aborted) return { status: "cancelled", at: "development", usage };
     }
 
+    // The developer has write access to the repository. Check again before
+    // verification/review so a same-round PRD/TASKS mutation cannot become the
+    // contract against which the reviewer judges the code.
+    if (specWasModified()) return stopForSpecTamper();
+
     // deterministic verification BEFORE spending reviewer tokens (§24)
     // On a resumed pass, skip the checks only when re-entering straight at
     // review: the interrupted review round never consumed fresh results, and
@@ -402,9 +422,17 @@ export async function runFeatureWorkflow(
       }
     }
 
+    // A human can also edit the approved documents while verification runs.
+    // Do not let that race reach the reviewer.
+    if (specWasModified()) return stopForSpecTamper();
+
     // review
     reviewRound += 1;
     const diff = await deps.git.diffSince(baseline);
+    // diffSince yields while it snapshots the tree. A human (or another
+    // process) can mutate the approved documents during that await, so check
+    // once more before building the reviewer context.
+    if (specWasModified()) return stopForSpecTamper();
     const patchSha = createHash("sha256").update(diff.patch).digest("hex");
     events.emit({ type: "phase.started", runId, phase: `review #${reviewRound}`, patchSha });
 
@@ -425,7 +453,7 @@ export async function runFeatureWorkflow(
     // run are invisible to the snapshot diff — the reviewer must know the
     // rules changed so it can judge whether the change hides work (a legit
     // .gitignore edit is common; concealment is the risk).
-    const ignoreRulesChanged = diff.files.some(
+    const ignoreRulesChanged = diff.ignoreRulesChanged === true || diff.files.some(
       (f) => f === ".gitignore" || f.endsWith("/.gitignore") || f === ".git/info/exclude",
     );
     if (ignoreRulesChanged) {
@@ -474,6 +502,10 @@ export async function runFeatureWorkflow(
     });
     recordUsage("reviewer", raw.usage);
     if (raw.aborted || deps.signal?.aborted) return { status: "cancelled", at: `review #${reviewRound}`, usage };
+    // The reviewer is read-only, but the human may edit the approved
+    // documents while it is running. Do not accept a verdict that was made
+    // against one spec and persist an outcome for another.
+    if (specWasModified()) return stopForSpecTamper();
 
     const validated = validateReviewResult(raw.structured);
     if (!validated.ok) {
@@ -493,6 +525,8 @@ export async function runFeatureWorkflow(
       runId,
       verdict: lastReview.verdict,
       round: reviewRound,
+      summary: lastReview.summary,
+      files: diff.files,
       issues: lastReview.issues.map((i) => ({
         id: i.id,
         severity: i.severity,
@@ -645,4 +679,11 @@ export function splitPlannerOutput(text: string): { title: string | null; prd: s
     return { title, prd: body, tasks: "# Tasks\n\n_(planner returned no task section)_\n" };
   }
   return { title, prd: body.slice(0, match.index).trim(), tasks: body.slice(match.index).trim() };
+}
+
+/** A plan must contain at least one stable task id before the human gate. */
+export function hasValidTaskList(tasks: string): boolean {
+  if (!/^#{1,3}\s*TASKS\b/im.test(tasks)) return false;
+  const ids = [...tasks.matchAll(/^\s*(?:[-*]|\d+[.)])\s*(T\d+)\b/gim)].map((m) => m[1]!.toUpperCase());
+  return ids.length > 0 && new Set(ids).size === ids.length;
 }

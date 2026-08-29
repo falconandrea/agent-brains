@@ -145,6 +145,49 @@ test("replayRunLog reconstructs state from log after develop completed (verify)"
   assert.equal(result.ok, true);
   assert.equal(result.state.phase, "verify");
   assert.equal(result.state.developerRuns, 1);
+  assert.equal(result.state.verifyRetryBanked, false);
+});
+
+test("replayRunLog banks only a persisted failed verify observation", () => {
+  const base: WorkflowEvent[] = [
+    { type: "workflow.started", runId: "run-verify", workflow: "feature", baseline: "abc123" },
+    { type: "phase.started", runId: "run-verify", phase: "develop" },
+    { type: "phase.started", runId: "run-verify", phase: "verify" },
+  ];
+
+  const interrupted = replayRunLog(base);
+  assert.equal(interrupted.ok, true);
+  assert.equal(interrupted.state.verifyRetryBanked, false);
+
+  const failed = replayRunLog([
+    ...base,
+    { type: "verification.completed", runId: "run-verify", passed: false },
+  ]);
+  assert.equal(failed.ok, true);
+  assert.equal(failed.state.verifyRetries, 1);
+  assert.equal(failed.state.verifyRetryBanked, true);
+});
+
+test("replayRunLog does not double-count failed verify observations across chained resumes", () => {
+  const events: WorkflowEvent[] = [
+    { type: "workflow.started", runId: "run-chain-verify", workflow: "feature", baseline: "abc123" },
+    { type: "phase.started", runId: "run-chain-verify", phase: "develop" },
+    { type: "phase.started", runId: "run-chain-verify", phase: "verify" },
+    { type: "verification.completed", runId: "run-chain-verify", passed: false },
+    { type: "workflow.failed", runId: "run-chain-verify", error: "crash 1" },
+    { type: "workflow.resumed", runId: "run-chain-verify", phase: "verify" },
+    { type: "phase.started", runId: "run-chain-verify", phase: "verify" },
+    { type: "verification.completed", runId: "run-chain-verify", passed: false },
+    { type: "workflow.failed", runId: "run-chain-verify", error: "crash 2" },
+    { type: "workflow.resumed", runId: "run-chain-verify", phase: "verify" },
+    { type: "phase.started", runId: "run-chain-verify", phase: "verify" },
+    { type: "verification.completed", runId: "run-chain-verify", passed: false },
+  ];
+
+  const result = replayRunLog(events);
+  assert.equal(result.ok, true);
+  assert.equal(result.state.verifyRetries, 1, "both resumed observations are the original retry");
+  assert.equal(result.state.verifyRetryBanked, true);
 });
 
 test("replayRunLog reconstructs state from log interrupted mid-review", () => {
@@ -332,7 +375,7 @@ test("validateResumePreconditions passes when artifacts exist with correct marke
   mkdirSync(featureDir, { recursive: true });
   const marker = `<!-- pi-brain:feature ${JSON.stringify(description)} -->`;
   writeFileSync(join(featureDir, "prd-test-feature.md"), `${marker}\n# PRD`, "utf8");
-  writeFileSync(join(featureDir, "tasks-test-feature.md"), `${marker}\n# Tasks`, "utf8");
+  writeFileSync(join(featureDir, "tasks-test-feature.md"), `${marker}\n## TASKS\n- T1 do it`, "utf8");
 
   const result = await validateResumePreconditions({
     cwd: root,
@@ -354,7 +397,7 @@ test("validateResumePreconditions returns unresolvable_baseline when diffSince f
   mkdirSync(featureDir, { recursive: true });
   const marker = `<!-- pi-brain:feature ${JSON.stringify(description)} -->`;
   writeFileSync(join(featureDir, "prd-test-feature.md"), `${marker}\n# PRD`, "utf8");
-  writeFileSync(join(featureDir, "tasks-test-feature.md"), `${marker}\n# Tasks`, "utf8");
+  writeFileSync(join(featureDir, "tasks-test-feature.md"), `${marker}\n## TASKS\n- T1 do it`, "utf8");
 
   // Create a git that throws on diffSince
   const git = new FakeGit();
@@ -453,11 +496,24 @@ test("an approved review without outcome is already_decided, not a new fix round
     { type: "phase.started", runId: "run-1", phase: "verify" },
     { type: "verification.completed", runId: "run-1", passed: true },
     { type: "phase.started", runId: "run-1", phase: "review #1" },
-    { type: "review.completed", runId: "run-1", verdict: "approved", round: 1, issues: [] },
+    { type: "agent.completed", runId: "run-1", role: "reviewer", usage: { input: 11, output: 7 } },
+    {
+      type: "review.completed",
+      runId: "run-1",
+      verdict: "approved",
+      round: 1,
+      summary: "all good",
+      files: ["src/file.ts"],
+      issues: [],
+    },
   ];
   const result = replayRunLog(events);
   assert.equal(result.ok, false);
-  assert.deepEqual(result.refusal, { type: "already_decided", status: "completed" });
+  assert.equal(result.refusal.type, "already_decided");
+  assert.equal(result.refusal.status, "completed");
+  assert.deepEqual(result.refusal.review, { verdict: "approved", summary: "all good", issues: [] });
+  assert.deepEqual(result.refusal.files, ["src/file.ts"]);
+  assert.deepEqual(result.refusal.usage, { reviewer: { input: 11, output: 7 } });
 });
 
 test("a needs_human review verdict without outcome is already_decided too", () => {
@@ -470,7 +526,105 @@ test("a needs_human review verdict without outcome is already_decided too", () =
   ];
   const result = replayRunLog(events);
   assert.equal(result.ok, false);
-  assert.deepEqual(result.refusal, { type: "already_decided", status: "needs_human" });
+  assert.equal(result.refusal.type, "already_decided");
+  assert.equal(result.refusal.status, "needs_human");
+});
+
+test("an approved review with blocking issues resumes at its fix round", () => {
+  const events: WorkflowEvent[] = [
+    { type: "workflow.started", runId: "run-blocking", workflow: "feature", baseline: "abc123" },
+    { type: "phase.started", runId: "run-blocking", phase: "develop" },
+    { type: "phase.started", runId: "run-blocking", phase: "verify" },
+    { type: "verification.completed", runId: "run-blocking", passed: true },
+    { type: "phase.started", runId: "run-blocking", phase: "review #1" },
+    {
+      type: "review.completed",
+      runId: "run-blocking",
+      verdict: "approved",
+      round: 1,
+      issues: [{ id: "R1", severity: "blocking", category: "bug", problem: "still broken" }],
+    },
+  ];
+
+  const next = replayRunLog(events);
+  assert.equal(next.ok, true);
+  assert.equal(next.state.phase, "fix #1");
+
+  const exhausted = replayRunLog(events, { maxReviewRounds: 1 });
+  assert.equal(exhausted.ok, false);
+  assert.equal(exhausted.refusal.type, "already_decided");
+  assert.equal(exhausted.refusal.status, "needs_human");
+});
+
+test("a repeated blocking review with an unchanged patch reconstructs no-progress escalation", () => {
+  const events: WorkflowEvent[] = [
+    { type: "workflow.started", runId: "run-no-progress", workflow: "feature", baseline: "abc123" },
+    { type: "phase.started", runId: "run-no-progress", phase: "develop" },
+    { type: "phase.started", runId: "run-no-progress", phase: "verify" },
+    { type: "verification.completed", runId: "run-no-progress", passed: true },
+    { type: "phase.started", runId: "run-no-progress", phase: "review #1", patchSha: "same-patch" },
+    {
+      type: "review.completed",
+      runId: "run-no-progress",
+      verdict: "changes_requested",
+      round: 1,
+      issues: [{ id: "R1", severity: "blocking", category: "bug", problem: "still broken" }],
+    },
+    { type: "phase.started", runId: "run-no-progress", phase: "fix #1" },
+    { type: "agent.completed", runId: "run-no-progress", role: "developer" },
+    { type: "phase.started", runId: "run-no-progress", phase: "verify" },
+    { type: "verification.completed", runId: "run-no-progress", passed: true },
+    { type: "phase.started", runId: "run-no-progress", phase: "review #2", patchSha: "same-patch" },
+    {
+      type: "review.completed",
+      runId: "run-no-progress",
+      verdict: "changes_requested",
+      round: 2,
+      issues: [{ id: "R1", severity: "blocking", category: "bug", problem: "still broken" }],
+    },
+  ];
+
+  const result = replayRunLog(events, { maxReviewRounds: 3 });
+  assert.equal(result.ok, false);
+  assert.equal(result.refusal.type, "already_decided");
+  assert.equal(result.refusal.status, "needs_human");
+});
+
+test("the first repeated blocking review after a resume does not reconstruct no-progress", () => {
+  const events: WorkflowEvent[] = [
+    { type: "workflow.started", runId: "run-resume-no-progress", workflow: "feature", baseline: "abc123" },
+    { type: "phase.started", runId: "run-resume-no-progress", phase: "develop" },
+    { type: "phase.started", runId: "run-resume-no-progress", phase: "verify" },
+    { type: "verification.completed", runId: "run-resume-no-progress", passed: true },
+    { type: "phase.started", runId: "run-resume-no-progress", phase: "review #1", patchSha: "same-patch" },
+    {
+      type: "review.completed",
+      runId: "run-resume-no-progress",
+      verdict: "changes_requested",
+      round: 1,
+      issues: [{ id: "R1", severity: "blocking", category: "bug", problem: "still broken" }],
+    },
+    { type: "phase.started", runId: "run-resume-no-progress", phase: "fix #1" },
+    { type: "workflow.failed", runId: "run-resume-no-progress", error: "crash during fix" },
+    { type: "workflow.resumed", runId: "run-resume-no-progress", phase: "fix #1" },
+    { type: "phase.started", runId: "run-resume-no-progress", phase: "fix #1" },
+    { type: "agent.completed", runId: "run-resume-no-progress", role: "developer" },
+    { type: "phase.started", runId: "run-resume-no-progress", phase: "verify" },
+    { type: "verification.completed", runId: "run-resume-no-progress", passed: true },
+    { type: "phase.started", runId: "run-resume-no-progress", phase: "review #2", patchSha: "same-patch" },
+    {
+      type: "review.completed",
+      runId: "run-resume-no-progress",
+      verdict: "changes_requested",
+      round: 2,
+      issues: [{ id: "R1", severity: "blocking", category: "bug", problem: "still broken" }],
+    },
+  ];
+
+  const result = replayRunLog(events, { maxReviewRounds: 3 });
+  assert.equal(result.ok, true);
+  assert.equal(result.state.phase, "fix #2");
+  assert.equal(result.state.reviewRound, 2);
 });
 
 test("replay extracts the spec.approved hashes for the tamper guard", () => {
