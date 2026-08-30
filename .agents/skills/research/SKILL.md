@@ -5,8 +5,34 @@ description: Investigate a question against high-trust primary sources and captu
 
 Spin up a **background agent** to do the research, so you keep working while it reads.
 
+## Mode selection
+
+Select the mode from the user's requested outcome:
+
+- `research` — the user wants facts, documentation, explanation or a neutral
+  comparison. Do not invent a recommendation or winner.
+- `assessment` — the user asks whether this repository should adopt, trial,
+  select or reject a candidate, or asks which option to choose here.
+
+Honor an explicit mode from the user. If the request is materially ambiguous,
+ask one focused clarifying question; otherwise default to `research`. State the
+selected mode near the report title as `Mode: research` or `Mode: assessment`.
+
 Its job:
 
 1. Investigate the question against **primary sources** — official docs, source code, specs, first-party APIs — not a secondary write-up of them. Follow every claim back to the source that owns it.
 2. Write the findings to a single Markdown file, citing each claim's source.
 3. Save it where the repo already keeps such notes; match the existing convention, and if there is none, put it somewhere sensible and say where.
+
+For `assessment`, also:
+
+4. Inspect the repository's current implementation and realistic alternatives.
+5. Separate upstream facts, local evidence and inferences.
+6. Evaluate new value, overlap, cost, risk, compatibility and reversibility.
+7. End with exactly one verdict: `adopt`, `trial`, `selectively import` or
+   `reject`. Tie the verdict to the repository, not to popularity alone, and
+   include revisit triggers when the decision is deferred or rejected.
+
+Neutral `research` does not require a verdict. Both modes remain report-only:
+do not install dependencies, modify source code or commit unless the user
+separately requests that work.

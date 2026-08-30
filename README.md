@@ -7,7 +7,7 @@ Centralized repository for AI agent configurations, skills, and project template
 > `/feature` workflow, reusing the same `.agents/skills/` and `profiles/*.list`.
 > See [docs/pi-brain/README.md](docs/pi-brain/README.md). `main` is unaffected.
 
-## Structure
+## Repository structure
 
 ```
 ├── .opencode/              # → Symlinked to projects (OpenCode)

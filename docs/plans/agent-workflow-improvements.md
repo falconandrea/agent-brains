@@ -104,7 +104,7 @@ W0-lite Minimal baseline (E1, E3, E7)
 
 ## W0-lite — Minimal baseline
 
-**Status:** pending
+**Status:** completed — 2026-08-30
 
 **Goal:** measure the current workflow on three representative extremes
 before any modification.
@@ -165,7 +165,7 @@ E2/E4/E5/E6.
 
 ## W1 — Structured knowledge loop (time-boxed trial)
 
-**Status:** deferred until W4 is evaluated
+**Status:** next — W4 promoted 2026-08-30
 
 **Goal:** keep `lessons.md` cheap, adding retrievable solution documents for
 non-trivial problems.
@@ -357,7 +357,7 @@ ones.
 
 ## W4 — Assessment mode for research
 
-**Status:** next — first experimental phase after W0-lite
+**Status:** completed — promoted 2026-08-30
 
 **Goal:** turn research on technologies or workflows into project-grounded
 verdicts without introducing a new overlapping skill.
@@ -499,6 +499,7 @@ Allowed status values: `pending`, `in_progress`, `completed`, `blocked`,
 | 2026-08-08 | D8 | Neutrality = rejection, as a global kill criterion | A neutral variant is not kept |
 | 2026-08-08 | D9 | W2 annotation-first, W3 only on observed problems | No modification without a demonstrated problem |
 | 2026-08-08 | D10 | Codex+OpenCode pilot only on the promotion candidate | Do not double the test surface from the beginning |
+| 2026-08-30 | D11 | Promote W4 assessment mode in the existing `research` skill | The assessment and neutral runs preserved their distinct contracts without adding a second skill, dependency or source-code change |
 
 ## Questions to decide during the work
 
@@ -518,9 +519,14 @@ phase with evidence.
 | --- | --- | --- | --- | --- |
 | 2026-08-08 | Initial planning | Compared local workflow and Compound Engineering; defined the W0–W5 plan | Comparison done in session and this document | Start W0.1: define E1–E7 prompts and fixtures |
 | 2026-08-08 | Plan review and reduction | Identified meta-work risk; W0 → W0-lite (E1/E3/E7); reordered to W0-lite → W4 → W1 trial; W2/W3 deferred; added global kill criteria | This document (D6–D10) | Start W0.1: repeatable prompts for E1, E3, E7 |
+| 2026-08-30 | W0.1 | Defined and registered repeatable E1, E3 and E7 prompts, expected results, failure modes and a raw-output run sheet | [Baseline protocol](../evals/agent-workflows/README.md) | Run W0.2 in fresh sessions on a frozen fixture |
+| 2026-08-30 | W0.2–W0.3 | Ran E1, E3 and E7 in fresh Pi sessions and saved the observed outcomes, including E3's planner-format failure | [E1](../evals/agent-workflows/results/E1-2026-08-30.md), [E3](../evals/agent-workflows/results/E3-2026-08-30.md), [E7](../evals/agent-workflows/results/E7-2026-08-30.md) | Start W4.1: define routing between neutral research and assessment |
+| 2026-08-30 | W4.1–W4.3 | Defined the research/assessment routing, six-dimension rubric and report contract; extended the existing `research` skill without creating a second skill | [W4 routing contract](../evals/agent-workflows/W4-assessment-routing.md), [research skill](../../.agents/skills/research/SKILL.md) | Run W4.4: repeat E7 in a fresh session and compare it with the baseline |
+| 2026-08-30 | W4.4 | Repeated E7 with `Mode: assessment` and ran a neutral comparison with `Mode: research`; both preserved the report-only boundary | [W4 result](../evals/agent-workflows/results/W4-2026-08-30.md), [assessment report](../evals/agent-workflows/results/E7-2026-08-30.md) | User gate: promote or abandon the W4 research extension |
+| 2026-08-30 | W4 promotion gate | Promoted the updated `research` skill as the stable version after the assessment and neutral-mode evidence passed review | [W4 result](../evals/agent-workflows/results/W4-2026-08-30.md), [routing contract](../evals/agent-workflows/W4-assessment-routing.md) | Start W1.1: design the solution-capture template and retrieval path |
 
 ## Next step
 
-Start **W0.1** without modifying skills: define repeatable prompts for E1,
-E3, E7, with expected result and failure modes. For E7, a real new external
-dependency must be chosen at test time.
+W4 is promoted. Start W1.1: design the solution-capture template and retrieval
+path, keeping the trial within the existing budget of two sessions and two real
+problems.
