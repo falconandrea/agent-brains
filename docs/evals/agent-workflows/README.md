@@ -1,8 +1,10 @@
 # Agent workflow baseline
 
-This directory contains the W0-lite evaluation protocol and the raw results
-produced by it. The protocol measures the current workflow before any skill or
-workflow change is made.
+This directory contains the W0-lite evaluation protocol and its run sheets and
+result artifacts. A run is accepted as reproducible only when its complete raw
+session export and configuration snapshot are persisted beside the sheet.
+The protocol measures the current workflow before any skill or workflow change
+is made.
 
 ## Scope
 
@@ -116,6 +118,9 @@ Neutral fact collection alone is insufficient for this assessment scenario.
 
 Create one copy of this template per scenario. Keep the raw transcript or
 session export beside the sheet; do not record only an agent-generated summary.
+Keep a configuration snapshot with it as well, including client/runtime,
+provider/model and relevant settings. A transcript supplied interactively or
+left in a temporary directory does not satisfy the reproducibility requirement.
 
 ```markdown
 # <ID> — <date>
@@ -156,11 +161,14 @@ session export beside the sheet; do not record only an agent-generated summary.
 
 1. Freeze and record the fixture commit and runtime configuration.
 2. Run E1, E3 and E7 in separate fresh sessions, using the exact inputs above.
-3. Save the raw output and complete one run sheet per scenario.
+3. Save the complete raw output, configuration snapshot and one run sheet per
+   scenario in the repository.
 4. Have a human review at least one result against the expected behavior. If a
    later candidate is compared, use a blind A/B comparison with the labels
    hidden until after the preference is recorded.
 5. Do not begin W4 until all three run sheets and the human spot-check are
    saved.
 
-W0.2 and W0.3 remain pending; this file completes only W0.1.
+W0.2 and W0.3 were completed on the frozen fixture; the linked run sheets,
+raw exports and configuration snapshots are the acceptance evidence. This
+protocol remains the source of truth for any later rerun.

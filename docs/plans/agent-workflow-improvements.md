@@ -2,9 +2,9 @@
 
 **Created:** 2026-08-08
 
-**Updated:** 2026-08-08 (review and reduction: W0-lite, global kill criteria, W2/W3 deferred)
+**Updated:** 2026-08-30 (W4 promoted; W1.1 approval pending)
 
-**Status:** planned — no implementation started
+**Status:** in progress — W1.1 design approval pending; W1 trial not started
 
 **Working mode:** interactive, evidence-driven, time-boxed phases with
 continuation gates
@@ -104,7 +104,7 @@ W0-lite Minimal baseline (E1, E3, E7)
 
 ## W0-lite — Minimal baseline
 
-**Status:** completed — 2026-08-30
+**Status:** completed — W0.2/W0.3 evidence persisted and spot-checked
 
 **Goal:** measure the current workflow on three representative extremes
 before any modification.
@@ -165,7 +165,7 @@ E2/E4/E5/E6.
 
 ## W1 — Structured knowledge loop (time-boxed trial)
 
-**Status:** next — W4 promoted 2026-08-30
+**Status:** pending — W1.1 design approval gate
 
 **Goal:** keep `lessons.md` cheap, adding retrievable solution documents for
 non-trivial problems.
@@ -500,6 +500,9 @@ Allowed status values: `pending`, `in_progress`, `completed`, `blocked`,
 | 2026-08-08 | D9 | W2 annotation-first, W3 only on observed problems | No modification without a demonstrated problem |
 | 2026-08-08 | D10 | Codex+OpenCode pilot only on the promotion candidate | Do not double the test surface from the beginning |
 | 2026-08-30 | D11 | Promote W4 assessment mode in the existing `research` skill | The assessment and neutral runs preserved their distinct contracts without adding a second skill, dependency or source-code change |
+| 2026-08-30 | D12 | W1.1 pilot contract uses the existing `lessons.md` format, a positive-verification precondition plus the literal three-of-five eligibility rule, and a provisional 180-day review signal | Preserves the documented index contract; keeps verification and capture eligibility distinct; makes staleness testable without automatic invalidation; W1.6 evidence can revise the threshold before promotion |
+| 2026-08-30 | D13 | W0/W4 gates remain open until raw session exports, run configuration and comparison evidence are persisted in the repository | Temporary reports and incomplete metadata are not reproducible evidence; statuses must follow the protocol rather than an agent summary |
+| 2026-08-30 | D14 | Promote W4 assessment routing in the existing `research` skill | The persisted pino rerun exposes `assessment` for decisions and `research` for neutral comparisons, preserves the shared evidence contract, adds no dependency or source change, and passes the explicit user promotion gate |
 
 ## Questions to decide during the work
 
@@ -507,7 +510,6 @@ These are not initial blockers; they are to be resolved in the indicated
 phase with evidence.
 
 - **W0-lite:** final placement of the eval fixtures.
-- **W1:** minimal solution frontmatter and staleness criterion.
 - **W2:** precise threshold for suppressing `low confidence` findings (only
   if the phase activates).
 - **W3:** Lightweight/Standard/Deep heuristics and maximum grounding budget
@@ -520,13 +522,16 @@ phase with evidence.
 | 2026-08-08 | Initial planning | Compared local workflow and Compound Engineering; defined the W0–W5 plan | Comparison done in session and this document | Start W0.1: define E1–E7 prompts and fixtures |
 | 2026-08-08 | Plan review and reduction | Identified meta-work risk; W0 → W0-lite (E1/E3/E7); reordered to W0-lite → W4 → W1 trial; W2/W3 deferred; added global kill criteria | This document (D6–D10) | Start W0.1: repeatable prompts for E1, E3, E7 |
 | 2026-08-30 | W0.1 | Defined and registered repeatable E1, E3 and E7 prompts, expected results, failure modes and a raw-output run sheet | [Baseline protocol](../evals/agent-workflows/README.md) | Run W0.2 in fresh sessions on a frozen fixture |
-| 2026-08-30 | W0.2–W0.3 | Ran E1, E3 and E7 in fresh Pi sessions and saved the observed outcomes, including E3's planner-format failure | [E1](../evals/agent-workflows/results/E1-2026-08-30.md), [E3](../evals/agent-workflows/results/E3-2026-08-30.md), [E7](../evals/agent-workflows/results/E7-2026-08-30.md) | Start W4.1: define routing between neutral research and assessment |
+| 2026-08-30 | W0.2–W0.3 | Ran E1, E3 and E7, but the required raw exports and complete runtime metadata were not persisted; W0 acceptance is therefore not established | [E1](../evals/agent-workflows/results/E1-2026-08-30.md), [E3](../evals/agent-workflows/results/E3-2026-08-30.md), [E7](../evals/agent-workflows/results/E7-2026-08-30.md) | Re-run W0.2–W0.3 with repository-persisted exports and configuration |
+| 2026-08-30 | W0.2–W0.3 rerun | Re-ran E1, E3 and E7 on frozen commit `e2670b7`; persisted raw exports, configuration snapshots and run sheets; human spot-check confirmed E1's one-line diff, E3's safe `needs_human` stop and E7's report-only `reject` verdict | [E1](../evals/agent-workflows/results/E1-2026-08-30.md), [E3](../evals/agent-workflows/results/E3-2026-08-30.md), [E7 pino](../evals/agent-workflows/results/E7-pino-2026-08-30.md), [raw exports](../evals/agent-workflows/results/raw/), [config snapshots](../evals/agent-workflows/results/config/) | Start W4.4 rerun with the same pino candidate and persisted comparison evidence |
 | 2026-08-30 | W4.1–W4.3 | Defined the research/assessment routing, six-dimension rubric and report contract; extended the existing `research` skill without creating a second skill | [W4 routing contract](../evals/agent-workflows/W4-assessment-routing.md), [research skill](../../.agents/skills/research/SKILL.md) | Run W4.4: repeat E7 in a fresh session and compare it with the baseline |
-| 2026-08-30 | W4.4 | Repeated E7 with `Mode: assessment` and ran a neutral comparison with `Mode: research`; both preserved the report-only boundary | [W4 result](../evals/agent-workflows/results/W4-2026-08-30.md), [assessment report](../evals/agent-workflows/results/E7-2026-08-30.md) | User gate: promote or abandon the W4 research extension |
-| 2026-08-30 | W4 promotion gate | Promoted the updated `research` skill as the stable version after the assessment and neutral-mode evidence passed review | [W4 result](../evals/agent-workflows/results/W4-2026-08-30.md), [routing contract](../evals/agent-workflows/W4-assessment-routing.md) | Start W1.1: design the solution-capture template and retrieval path |
+| 2026-08-30 | W4.4 | Repeated E7 with `Mode: assessment` and ran a neutral comparison with `Mode: research`; report artifacts were recovered, but raw sessions, complete counters and a valid pre/post comparison were not persisted | [W4 result](../evals/agent-workflows/results/W4-2026-08-30.md), [W4 artifacts](../evals/agent-workflows/results/artifacts/) | Re-run W0 first, then repeat W4.4 with repository-persisted evidence |
+| 2026-08-30 | W4.4 rerun | Repeated the pino assessment and neutral comparison in fresh fixtures with the updated skill; persisted both raw sessions, configuration snapshots and report artifacts; assessment exposed `Mode: assessment` and neutral research exposed `Mode: research` without a verdict | [W4 result](../evals/agent-workflows/results/W4-2026-08-30.md), [assessment](../evals/agent-workflows/results/artifacts/W4-pino-assessment.md), [neutral](../evals/agent-workflows/results/artifacts/W4-pino-neutral.md) | Make the explicit W4 promotion or abandonment decision |
+| 2026-08-30 | W4 promotion gate audit | Reopened the W4 gate; the existing promotion claim is not supported until the baseline and W4 comparison meet the protocol | [D13](#decision-log), [W4 result](../evals/agent-workflows/results/W4-2026-08-30.md) | Keep W1 blocked until W4 is explicitly promoted or abandoned |
+| 2026-08-30 | W4 promotion gate | Promoted the updated `research` skill after the persisted pino assessment/neutral reruns passed the routing and report-only checks | [D14](#decision-log), [W4 result](../evals/agent-workflows/results/W4-2026-08-30.md) | Start the W1.1 design approval gate |
+| 2026-08-30 | W1.1 | Defined the solution document shape, three-of-five eligibility rule with separate positive-verification precondition, single approval step, provisional 180-day review signal, progressive retrieval contract, and two-session/two-problem pilot checks | [W1 design](../evals/agent-workflows/W1-solution-capture-design.md), D12 | After W0/W4 evidence is accepted, return to the W1.1 design approval gate |
 
 ## Next step
 
-W4 is promoted. Start W1.1: design the solution-capture template and retrieval
-path, keeping the trial within the existing budget of two sessions and two real
-problems.
+W4 is promoted. Start the W1.1 design approval gate, keeping the trial within
+the existing budget of two sessions and two real problems.

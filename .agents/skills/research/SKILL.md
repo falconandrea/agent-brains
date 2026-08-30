@@ -23,13 +23,15 @@ Its job:
 1. Investigate the question against **primary sources** — official docs, source code, specs, first-party APIs — not a secondary write-up of them. Follow every claim back to the source that owns it.
 2. Write the findings to a single Markdown file, citing each claim's source.
 3. Save it where the repo already keeps such notes; match the existing convention, and if there is none, put it somewhere sensible and say where.
+4. Inspect the repository's current implementation and only the local areas
+   relevant to the question.
+5. Separate upstream facts, local evidence and inferences in the report.
 
 For `assessment`, also:
 
-4. Inspect the repository's current implementation and realistic alternatives.
-5. Separate upstream facts, local evidence and inferences.
-6. Evaluate new value, overlap, cost, risk, compatibility and reversibility.
-7. End with exactly one verdict: `adopt`, `trial`, `selectively import` or
+6. Compare the candidate with realistic alternatives.
+7. Evaluate new value, overlap, cost, risk, compatibility and reversibility.
+8. End with exactly one verdict: `adopt`, `trial`, `selectively import` or
    `reject`. Tie the verdict to the repository, not to popularity alone, and
    include revisit triggers when the decision is deferred or rejected.
 
