@@ -3,6 +3,14 @@
 Nothing here is decided. Each idea earns code only after a spike or trial
 proves it. These notes exist so a future session does not re-derive them.
 
+## Active follow-up roadmap
+
+Pi plugin trials, context-template cleanup and related skill improvements are
+tracked in the [plugin adoption roadmap](../plans/pi-plugin-adoption-roadmap.md).
+Use that document—not this idea archive—as the source of truth for execution
+status. The supporting evidence remains in the
+[plugin and context assessment](../research/pi-plugins-and-context-structure-assessment.md).
+
 ## Housekeeping: translate Italian artifacts to English
 
 **Status:** DONE 2026-08-23 (commit `5eb67ee`) — the workflow improvement plan
