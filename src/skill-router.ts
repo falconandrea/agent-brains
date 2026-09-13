@@ -35,9 +35,6 @@ export type SkillCategory =
 
 const SKILL_CATEGORIES: Record<string, SkillCategory> = {
   // planning
-  feature: "planning",
-  grilling: "planning",
-  "grill-with-docs": "planning",
   "to-spec": "planning",
   "product-thinking": "planning",
   prototype: "planning",
@@ -79,6 +76,13 @@ const SKILL_CATEGORIES: Record<string, SkillCategory> = {
   "i-have-adhd": "operational",
   "find-skills": "operational",
   setup: "operational", // greenfield bootstrap drives a whole session, not a pipeline child
+  // Interactive workflow skills (roadmap F0.1): feature/grilling/grill-with-docs
+  // drive a whole conversational session when explicitly invoked — like the
+  // other operational skills, they must never be injected into a one-shot
+  // pipeline child.
+  feature: "operational",
+  grilling: "operational",
+  "grill-with-docs": "operational",
 };
 
 /**

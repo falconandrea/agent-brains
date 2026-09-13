@@ -20,6 +20,13 @@ import { Type } from "typebox";
 
 import type { AgentRunner, AgentRunRequest, AgentRunResult, ResultToolSpec } from "../agent.ts";
 import { toTypeBox, type JsonSchemaNode } from "./json-schema.ts";
+import {
+  ASK_USER_BATCH_PARAMETERS,
+  BATCH_ANSWER_HINT,
+  askToolForRole,
+  parseBatchQuestions,
+  renderBatchQuestions,
+} from "./ask-user-batch.ts";
 
 export interface PiAgentRunnerDeps {
   /** Repo root. Also drives session naming and tool path resolution. */
@@ -73,7 +80,13 @@ export class PiAgentRunner implements AgentRunner {
         }),
       );
     }
-    if (this.#deps.askUser) customTools.push(this.#buildAskUserTool());
+    if (this.#deps.askUser) {
+      customTools.push(
+        askToolForRole(request.role) === "ask_user_batch"
+          ? this.#buildAskUserBatchTool()
+          : this.#buildAskUserTool(),
+      );
+    }
 
     // Model resolution can hit the network (auth probes) and the session build
     // can be long. An abort during either arrives as a rejection, and must be
@@ -248,6 +261,51 @@ export class PiAgentRunner implements AgentRunner {
           };
         }
         const answer = await askUser?.(params);
+        return { content: [{ type: "text", text: answer ?? NO_ANSWER }], details: {} };
+      },
+    });
+  }
+
+  /**
+   * The planner's ONLY ask tool (roadmap F0.1). The structured batch is
+   * rendered as one numbered message and routed through the same
+   * child-question callback as `ask_user` — with no `options`, so
+   * `PiHumanInput.askFromChild` always takes the freeform `input()` path,
+   * including for a one-question batch.
+   */
+  #buildAskUserBatchTool(): ToolDefinition {
+    const askUser = this.#deps.askUser;
+    return defineTool({
+      name: "ask_user_batch",
+      label: "Ask user (batch)",
+      description:
+        "Ask the human about every open product/design decision in ONE call: " +
+        "1-6 decisions, each with a short question, 2-3 concrete options and " +
+        "your explicit recommendation. The user answers the whole numbered " +
+        "list in a single free-form message. Call this once during planning; " +
+        "a second call is allowed only when the first answers open a " +
+        "genuinely blocking new ambiguity. Never use it for facts " +
+        "discoverable in the repository — look those up.",
+      parameters: ASK_USER_BATCH_PARAMETERS,
+      execute: async (_id, params) => {
+        const parsed = parseBatchQuestions(params);
+        if (!parsed.ok) {
+          return {
+            content: [
+              {
+                type: "text",
+                text:
+                  `ERROR: ask_user_batch payload rejected: ${parsed.error}. ` +
+                  "Call again with 1-6 well-formed decisions.",
+              },
+            ],
+            details: {},
+          };
+        }
+        const answer = await askUser?.({
+          question: renderBatchQuestions(parsed.questions),
+          reason: BATCH_ANSWER_HINT,
+        });
         return { content: [{ type: "text", text: answer ?? NO_ANSWER }], details: {} };
       },
     });

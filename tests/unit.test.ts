@@ -108,8 +108,10 @@ const AVAILABLE_SKILLS = (() => {
     "verification-before-completion",
     "feature",
     "grilling",
+    "grill-with-docs",
     "product-thinking",
     "to-spec",
+    "prototype",
     "research",
     "simplify",
     "tdd",
@@ -149,6 +151,31 @@ test("no operational skill reaches any pipeline role", () => {
     for (const banned of ["handoff", "start", "setup", "to-tickets", "lessons-gardener", "long-horizon-brief", "improve-codebase-architecture"]) {
       assert.ok(!sel.skills.includes(banned), `${banned} must not reach ${role}`);
     }
+  }
+});
+
+test("interactive workflow skills no longer reach any pipeline role", () => {
+  // Synthetic profile so every skill under test is present regardless of the
+  // real manifests: the routing TABLE is the thing under test.
+  const dir = fixture();
+  const names = ["feature", "grilling", "grill-with-docs", "product-thinking", "to-spec", "prototype"];
+  writeFileSync(join(dir, "routing.list"), names.join("\n") + "\n");
+  const available = new Set(names);
+  for (const role of ["planner", "developer", "reviewer", "tester", "security-reviewer"] as const) {
+    const sel = selectSkills(dir, "routing", role, available);
+    for (const banned of ["feature", "grilling", "grill-with-docs"]) {
+      assert.ok(!sel.skills.includes(banned), `${banned} must not reach ${role}`);
+    }
+  }
+});
+
+test("the planner keeps the non-interactive planning skills", () => {
+  const dir = fixture();
+  const names = ["feature", "grilling", "grill-with-docs", "product-thinking", "to-spec", "prototype"];
+  writeFileSync(join(dir, "routing.list"), names.join("\n") + "\n");
+  const plan = selectSkills(dir, "routing", "planner", new Set(names));
+  for (const kept of ["product-thinking", "to-spec", "prototype"]) {
+    assert.ok(plan.skills.includes(kept), `${kept} must stay available to the planner`);
   }
 });
 

@@ -123,9 +123,13 @@ code it was never shown. Nothing is committed.
   message (answerable as "1: A, 2: B"), and every child-question select gets a
   trailing "Other — type your answer" row that opens a chained input — the
   user must never have to type a workflow answer into the main chat, where it
-  wakes the main agent instead of reaching the child. With the lock in place,
-  role prompts mandate ONE decision per ask_user call (2-3 options each),
-  asked sequentially — the batched Q1..Qn single call is explicitly banned.
+  wakes the main agent instead of reaching the child. Question model
+  (roadmap F0.1): the `/feature` planner asks ALL its decisions in ONE
+  `ask_user_batch` call — 1-6 structured decisions rendered as a single
+  freeform input, so a batch never reaches the single-pick `select` dead end
+  (including a one-question batch); every non-planner role keeps ONE decision
+  per `ask_user` call, asked sequentially, and explicit grilling sessions
+  stay one-decision-at-a-time by design.
   Known residual risk: if the TUI ever loses a dialog anyway, the lock queues
   all later dialogs behind the dead promise — `/flow stop` is the escape
   hatch. `mode: "deferred"` remains the fallback.
