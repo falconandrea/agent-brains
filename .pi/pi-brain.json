@@ -1,4 +1,22 @@
 {
   "stack": "nodejs",
+  "roles": {
+    "planner": {
+      "provider": "openai-codex",
+      "model": "gpt-5.6-sol",
+      "thinking": "high"
+    },
+    "developer": {
+      "provider": "zai",
+      "model": "glm-5.3",
+      "thinking": "high"
+    },
+    "reviewer": {
+      "provider": "openai-codex",
+      "model": "gpt-5.6-sol",
+      "thinking": "high",
+      "readOnly": true
+    }
+  },
   "verify": ["npm run typecheck", "npm test"]
 }

@@ -62,7 +62,9 @@ restart-vs-resume first.
 ## Configure roles → models
 
 `~/.pi/agent/pi-brain/config.json` (global) or `.pi/pi-brain.json` (per project,
-wins). Only what you want to change:
+wins). Configuration layers are merged in this order: built-in defaults, global
+config, project config, then workflow overrides. The project file does not need
+to repeat the global settings; specify only what you want to change:
 
 ```json
 {
@@ -74,6 +76,18 @@ wins). Only what you want to change:
   "stack": "laravel",
   "maxReviewRounds": 2,
   "verify": ["./vendor/bin/pest --compact", "./vendor/bin/pint --test"]
+}
+```
+
+Role settings are merged per role and per field. For example, this project
+override changes only the reviewer's reasoning level while inheriting its
+provider, model, and `readOnly` value from the global config:
+
+```json
+{
+  "roles": {
+    "reviewer": { "thinking": "xhigh" }
+  }
 }
 ```
 
