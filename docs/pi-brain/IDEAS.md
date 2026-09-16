@@ -315,7 +315,7 @@ retried when the window resets. No mitigation worth building until observed.
 
 ## Plan amendment at the gate (edit before approving)
 
-**Status:** idea, raised 2026-08-21 after the first real gates. Not built.
+**Status:** IMPLEMENTED 2026-09-16.
 
 **The gap.** The gate is binary today: approve the PRD/tasks as written, or
 cancel the whole run and re-ask /feature (planner re-asks questions, pays
@@ -323,39 +323,15 @@ full planner tokens again, may produce a *different* plan). There is no way
 to say "good plan, but change these three things and go". The natural human
 workflow — review, annotate, amend, then approve — is missing.
 
-**Design space (to be decided):**
-
-1. **Reject-with-notes (minimal).** Third gate option "reject with notes":
-   the notes become planner input, the planner revises the SAME run (PRD v2
-   written to the same feature dir), gate re-asked. Bounded to 1-2 amendment
-   rounds like the review loop. Cheapest to build: reuses the review-round
-   plumbing, no new UX.
-2. **Editor gate.** Gate opens `ctx.ui.editor` preloaded with the PRD; the
-   user edits freely; the diff (or the full text) becomes either (a) the
-   authoritative PRD directly, or (b) input to the planner for a revision
-   pass that reconciles tasks with the edited PRD. Direct-edit is simpler
-   but lets tasks and PRD drift apart; revision-pass keeps them consistent.
-3. **Annotation mode.** User replies freeform at the gate ("approve IF you
-   change Q5's assumption to X"); the planner applies amendments and
-   re-submits. Risk: freeform parsing of conditions is exactly the kind of
-   fuzzy contract the deterministic-orchestration principle avoids.
-
-**Open questions.**
-- Should amendments be recorded in the artifact (a "Amendments" section) so
-  the reviewer later knows which parts were human-specified? (Probably yes —
-  the reviewer judges against the spec; provenance matters.)
-- Interaction with the ask_user findings: the gate amendment is a SECOND
-  human checkpoint; do sequential dialogs from the background workflow
-  survive an editor dialog? (The serialization lock should handle it, but
-  editor + notify interplay is untested.)
-- Does an amended plan reset the "approve or veto Assumptions" semantics?
-  (Amended assumptions should move from "assumptions" to "decisions".)
-
-**Recommendation (not yet decided): start with option 1** — reject-with-notes
-reuses the most machinery, creates no new dialog types, and matches how the
-review loop already works. Options 2/3 build on it if notes prove too
-coarse. Trigger to build: the first real gate where the user actually wants
-to amend (has not happened yet — both gates so far were clean approvals).
+**Solution chosen.** The gate is now tri-state: Approve and implement, Revise
+with notes, or Cancel. A non-empty note set invokes the same planner model in
+the same run, with the current PRD/tasks and notes as authoritative input; it
+does not repeat discovery or register question tools. The planner returns a
+complete canonical plan, which is validated before replacing the same files.
+There are at most two revision rounds, rejected output is retained as a
+diagnostic artifact, and final approval alone emits `spec.approved` and freezes
+the final hashes. The gate uses a safe headless Cancel default and does not use
+`ctx.ui.editor`.
 
 ## Plan reviewer (spec review before the gate)
 

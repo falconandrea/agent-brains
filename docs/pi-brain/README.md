@@ -3,9 +3,9 @@
 Local multi-agent workflow harness for [Pi](https://pi.dev), built on top of the
 `agent-brains` canonical skill store.
 
-`/feature <idea>` runs: plan → your approval → developer agent → deterministic
-checks → independent reviewer agent (different model) → bounded fix loop →
-summary. **It never commits.**
+`/feature <idea>` runs: plan → tri-state approval gate → developer agent →
+deterministic checks → independent reviewer agent (different model) → bounded
+fix loop → summary. **It never commits.**
 
 This lives on the `pi-brain` branch. `main` is unchanged and still serves
 OpenCode/Codex through `setup.sh`.
@@ -16,7 +16,7 @@ OpenCode/Codex through `setup.sh`.
 
 | | |
 |---|---|
-| Pi-free logic (profiles, stack, context routing, verification, review loop, run lock, workflow) | implemented, 46 tests green |
+| Pi-free logic (profiles, stack, context routing, verification, tri-state gate, review loop, run lock, workflow) | implemented, 196 tests green |
 | Pi SDK layer (`src/pi/`, `extensions/pi-brain.ts`) | typechecked against pi-coding-agent 0.84.2, **exercised by real runs since 2026-08-21** |
 | Spike proving the Pi APIs | **passed 2026-08-17 on 0.84.2** — all checks, see [SPIKE.md](./SPIKE.md) |
 | Real `/feature` runs | several completed end-to-end (2026-08-21 → 2026-08-23): gates, ask_user mid-run, review rounds, classified warnings, run-state log persisted and read back via `/flow log` |
@@ -51,6 +51,12 @@ pi
 > /flow log-all             # persisted runs in this repo
 > /flow resume <runId>      # continue an interrupted run from its log
 ```
+
+The plan gate offers **Approve and implement**, **Revise with notes**, and
+**Cancel**. A revision sends one free-form note set plus the current PRD/tasks
+back to the same planner in the same run and feature directory. At most two
+non-empty revisions are allowed; invalid planner output is rejected without
+changing the last valid artifacts. Headless runs default to **Cancel**.
 
 `/flow resume` replays `.pi/pi-brain/runs/<runId>.jsonl` and re-enters at the
 first incomplete phase (develop / verify / review) with counters, usage and the

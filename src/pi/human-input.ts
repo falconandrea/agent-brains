@@ -92,7 +92,7 @@ export class PiHumanInput implements HumanInput {
 
   async select(q: SelectQuestion): Promise<string> {
     const ctx = this.#liveCtx();
-    if (!ctx.hasUI) return q.options[0]!.value;
+    if (!ctx.hasUI) return q.defaultValue ?? q.options[0]!.value;
     const labels = q.options.map((o) => o.label);
     const picked = await this.#serialized(() => ctx.ui.select(q.message, labels));
     if (picked === undefined) throw new UserDismissedError("select");

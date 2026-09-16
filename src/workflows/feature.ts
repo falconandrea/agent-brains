@@ -11,7 +11,7 @@
 import { readFileSync, existsSync, mkdirSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
-import type { AgentRunner } from "../agent.ts";
+import type { AgentRunner, AgentRunResult } from "../agent.ts";
 import type {
   GitService,
   HumanInput,
@@ -31,7 +31,13 @@ import {
   type ReviewIssue,
   type ReviewResult,
 } from "../review.ts";
-import { REVIEW_TOOL, PLANNER_PROMPT, DEVELOPER_PROMPT, REVIEWER_PROMPT } from "./feature-prompts.ts";
+import {
+  REVIEW_TOOL,
+  PLANNER_PROMPT,
+  PLAN_REVISION_PROMPT,
+  DEVELOPER_PROMPT,
+  REVIEWER_PROMPT,
+} from "./feature-prompts.ts";
 import type { WorkflowEvent } from "../ports.ts";
 import { runsDir } from "../run-log.ts";
 
@@ -103,6 +109,8 @@ export interface ResumeState {
 /** Built-in tools the developer is allowed: everything except bash. */
 export const DEVELOPER_TOOLS = ["read", "grep", "find", "ls", "edit", "write"] as const;
 
+const MAX_PLAN_REVISIONS = 2;
+
 /** sha256 of a file's content; empty string when unreadable. */
 const fileSha = (path: string): string => {
   try {
@@ -172,61 +180,65 @@ export async function runFeatureWorkflow(
     events.emit({ type: "phase.started", runId, phase: "spec" });
     const planner = selectSkills(deps.profilesDir, stack.primary, "planner", deps.availableSkills);
     const plannerCfg = roleConfig(config, "planner");
-    events.emit({
-      type: "agent.started",
-      runId,
-      role: "planner",
-      model: modelLabel(plannerCfg.provider, plannerCfg.model),
-      skills: planner.skills,
-    });
+    const runPlanner = async (
+      prompt: string,
+      allowHumanInput?: boolean,
+      contextTask = description,
+    ): Promise<AgentRunResult> => {
+      events.emit({
+        type: "agent.started",
+        runId,
+        role: "planner",
+        model: modelLabel(plannerCfg.provider, plannerCfg.model),
+        skills: planner.skills,
+      });
+      const result = await deps.agents.run({
+        runId,
+        role: "planner",
+        cwd: deps.cwd,
+        prompt,
+        model: plannerCfg,
+        skills: planner.skills,
+        tools: ["read", "grep", "find", "ls"],
+        contextFiles: routeContext({ cwd: deps.cwd, role: "planner", task: contextTask, stack }).files,
+        ...(allowHumanInput !== undefined ? { allowHumanInput } : {}),
+        signal: deps.signal,
+      });
+      events.emit({
+        type: "agent.completed",
+        runId,
+        role: "planner",
+        ...(result.usage
+          ? { usage: { input: result.usage.input ?? 0, output: result.usage.output ?? 0 } }
+          : {}),
+      });
+      recordUsage("planner", result.usage);
+      return result;
+    };
 
-    const plan = await deps.agents.run({
-      runId,
-      role: "planner",
-      cwd: deps.cwd,
-      prompt: PLANNER_PROMPT({ description, stack }),
-      model: plannerCfg,
-      skills: planner.skills,
-      tools: ["read", "grep", "find", "ls"],
-      contextFiles: routeContext({ cwd: deps.cwd, role: "planner", task: description, stack }).files,
-      signal: deps.signal,
-    });
-    events.emit({
-      type: "agent.completed",
-      runId,
-      role: "planner",
-      ...(plan.usage ? { usage: { input: plan.usage.input ?? 0, output: plan.usage.output ?? 0 } } : {}),
-    });
-    recordUsage("planner", plan.usage);
+    const plan = await runPlanner(PLANNER_PROMPT({ description, stack }));
     if (plan.aborted || deps.signal?.aborted) return { status: "cancelled", at: "planning", usage };
 
     // The planner is read-only by design: it returns the documents as text and the
     // orchestrator writes them. Always write this run's output — reusing files
     // left by an earlier, possibly rejected, run would hand the developer a plan
-    // the user never approved. The slug comes from the planner's English TITLE
-    // (falling back to the raw description); a rerun of the same request reuses
+    // the user never approved. The slug comes from the planner's non-empty English TITLE;
+    // a rerun of the same request reuses
     // its earlier directory, found via the description marker — which also
     // covers reruns whose TITLE gets worded differently.
-    const { title, prd, tasks } = splitPlannerOutput(plan.text);
-    const taskValidation = validateTaskList(tasks);
-    if (!taskValidation.valid) {
-      const rejectedPath = plannerRejectedArtifactPath(deps.cwd, runId);
-      let persisted = true;
-      try {
-        mkdirSync(runsDir(deps.cwd), { recursive: true });
-        writeFileSync(rejectedPath, plan.text, "utf8");
-      } catch {
-        persisted = false;
-      }
+    const planValidation = validatePlannerOutput(plan.text);
+    if (!planValidation.valid) {
+      const rejected = persistRejectedPlannerOutput(deps.cwd, runId, plan.text);
       return {
         status: "needs_human",
         reason:
-          `${taskValidation.message}; the plan cannot be approved safely. ` +
-          `${persisted ? "Rejected planner output saved to" : "Could not save rejected planner output; expected path:"} ${rejectedPath}`,
+          `${planValidation.message}; the plan cannot be approved safely. ` +
+          `${rejected.persisted ? "Rejected planner output saved to" : "Could not save rejected planner output; expected path:"} ${rejected.path}`,
         usage,
       };
     }
-    const slug = findExistingFeatureSlug(deps.cwd, description) ?? featureSlug(deps.cwd, title ?? description);
+    const { title, prd, tasks } = planValidation.value;
+    const slug = findExistingFeatureSlug(deps.cwd, description) ?? featureSlug(deps.cwd, title);
     const featureDir = join(deps.cwd, ".ai", "features", slug);
     prdPath = join(featureDir, `prd-${slug}.md`);
     tasksPath = join(featureDir, `tasks-${slug}.md`);
@@ -235,19 +247,92 @@ export async function runFeatureWorkflow(
     writeFileSync(prdPath, `${marker}\n${prd}`, "utf8");
     writeFileSync(tasksPath, `${marker}\n${tasks}`, "utf8");
 
-    const approved = await human.confirm({
-      message: `Approve the plan for '${slug}' and start implementation?`,
-      detail: `${prdPath}\n${tasksPath}`,
-      defaultValue: false,
-    });
-    if (!approved) {
-      return { status: "cancelled", at: "spec approval", usage };
+    const stableTitle = title;
+    let revisionRound = 0;
+    for (;;) {
+      if (revisionRound >= MAX_PLAN_REVISIONS) {
+        human.notify(
+          `pi-brain: plan revision limit reached (${MAX_PLAN_REVISIONS}/${MAX_PLAN_REVISIONS}). ` +
+            "Only Approve and implement or Cancel are available.",
+        );
+      }
+      const action = await human.select({
+        message:
+          `Plan ready for '${slug}'. Choose an action.\n` +
+          `${prdPath}\n${tasksPath}`,
+        options: [
+          { label: "Approve and implement", value: "approve", description: "Freeze this plan and start the developer." },
+          ...(revisionRound < MAX_PLAN_REVISIONS
+            ? [{ label: "Revise with notes", value: "revise", description: "Ask the planner to apply one set of notes." }]
+            : []),
+          { label: "Cancel", value: "cancel", description: "End this run without starting the developer." },
+        ],
+        defaultValue: "cancel",
+      });
+
+      if (action === "approve") {
+        // Freeze only the final content: revision artifacts have no hashes in
+        // the audit log and cannot activate the post-approval tamper guard.
+        specGuard = { prdSha: fileSha(prdPath), tasksSha: fileSha(tasksPath) };
+        events.emit({ type: "spec.approved", runId, ...specGuard });
+        break;
+      }
+      if (action !== "revise" || revisionRound >= MAX_PLAN_REVISIONS) {
+        return { status: "cancelled", at: "spec approval", usage };
+      }
+
+      const notes = (await human.input({
+        message: "Describe the changes the planner must apply to this plan:",
+        placeholder: "One free-form note; the planner will preserve everything not mentioned.",
+      })).trim();
+      if (notes === "") {
+        human.notify("pi-brain: empty revision notes — no planner call made and no revision round consumed.");
+        continue;
+      }
+
+      revisionRound += 1;
+      events.emit({ type: "spec.revision.requested", runId, round: revisionRound, notes });
+      const revisedPlan = await runPlanner(
+        PLAN_REVISION_PROMPT({
+          description,
+          stack,
+          title: stableTitle,
+          prd: read(prdPath),
+          tasks: read(tasksPath),
+          notes,
+        }),
+        false,
+        `${description}\n${notes}`,
+      );
+      if (revisedPlan.aborted || deps.signal?.aborted) {
+        return { status: "cancelled", at: "plan revision", usage };
+      }
+
+      const revisedValidation = validatePlannerOutput(revisedPlan.text);
+      if (!revisedValidation.valid) {
+        const rejected = persistRejectedPlannerOutput(deps.cwd, runId, revisedPlan.text);
+        events.emit({
+          type: "spec.revision.rejected",
+          runId,
+          round: revisionRound,
+          reason: revisedValidation.message,
+          artifactPath: rejected.path,
+        });
+        human.notify(
+          `pi-brain: plan revision ${revisionRound}/${MAX_PLAN_REVISIONS} failed — ` +
+            `${revisedValidation.message}. Current PRD/tasks were not changed. ` +
+            `${rejected.persisted ? "Rejected output saved to" : "Could not save rejected output; expected path:"} ${rejected.path}`,
+        );
+        continue;
+      }
+
+      // The title returned by a revision is deliberately ignored: the original
+      // title and slug identify this run's stable feature directory.
+      writeFileSync(prdPath, `${marker}\n${revisedValidation.value.prd}`, "utf8");
+      writeFileSync(tasksPath, `${marker}\n${revisedValidation.value.tasks}`, "utf8");
+      events.emit({ type: "spec.revision.completed", runId, round: revisionRound });
+      human.notify(`pi-brain: plan revision ${revisionRound}/${MAX_PLAN_REVISIONS} applied to the same feature artifacts.`);
     }
-    // Freeze the approved content: the hashes persist in the event log so a
-    // later mutation of PRD/tasks (e.g. by the developer making its own work
-    // look conformant) is detected before any agent trusts the files again.
-    specGuard = { prdSha: fileSha(prdPath), tasksSha: fileSha(tasksPath) };
-    events.emit({ type: "spec.approved", runId, ...specGuard });
   } else {
     // In resume mode, re-locate the PRD/tasks files from the description marker.
     const slug = findExistingFeatureSlug(deps.cwd, description);
@@ -674,10 +759,11 @@ export function slugify(description: string): string {
  * Planner returns `## TITLE`, `## PRD` and `## TASKS` sections; split them for
  * writing. Anything before the `## TITLE`/`## PRD` heading (conversational
  * preamble the model was told not to emit) never reaches the artifact files.
- * A missing or empty TITLE yields null and the caller falls back to the raw
- * description for the slug. A missing TASKS section is returned as an empty
- * string so validation can report that specific failure without inventing an
- * approvable-looking section.
+ * A missing or empty TITLE yields null for callers that only need parsing. The
+ * workflow uses validatePlannerOutput below before writing anything, so missing
+ * structure cannot fall back into an approvable plan. A missing TASKS section
+ * is returned as an empty string so validation can report that specific failure
+ * without inventing an approvable-looking section.
  */
 export function splitPlannerOutput(text: string): { title: string | null; prd: string; tasks: string } {
   const titleMatch = /^#{1,3}\s*TITLE\b\s*\n?/im.exec(text);
@@ -693,6 +779,64 @@ export function splitPlannerOutput(text: string): { title: string | null; prd: s
     return { title, prd: body, tasks: "" };
   }
   return { title, prd: body.slice(0, match.index).trim(), tasks: body.slice(match.index).trim() };
+}
+
+export type PlannerOutputValidation =
+  | { valid: true; value: { title: string; prd: string; tasks: string } }
+  | {
+      valid: false;
+      reason:
+        | "missing_title"
+        | "empty_title"
+        | "missing_prd"
+        | "empty_prd"
+        | "missing_tasks"
+        | "invalid_order"
+        | Extract<TaskListValidation, { valid: false }>["reason"];
+      message: string;
+    };
+
+const TITLE_SECTION = /^#{1,3}\s*TITLE\b\s*\n?/im;
+const PRD_SECTION = /^#{1,3}\s*PRD\b\s*\n?/im;
+
+/** Validate the complete planner contract before any artifact is written. */
+export function validatePlannerOutput(text: string): PlannerOutputValidation {
+  const parsed = splitPlannerOutput(text);
+  const titleMatch = TITLE_SECTION.exec(text);
+  const prdMatch = PRD_SECTION.exec(text);
+  const tasksMatch = TASKS_SECTION.exec(text);
+
+  if (!titleMatch) {
+    return { valid: false, reason: "missing_title", message: "planner TITLE section is missing" };
+  }
+  if (!prdMatch) {
+    return { valid: false, reason: "missing_prd", message: "planner PRD section is missing" };
+  }
+  if (!tasksMatch) {
+    return { valid: false, reason: "missing_tasks", message: "planner TASKS section is missing" };
+  }
+  if (!(titleMatch.index < prdMatch.index && prdMatch.index < tasksMatch.index)) {
+    return {
+      valid: false,
+      reason: "invalid_order",
+      message: "planner sections must be ordered TITLE, PRD, TASKS",
+    };
+  }
+
+  const title = text.slice(titleMatch.index + titleMatch[0].length, prdMatch.index).trim();
+  if (title === "") {
+    return { valid: false, reason: "empty_title", message: "planner TITLE section is empty" };
+  }
+
+  const prd = text.slice(prdMatch.index + prdMatch[0].length, tasksMatch.index).trim();
+  if (prd === "") {
+    return { valid: false, reason: "empty_prd", message: "planner PRD section is empty" };
+  }
+
+  const taskValidation = validateTaskList(parsed.tasks);
+  if (!taskValidation.valid) return taskValidation;
+
+  return { valid: true, value: { title, prd, tasks: parsed.tasks } };
 }
 
 export type TaskListValidation =
@@ -770,3 +914,18 @@ export function hasValidTaskList(tasks: string): boolean {
 
 export const plannerRejectedArtifactPath = (cwd: string, runId: string): string =>
   join(runsDir(cwd), `${runId}.planner-rejected.md`);
+
+export function persistRejectedPlannerOutput(
+  cwd: string,
+  runId: string,
+  text: string,
+): { path: string; persisted: boolean } {
+  const path = plannerRejectedArtifactPath(cwd, runId);
+  try {
+    mkdirSync(runsDir(cwd), { recursive: true });
+    writeFileSync(path, text, "utf8");
+    return { path, persisted: true };
+  } catch {
+    return { path, persisted: false };
+  }
+}

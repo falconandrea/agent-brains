@@ -25,6 +25,7 @@ import type { ReviewResult } from "../src/review.ts";
 import {
   hasValidTaskList,
   runFeatureWorkflow,
+  validatePlannerOutput,
   validateTaskList,
   type FeatureDeps,
 } from "../src/workflows/feature.ts";
@@ -33,21 +34,28 @@ import { mkdirSync, writeFileSync } from "node:fs";
 const PROFILES_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "profiles");
 const SKILLS = new Set(["karpathy-guidelines", "code-review", "feature", "nodejs-best-practices"]);
 
-const PLAN = "## PRD\nBuild the thing.\n\n## TASKS\n- T1 do it\n";
+const PLAN = "## TITLE\nAdd Invitations\n\n## PRD\nBuild the thing.\n\n## TASKS\n- T1 do it\n";
 
 class FakeHuman implements HumanInput {
   approve = true;
   confirmCalls = 0;
+  gateChoices: string[] = [];
+  readonly gateOptionValues: string[][] = [];
+  revisionNotes: string[] = [];
   readonly notices: string[] = [];
   async confirm(): Promise<boolean> {
     this.confirmCalls += 1;
     return this.approve;
   }
   async select(q: { options: Array<{ value: string }> }): Promise<string> {
+    if (q.options.some((option) => ["approve", "revise", "cancel"].includes(option.value))) {
+      this.gateOptionValues.push(q.options.map((option) => option.value));
+      return this.gateChoices.shift() ?? (this.approve ? "approve" : "cancel");
+    }
     return q.options[0]!.value;
   }
   async input(): Promise<string> {
-    return "";
+    return this.revisionNotes.shift() ?? "";
   }
   async editor(q: { content: string }): Promise<string> {
     return q.content;
@@ -307,12 +315,209 @@ test("rejecting the plan cancels before any developer runs", async () => {
   const { deps, human, agents } = harness((req) =>
     req.role === "planner" ? plannerResult : devResult,
   );
-  human.approve = false;
+  human.gateChoices = ["cancel"];
 
   const outcome = await runFeatureWorkflow(deps, "add invitations", "run-4");
 
   assert.deepEqual(outcome, { status: "cancelled", at: "spec approval", usage: {} });
   assert.equal(agents.calls.filter((c) => c.role !== "planner").length, 0);
+});
+
+test("revise then approve calls the same planner twice and sends revised files to the developer", async () => {
+  let plannerCalls = 0;
+  const revisedPlan =
+    "## TITLE\nRenamed by the model\n\n## PRD\nBuild the thing with the requested note.\n\n## TASKS\n- T1 do the revised thing\n";
+  const { deps, human, agents, cwd, events } = harness((req) => {
+    if (req.role === "planner") {
+      plannerCalls += 1;
+      return plannerCalls === 1
+        ? { ...plannerResult, usage: { input: 10, output: 5 } }
+        : { role: "planner", text: revisedPlan, aborted: false, usage: { input: 20, output: 10 } };
+    }
+    if (req.role === "developer") return devResult;
+    return reviewOf({ verdict: "approved", summary: "ok", issues: [] });
+  });
+  human.gateChoices = ["revise", "approve"];
+  human.revisionNotes = ["Use the revised task wording and preserve the rest of the plan."];
+
+  const outcome = await runFeatureWorkflow(deps, "add invitations", "run-revise");
+
+  assert.equal(outcome.status, "completed");
+  assert.deepEqual(outcome.usage.planner, { input: 30, output: 15 });
+  assert.equal(plannerCalls, 2);
+  assert.equal(agents.calls.filter((c) => c.role === "developer").length, 1);
+  const featureDir = join(cwd, ".ai/features/add-invitations");
+  assert.deepEqual(human.gateOptionValues[0], ["approve", "revise", "cancel"]);
+  assert.match(readFileSync(join(featureDir, "tasks-add-invitations.md"), "utf8"), /revised thing/);
+  assert.ok(!existsSync(join(cwd, ".ai/features/renamed-by-the-model")));
+  const revision = agents.calls[1]!;
+  assert.equal(agents.calls[0]!.allowHumanInput, undefined);
+  assert.equal(revision.allowHumanInput, false);
+  assert.match(revision.prompt, /Use the revised task wording/);
+  assert.match(revision.prompt, /- T1 do it/);
+  assert.match(agents.calls.find((c) => c.role === "developer")!.prompt, /revised thing/);
+  assert.match(agents.calls.find((c) => c.role === "reviewer")!.prompt, /revised thing/);
+  assert.equal(events.filter((e) => e.type === "spec.approved").length, 1);
+  assert.equal(events.filter((e) => e.type === "spec.revision.requested").length, 1);
+  assert.equal(events.filter((e) => e.type === "spec.revision.completed").length, 1);
+  const approved = events.find((e) => e.type === "spec.approved");
+  assert.deepEqual(approved && approved.type === "spec.approved" ? approved : undefined, {
+    type: "spec.approved",
+    runId: "run-revise",
+    prdSha: createHash("sha256")
+      .update(readFileSync(join(featureDir, "prd-add-invitations.md"), "utf8"), "utf8")
+      .digest("hex"),
+    tasksSha: createHash("sha256")
+      .update(readFileSync(join(featureDir, "tasks-add-invitations.md"), "utf8"), "utf8")
+      .digest("hex"),
+  });
+});
+
+test("two plan revisions are allowed but the third gate has no revise action", async () => {
+  let plannerCalls = 0;
+  const { deps, human, agents } = harness((req) => {
+    if (req.role === "planner") {
+      plannerCalls += 1;
+      return {
+        role: "planner",
+        text: `## TITLE\nAdd Invitations\n\n## PRD\nPlan ${plannerCalls}.\n\n## TASKS\n- T1 do ${plannerCalls}\n`,
+        aborted: false,
+      };
+    }
+    if (req.role === "developer") return devResult;
+    return reviewOf({ verdict: "approved", summary: "ok", issues: [] });
+  });
+  human.gateChoices = ["revise", "revise", "approve"];
+  human.revisionNotes = ["first note", "second note"];
+
+  const outcome = await runFeatureWorkflow(deps, "add invitations", "run-revise-limit");
+
+  assert.equal(outcome.status, "completed");
+  assert.equal(plannerCalls, 3);
+  assert.equal(agents.calls.filter((c) => c.role === "developer").length, 1);
+  assert.deepEqual(human.gateOptionValues[2], ["approve", "cancel"]);
+  assert.ok(human.notices.some((notice) => notice.includes("revision limit reached (2/2)")));
+});
+
+test("empty revision notes return to the gate without calling the planner or consuming a round", async () => {
+  const { deps, human, agents, events } = harness((req) =>
+    req.role === "planner"
+      ? plannerResult
+      : req.role === "developer"
+        ? devResult
+        : reviewOf({ verdict: "approved", summary: "ok", issues: [] }),
+  );
+  human.gateChoices = ["revise", "approve"];
+  human.revisionNotes = [" \t  "];
+
+  const outcome = await runFeatureWorkflow(deps, "add invitations", "run-empty-revision");
+
+  assert.equal(outcome.status, "completed");
+  assert.equal(agents.calls.filter((c) => c.role === "planner").length, 1);
+  assert.equal(events.filter((e) => e.type === "spec.revision.requested").length, 0);
+  assert.ok(human.notices.some((notice) => notice.includes("empty revision notes")));
+});
+
+test("cancelling at the first gate or after a revision never starts the developer", async () => {
+  for (const [runId, choices, notes] of [
+    ["run-cancel-first", ["cancel"], []],
+    ["run-cancel-revision", ["revise", "cancel"], ["not this scope"]],
+  ] as const) {
+    const { deps, human, agents } = harness((req) =>
+      req.role === "planner" ? plannerResult : devResult,
+    );
+    human.gateChoices = [...choices];
+    human.revisionNotes = [...notes];
+
+    const outcome = await runFeatureWorkflow(deps, "add invitations", runId);
+
+    assert.equal(outcome.status, "cancelled");
+    assert.equal(agents.calls.filter((c) => c.role === "developer").length, 0);
+  }
+});
+
+test("invalid revision tasks preserve valid artifacts and persist rejected output", async () => {
+  const invalidRevision = "## TITLE\nAnything\n\n## PRD\nBroken\n\n## TASKS\n- TODO\n";
+  let plannerCalls = 0;
+  const { deps, human, agents, cwd, events } = harness((req) => {
+    if (req.role === "planner") {
+      plannerCalls += 1;
+      return plannerCalls === 1
+        ? plannerResult
+        : { role: "planner", text: invalidRevision, aborted: false };
+    }
+    return devResult;
+  });
+  human.gateChoices = ["revise", "cancel"];
+  human.revisionNotes = ["Make the tasks invalid, for fixture coverage."];
+
+  const outcome = await runFeatureWorkflow(deps, "add invitations", "run-invalid-revision");
+
+  assert.equal(outcome.status, "cancelled");
+  assert.equal(agents.calls.filter((c) => c.role === "developer").length, 0);
+  assert.equal(events.filter((e) => e.type === "spec.approved").length, 0);
+  assert.match(
+    readFileSync(join(cwd, ".ai/features/add-invitations/tasks-add-invitations.md"), "utf8"),
+    /T1 do it/,
+  );
+  assert.equal(
+    readFileSync(join(cwd, ".pi/pi-brain/runs/run-invalid-revision.planner-rejected.md"), "utf8"),
+    invalidRevision,
+  );
+  assert.ok(human.notices.some((notice) => notice.includes("Current PRD/tasks were not changed")));
+  const rejected = events.find((e) => e.type === "spec.revision.rejected");
+  assert.equal(rejected?.round, 1);
+});
+
+test("a malformed revision preserves both valid artifacts and cannot approve before a later valid gate choice", async () => {
+  const malformedRevision = "## TITLE\nAdd Invitations\n\n## PRD\n\n## TASKS\n- T1 revised\n";
+  let plannerCalls = 0;
+  const { deps, human, agents, cwd, events } = harness((req) => {
+    if (req.role === "planner") {
+      plannerCalls += 1;
+      return plannerCalls === 1
+        ? plannerResult
+        : { role: "planner", text: malformedRevision, aborted: false };
+    }
+    if (req.role === "developer") return devResult;
+    return reviewOf({ verdict: "approved", summary: "ok", issues: [] });
+  });
+  human.gateChoices = ["revise", "approve"];
+  human.revisionNotes = ["Keep the original plan but make the PRD malformed for this test."];
+
+  const outcome = await runFeatureWorkflow(deps, "add invitations", "run-malformed-revision");
+
+  assert.equal(outcome.status, "completed");
+  assert.equal(agents.calls.filter((c) => c.role === "planner").length, 2);
+  assert.equal(agents.calls.filter((c) => c.role === "developer").length, 1);
+  assert.match(readFileSync(join(cwd, ".ai/features/add-invitations/prd-add-invitations.md"), "utf8"), /Build the thing/);
+  assert.match(readFileSync(join(cwd, ".ai/features/add-invitations/tasks-add-invitations.md"), "utf8"), /T1 do it/);
+  const rejectedIndex = events.findIndex((e) => e.type === "spec.revision.rejected");
+  const approvedIndex = events.findIndex((e) => e.type === "spec.approved");
+  const developerIndex = events.findIndex((e) => e.type === "agent.started" && e.role === "developer");
+  assert.ok(rejectedIndex >= 0);
+  assert.ok(rejectedIndex < approvedIndex, "the malformed revision is rejected before approval");
+  assert.ok(approvedIndex < developerIndex, "development starts only after a later approval");
+  assert.equal(events.filter((e) => e.type === "spec.approved").length, 1);
+  assert.equal(events.find((e) => e.type === "spec.revision.rejected")?.round, 1);
+});
+
+test("an aborted plan revision cancels the run before development", async () => {
+  let plannerCalls = 0;
+  const { deps, human, agents } = harness((req) => {
+    if (req.role === "planner") {
+      plannerCalls += 1;
+      return plannerCalls === 1 ? plannerResult : { role: "planner", text: "", aborted: true };
+    }
+    return devResult;
+  });
+  human.gateChoices = ["revise"];
+  human.revisionNotes = ["abort this revision"];
+
+  const outcome = await runFeatureWorkflow(deps, "add invitations", "run-abort-revision");
+
+  assert.deepEqual(outcome, { status: "cancelled", at: "plan revision", usage: {} });
+  assert.equal(agents.calls.filter((c) => c.role === "developer").length, 0);
 });
 
 test("malformed reviewer output escalates instead of crashing", async () => {
@@ -351,7 +556,7 @@ test("a plan from an earlier pi-brain run on the same feature is overwritten", a
       // the two runs must be distinguishable, or "overwritten" proves nothing
       return {
         role: "planner",
-        text: `## PRD\nPlan revision ${plannerCalls}.\n\n## TASKS\n- T${plannerCalls} do it\n`,
+        text: `## TITLE\nAdd Invitations\n\n## PRD\nPlan revision ${plannerCalls}.\n\n## TASKS\n- T${plannerCalls} do it\n`,
         aborted: false,
       };
     }
@@ -441,13 +646,21 @@ test("dirty submodules stop the run instead of approving unseen code", async () 
 });
 
 test("two different features that slugify the same get separate directories", async () => {
-  const { deps, cwd } = harness((req) =>
-    req.role === "planner"
-      ? plannerResult
-      : req.role === "developer"
-        ? devResult
-        : reviewOf({ verdict: "approved", summary: "ok", issues: [] }),
-  );
+  const { deps, cwd } = harness((req) => {
+    if (req.role === "planner") {
+      const title = req.prompt.includes("guests")
+        ? "Add invitations to the org for guests"
+        : "Add invitations to the org for admins";
+      return {
+        role: "planner",
+        text: `## TITLE\n${title}\n\n## PRD\nBuild the thing.\n\n## TASKS\n- T1 do it\n`,
+        aborted: false,
+      };
+    }
+    return req.role === "developer"
+      ? devResult
+      : reviewOf({ verdict: "approved", summary: "ok", issues: [] });
+  });
 
   await runFeatureWorkflow(deps, "add invitations to the org for admins only", "run-a");
   await runFeatureWorkflow(deps, "add invitations to the org for guests too", "run-b");
@@ -497,6 +710,22 @@ test("the planner's TASKS validator rejects placeholders and duplicate ids", () 
   assert.equal(hasValidTaskList("## TASKS\n- T1 first\n- T1 duplicate"), false);
 });
 
+test("the complete planner validator rejects a missing TITLE even with valid TASKS", () => {
+  const validation = validatePlannerOutput("## PRD\nbody\n\n## TASKS\n- T1 do it\n");
+  assert.equal(validation.valid, false);
+  if (validation.valid) throw new Error("expected missing TITLE rejection");
+  assert.equal(validation.reason, "missing_title");
+});
+
+test("the complete planner validator rejects an empty PRD even with valid TASKS", () => {
+  const validation = validatePlannerOutput(
+    "## TITLE\nFeature\n\n## PRD\n\n## TASKS\n- T1 do it\n",
+  );
+  assert.equal(validation.valid, false);
+  if (validation.valid) throw new Error("expected empty PRD rejection");
+  assert.equal(validation.reason, "empty_prd");
+});
+
 test("the planner's TASKS validator rejects Markdown-wrapped placeholder descriptions", () => {
   for (const tasks of [
     "## TASKS\n- T1 — **TODO**",
@@ -536,7 +765,7 @@ test("the planner's TASKS diagnostics distinguish missing sections, invalid ids 
 });
 
 test("a planner response without granular TASKS is escalated before the gate", async () => {
-  const rejectedText = "## PRD\nA plan with no executable tasks.\n";
+  const rejectedText = "## TITLE\nAdd Invitations\n\n## PRD\nA plan with no executable tasks.\n";
   const { deps, agents, human } = harness((req) =>
     req.role === "planner"
       ? { role: "planner", text: rejectedText, aborted: false }
@@ -559,12 +788,27 @@ test("a planner response without granular TASKS is escalated before the gate", a
   assert.equal(human.notices.some((notice) => notice.includes(rejectedText)), false);
 });
 
+test("an initial planner response without TITLE is rejected before writing feature artifacts", async () => {
+  const rejectedText = "## PRD\nbody\n\n## TASKS\n- T1 do it\n";
+  const { deps, agents, human } = harness((req) =>
+    req.role === "planner" ? { role: "planner", text: rejectedText, aborted: false } : devResult,
+  );
+
+  const outcome = await runFeatureWorkflow(deps, DESCRIPTION, "run-no-title");
+
+  assert.equal(outcome.status, "needs_human");
+  assert.match(outcome.status === "needs_human" ? outcome.reason : "", /TITLE section is missing/);
+  assert.equal(agents.calls.length, 1);
+  assert.equal(human.gateOptionValues.length, 0);
+  assert.equal(existsSync(join(deps.cwd, ".ai/features")), false);
+});
+
 test("a rejected TASKS section reports its specific cause and artifact path", async () => {
   for (const [suffix, tasks, expectedCause] of [
     ["no-ids", "## TASKS\n- TODO\n", "no valid granular task IDs"],
     ["duplicates", "## TASKS\n- T1 first\n- **T1** duplicate\n", "duplicate task IDs: T1"],
   ] as const) {
-    const rejectedText = `## PRD\nRejected ${suffix}.\n\n${tasks}`;
+    const rejectedText = `## TITLE\nAdd Invitations\n\n## PRD\nRejected ${suffix}.\n\n${tasks}`;
     const { deps, human } = harness((req) =>
       req.role === "planner" ? { role: "planner", text: rejectedText, aborted: false } : devResult,
     );

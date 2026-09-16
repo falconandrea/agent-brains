@@ -23,10 +23,10 @@ import { toTypeBox, type JsonSchemaNode } from "./json-schema.ts";
 import {
   ASK_USER_BATCH_PARAMETERS,
   BATCH_ANSWER_HINT,
-  askToolForRole,
   parseBatchQuestions,
   renderBatchQuestions,
 } from "./ask-user-batch.ts";
+import { humanInputToolForRequest } from "./human-input-policy.ts";
 
 export interface PiAgentRunnerDeps {
   /** Repo root. Also drives session naming and tool path resolution. */
@@ -80,9 +80,10 @@ export class PiAgentRunner implements AgentRunner {
         }),
       );
     }
-    if (this.#deps.askUser) {
+    const humanInputTool = this.#deps.askUser ? humanInputToolForRequest(request) : null;
+    if (humanInputTool !== null) {
       customTools.push(
-        askToolForRole(request.role) === "ask_user_batch"
+        humanInputTool === "ask_user_batch"
           ? this.#buildAskUserBatchTool()
           : this.#buildAskUserTool(),
       );

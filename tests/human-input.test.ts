@@ -15,10 +15,10 @@ interface Call {
   args: unknown[];
 }
 
-function fakeCtx(ui: Partial<ExtensionContext["ui"]> = {}) {
+function fakeCtx(ui: Partial<ExtensionContext["ui"]> = {}, hasUI = true) {
   const calls: Call[] = [];
   const ctx = {
-    hasUI: true,
+    hasUI,
     ui: {
       confirm: async (title: string, message: string) => {
         calls.push({ method: "confirm", args: [title, message] });
@@ -40,6 +40,31 @@ function fakeCtx(ui: Partial<ExtensionContext["ui"]> = {}) {
   };
   return { ctx: ctx as unknown as ExtensionContext, calls };
 }
+
+test("select uses its explicit default in headless mode and keeps UI ordering unchanged", async () => {
+  const headless = fakeCtx({}, false);
+  const headlessHuman = new PiHumanInput(() => headless.ctx);
+  assert.equal(
+    await headlessHuman.select({
+      message: "gate",
+      options: [{ label: "Approve", value: "approve" }, { label: "Cancel", value: "cancel" }],
+      defaultValue: "cancel",
+    }),
+    "cancel",
+  );
+  assert.equal(headless.calls.length, 0);
+
+  const interactive = fakeCtx({ select: async (_title: string, options: string[]) => options[0] });
+  const interactiveHuman = new PiHumanInput(() => interactive.ctx);
+  assert.equal(
+    await interactiveHuman.select({
+      message: "gate",
+      options: [{ label: "Approve", value: "approve" }, { label: "Cancel", value: "cancel" }],
+      defaultValue: "cancel",
+    }),
+    "approve",
+  );
+});
 
 // --- ask_user routing -------------------------------------------------------
 

@@ -14,6 +14,8 @@ export interface ConfirmQuestion {
 export interface SelectQuestion {
   message: string;
   options: Array<{ label: string; value: string; description?: string }>;
+  /** Value to return when no UI is available; interactive behavior is unchanged. */
+  defaultValue?: string;
 }
 export interface InputQuestion {
   message: string;
@@ -170,4 +172,25 @@ export type WorkflowEvent =
       runId: string;
       prdSha: string;
       tasksSha: string;
+    }
+  | {
+      /** The human asked the planner to revise the current plan. */
+      type: "spec.revision.requested";
+      runId: string;
+      round: number;
+      notes: string;
+    }
+  | {
+      /** A requested plan revision produced a valid replacement on disk. */
+      type: "spec.revision.completed";
+      runId: string;
+      round: number;
+    }
+  | {
+      /** A requested plan revision was rejected before touching valid artifacts. */
+      type: "spec.revision.rejected";
+      runId: string;
+      round: number;
+      reason: string;
+      artifactPath: string;
     };

@@ -30,6 +30,8 @@ export interface AgentRunRequest {
   contextFiles?: Array<{ path: string; content: string }>;
   /** When set, the child gets a single result tool it must call once. */
   resultTool?: ResultToolSpec;
+  /** Allow child-side human-question tools; defaults to true for compatibility. */
+  allowHumanInput?: boolean;
   signal?: AbortSignal;
 }
 

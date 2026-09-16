@@ -702,6 +702,12 @@ function describe(event: WorkflowEvent): string {
           ? event.issues.map((i) => `    ${i.id} [${i.severity}] ${i.problem}`)
           : []),
       ].join("\n");
+    case "spec.revision.requested":
+      return `  plan revision #${event.round} requested: ${event.notes}`;
+    case "spec.revision.completed":
+      return `  plan revision #${event.round}: completed`;
+    case "spec.revision.rejected":
+      return `  plan revision #${event.round}: rejected — ${event.reason} (${event.artifactPath})`;
     case "workflow.outcome": {
       const usageLine =
         event.usage && Object.keys(event.usage).length > 0

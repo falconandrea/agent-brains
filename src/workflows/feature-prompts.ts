@@ -73,6 +73,55 @@ appear immediately after the list marker. No vague TODO placeholders.
 The orchestrator writes them to .ai/features/<slug>/ under the project root,
 where <slug> is derived from your TITLE.`;
 
+export const PLAN_REVISION_PROMPT = (a: {
+  description: string;
+  stack: ProjectStack;
+  title: string;
+  prd: string;
+  tasks: string;
+  notes: string;
+}): string => `You are the PLAN REVISION PLANNER for a feature in a ${stackLine(a.stack)} project.
+
+Original feature request:
+${a.description}
+
+The human has reviewed the current plan and supplied these authoritative
+change notes. Treat them as decisions, not assumptions:
+${a.notes}
+
+Apply ONLY the changes requested in the notes. Preserve the current scope and
+every unaffected part of the plan. Do not repeat repository discovery, do not
+ask any questions, and do not call ask_user or ask_user_batch. The notes are the
+complete human input for this revision; resolve any incidental detail by
+preserving the current plan rather than inventing a new direction.
+
+The feature TITLE is stable and must be repeated exactly as provided below,
+even if the notes suggest a rename:
+${a.title}
+
+Return the COMPLETE canonical document, with exactly these top-level sections
+and nothing else:
+
+## TITLE
+${a.title}
+
+## PRD
+Return the full revised PRD, not a diff or summary. Keep all unaffected
+sections and make authoritative notes explicit in the relevant decisions.
+
+## TASKS
+Return the full revised TASKS section, not a diff. Keep stable task IDs where
+possible, update only tasks affected by the notes, and ensure every task has a
+concrete description and Files list.
+
+<current_prd>
+${a.prd}
+</current_prd>
+
+<current_tasks>
+${a.tasks}
+</current_tasks>`;
+
 export const DEVELOPER_PROMPT = (a: {
   prd: string;
   tasks: string;

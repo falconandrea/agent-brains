@@ -38,6 +38,17 @@ only spent on a green tree.
 gets one tool — `submit_review` — and must call it. `validateReviewResult`
 rejects anything malformed and the run escalates instead of guessing.
 
+**Tri-state plan gate.** After the initial planner call, `/feature` offers
+Approve and implement, Revise with notes, or Cancel. A non-empty revision sends
+the current PRD/tasks plus the human's authoritative notes back through the
+same planner model/config/skills in the same run. Revision output is validated
+before either artifact is replaced; malformed output is persisted as
+`.planner-rejected.md` while the last valid files remain in place. Two revision
+rounds are the hard limit, after which only approval or cancellation remains.
+The planner revision request disables both question tools at the runner level.
+`spec.approved` is emitted once, only after final approval, with hashes of the
+final files; the existing post-approval tamper guard then applies unchanged.
+
 **Bounded loop.** `decideNextRound` is a pure function: approved → complete,
 `needs_human` → escalate, max rounds → escalate, same blocking IDs with an
 unchanged diff → escalate as no-progress. It cannot loop forever.
