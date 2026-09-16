@@ -154,7 +154,7 @@ test("renderBatchQuestions produces one numbered list with options and recommend
   assert.match(rendered, /^1\. Which cache backend\?$/m);
   assert.match(rendered, /^   A\. Redis$/m);
   assert.match(rendered, /^   B\. In-memory ★$/m);
-  assert.match(rendered, /^   ↳ No new dependency$/m);
+  assert.match(rendered, /^   ↳ Perché B: No new dependency$/m);
   assert.doesNotMatch(rendered, /^\s+★/m, "the recommendation is not a separate option-like row");
   assert.match(rendered, /^2\. Dark mode at launch\?$/m);
   assert.match(rendered, /^   C\. Later$/m);
@@ -165,13 +165,25 @@ test("a recommendation cannot be interpreted as an additional option", () => {
 
   assert.match(rendered, /A\. Redis/);
   assert.match(rendered, /B\. In-memory ★/);
-  assert.match(rendered, /↳ No new dependency/);
+  assert.match(rendered, /↳ Perché B: No new dependency/);
   assert.doesNotMatch(rendered, /^\s+[CD]\. /m, "no third/fourth option is created by the recommendation");
 });
 
-test("batch chrome is language-neutral: no fixed English labels reach the dialog", () => {
+test("renderBatchQuestions does not duplicate option letters supplied by the planner", () => {
+  const rendered = renderBatchQuestions([
+    question({ options: ["A. Redis", "B) In-memory", "C: Filesystem"] }),
+  ]);
+
+  assert.match(rendered, /^   A\. Redis$/m);
+  assert.match(rendered, /^   B\. In-memory ★$/m);
+  assert.match(rendered, /^   C\. Filesystem$/m);
+  assert.doesNotMatch(rendered, /A\. A\.|B\. B\)|C\. C:/);
+});
+
+test("batch chrome has an explicit recommendation reason and no fixed English labels", () => {
   const rendered = renderBatchQuestions([question(), question({ question: "Auth provider?" })]);
   assert.ok(!/Recommended:/.test(rendered), "no English label for the recommendation");
+  assert.match(rendered, /↳ Perché B: No new dependency/);
   assert.equal(BATCH_ANSWER_HINT, "1: A, 2: B", "the placeholder is just the answer format");
 });
 

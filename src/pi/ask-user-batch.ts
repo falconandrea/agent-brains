@@ -45,7 +45,8 @@ export const ASK_USER_BATCH_PARAMETERS = Type.Object({
       options: Type.Array(Type.String(), {
         minItems: 2,
         maxItems: 3,
-        description: "2-3 concrete, mutually exclusive options.",
+        description:
+          "2-3 concrete, mutually exclusive options without A/B/C prefixes; the renderer adds them.",
       }),
       recommendedOption: Type.Union([Type.Literal("A"), Type.Literal("B"), Type.Literal("C")], {
         description: "The letter of the recommended option: A, B or C.",
@@ -71,10 +72,11 @@ export function renderBatchQuestions(questions: BatchQuestion[]): string {
       const options = q.options
         .map((o, j) => {
           const letter = String.fromCharCode(65 + j);
-          return `   ${letter}. ${o}${letter === q.recommendedOption ? " ★" : ""}`;
+          const option = o.replace(new RegExp(`^${letter}[.):]\\s+`, "i"), "");
+          return `   ${letter}. ${option}${letter === q.recommendedOption ? " ★" : ""}`;
         })
         .join("\n");
-      return `${i + 1}. ${q.question}\n${options}\n   ↳ ${q.recommendationReason}`;
+      return `${i + 1}. ${q.question}\n${options}\n   ↳ Perché ${q.recommendedOption}: ${q.recommendationReason}`;
     })
     .join("\n");
 }
