@@ -23,6 +23,7 @@ import { listProfiles, resolveProfile } from "../src/profiles.ts";
 import { RealGitService, ShellVerifyRunner } from "../src/shell.ts";
 import { acquireRunLock, describeLock, type AcquireResult } from "../src/run-lock.ts";
 import { PiHumanInput, UserDismissedError } from "../src/pi/human-input.ts";
+import { blocksFeatureStart, requestFlowStop, type FlowRunStatus } from "../src/pi/flow-stop.ts";
 import { PiAgentRunner } from "../src/pi/pi-agent-runner.ts";
 import { runFeatureWorkflow, type FeatureOutcome, type UsageByRole } from "../src/workflows/feature.ts";
 import { replayRunLog, validateResumePreconditions, hasPatchChanged, askResumeWithChangedDiff, type Refusal } from "../src/workflows/resume.ts";
@@ -67,7 +68,7 @@ interface ActiveRun {
   runId: string;
   workflow: string;
   phase: string;
-  status: string;
+  status: FlowRunStatus;
   events: WorkflowEvent[];
   abort: AbortController;
 }
@@ -79,7 +80,7 @@ export default function piBrain(pi: ExtensionAPI): void {
   pi.registerCommand("feature", {
     description: "Plan -> develop -> verify -> independent review, for one feature",
     handler: async (args: string, ctx: ExtensionCommandContext) => {
-      if (active?.status === "running") {
+      if (active && blocksFeatureStart(active.status)) {
         ctx.ui.notify(`pi-brain is already running ${active.workflow} (${active.phase}).`, "warning");
         return;
       }
@@ -259,11 +260,27 @@ export default function piBrain(pi: ExtensionAPI): void {
         return;
       }
       switch (subcommand || "status") {
-        case "stop":
-          active.abort.abort();
-          active.status = "cancelled";
-          ctx.ui.notify("pi-brain: cancelling…", "warning");
-          return;
+        case "stop": {
+          const run = active;
+          const decision = requestFlowStop(run, () => run.abort.abort());
+          switch (decision.action) {
+            case "cancellation_requested":
+              ctx.ui.notify("pi-brain: cancellation requested; waiting for the workflow to finish…", "warning");
+              return;
+            case "cancellation_in_progress":
+              ctx.ui.notify("pi-brain: cancellation is already in progress.", "warning");
+              return;
+            case "already_finished":
+              ctx.ui.notify(
+                `pi-brain: run ${active.runId} is already terminated (${decision.status}); there is nothing to cancel.`,
+                "info",
+              );
+              return;
+            case "no_run":
+              ctx.ui.notify("pi-brain: no run in this session.");
+              return;
+          }
+        }
         case "log": {
           // Read from the persisted run log (survives scrolling/crashes), not
           // from the in-memory buffer.
@@ -392,7 +409,8 @@ export default function piBrain(pi: ExtensionAPI): void {
     const state = replay.state;
 
     // Check if there's already an active run
-    if (getActive()?.status === "running") {
+    const currentRun = getActive();
+    if (currentRun && blocksFeatureStart(currentRun.status)) {
       ctx.ui.notify("pi-brain: another run is active in this session. Use /flow stop first.", "warning");
       return;
     }

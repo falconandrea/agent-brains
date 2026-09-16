@@ -62,8 +62,13 @@ each — the user approves or vetoes these at the gate. If and only if the
 feature has user-facing UI, add a "UI/UX Notes" section; otherwise omit it.
 
 ## TASKS
-Granular, ordered, stable IDs (T1, T2, ...), each with the files it is expected
-to touch. No vague TODO placeholders.
+Every task MUST be a canonical Markdown list entry in this exact shape:
+
+- T1 — concrete description. Files: \`path/a\`, \`path/b\`.
+- T2 — concrete description. Files: \`path/c\`.
+
+Use granular, ordered, stable IDs (T1, T2, ...). IDs must be unique and must
+appear immediately after the list marker. No vague TODO placeholders.
 
 The orchestrator writes them to .ai/features/<slug>/ under the project root,
 where <slug> is derived from your TITLE.`;

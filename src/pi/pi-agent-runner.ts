@@ -280,8 +280,9 @@ export class PiAgentRunner implements AgentRunner {
       label: "Ask user (batch)",
       description:
         "Ask the human about every open product/design decision in ONE call: " +
-        "1-6 decisions, each with a short question, 2-3 concrete options and " +
-        "your explicit recommendation. The user answers the whole numbered " +
+        "1-6 decisions, each with a short question, 2-3 concrete options, " +
+        "a recommendedOption containing the letter A, B or C of the chosen " +
+        "option, and a non-empty recommendationReason. The user answers the whole numbered " +
         "list in a single free-form message. Call this once during planning; " +
         "a second call is allowed only when the first answers open a " +
         "genuinely blocking new ambiguity. Never use it for facts " +

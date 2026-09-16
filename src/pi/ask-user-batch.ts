@@ -14,10 +14,13 @@ import type { Role } from "../skill-router.ts";
 /** Hard cap from the F0.1 contract: one batch carries at most six decisions. */
 export const MAX_BATCH_QUESTIONS = 6;
 
+export type RecommendedOption = "A" | "B" | "C";
+
 export interface BatchQuestion {
   question: string;
   options: string[];
-  recommendation: string;
+  recommendedOption: RecommendedOption;
+  recommendationReason: string;
 }
 
 /**
@@ -44,8 +47,12 @@ export const ASK_USER_BATCH_PARAMETERS = Type.Object({
         maxItems: 3,
         description: "2-3 concrete, mutually exclusive options.",
       }),
-      recommendation: Type.String({
-        description: "The option you recommend, with a one-line reason.",
+      recommendedOption: Type.Union([Type.Literal("A"), Type.Literal("B"), Type.Literal("C")], {
+        description: "The letter of the recommended option: A, B or C.",
+      }),
+      recommendationReason: Type.String({
+        minLength: 1,
+        description: "A concise reason for recommending that option; never leave it empty.",
       }),
     }),
     { minItems: 1, maxItems: MAX_BATCH_QUESTIONS },
@@ -62,9 +69,12 @@ export function renderBatchQuestions(questions: BatchQuestion[]): string {
   return questions
     .map((q, i) => {
       const options = q.options
-        .map((o, j) => `   ${String.fromCharCode(65 + j)}. ${o}`)
+        .map((o, j) => {
+          const letter = String.fromCharCode(65 + j);
+          return `   ${letter}. ${o}${letter === q.recommendedOption ? " ★" : ""}`;
+        })
         .join("\n");
-      return `${i + 1}. ${q.question}\n${options}\n   ★ ${q.recommendation}`;
+      return `${i + 1}. ${q.question}\n${options}\n   ↳ ${q.recommendationReason}`;
     })
     .join("\n");
 }
@@ -117,13 +127,31 @@ export function parseBatchQuestions(params: unknown): BatchParseResult {
       return { ok: false, error: `decision ${i + 1}: options must be meaningful labels, not bare numbers` };
     }
 
-    const recommendation =
-      typeof item.recommendation === "string" ? item.recommendation.trim() : "";
-    if (!recommendation) {
-      return { ok: false, error: `decision ${i + 1}: mark which option you recommend` };
+    const recommendedOption =
+      typeof item.recommendedOption === "string" ? item.recommendedOption.trim() : "";
+    if (!/^[ABC]$/.test(recommendedOption)) {
+      return { ok: false, error: `decision ${i + 1}: recommendedOption must be A, B or C` };
+    }
+    const recommendedIndex = recommendedOption.charCodeAt(0) - 65;
+    if (recommendedIndex >= options.length) {
+      return {
+        ok: false,
+        error: `decision ${i + 1}: ${recommendedOption} does not identify an existing option`,
+      };
     }
 
-    questions.push({ question, options, recommendation });
+    const recommendationReason =
+      typeof item.recommendationReason === "string" ? item.recommendationReason.trim() : "";
+    if (!recommendationReason) {
+      return { ok: false, error: `decision ${i + 1}: recommendationReason must not be empty` };
+    }
+
+    questions.push({
+      question,
+      options,
+      recommendedOption: recommendedOption as RecommendedOption,
+      recommendationReason,
+    });
   }
   return { ok: true, questions };
 }

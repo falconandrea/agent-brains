@@ -77,7 +77,8 @@ and `tests/unit.test.ts`. R0.1 remains the current next action.
 
 - [x] Add a planner-only `ask_user_batch` tool. Its schema must contain a
   `questions` array with `minItems: 1` and `maxItems: 6`; each question has
-  2–3 options and one explicit recommendation.
+  2–3 options plus a `recommendedOption` letter (`A`, `B` or `C`) and a
+  non-empty `recommendationReason`.
 - [x] Keep the existing single-decision `ask_user` contract for non-planner
   roles. The `/feature` planner receives `ask_user_batch`, not `ask_user`.
 - [x] Render the structured batch as one numbered string and pass it to the

@@ -22,7 +22,12 @@ import type {
   WorkflowEvent,
 } from "../src/ports.ts";
 import type { ReviewResult } from "../src/review.ts";
-import { hasValidTaskList, runFeatureWorkflow, type FeatureDeps } from "../src/workflows/feature.ts";
+import {
+  hasValidTaskList,
+  runFeatureWorkflow,
+  validateTaskList,
+  type FeatureDeps,
+} from "../src/workflows/feature.ts";
 import { mkdirSync, writeFileSync } from "node:fs";
 
 const PROFILES_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "profiles");
@@ -476,27 +481,106 @@ test("the planner's English TITLE names the directory, not the raw request", asy
     !existsSync(join(cwd, ".ai/features/aggiungi-un-playwrightprovider-come-nuovo")),
     "the Italian description must not name the directory",
   );
+  assert.equal(
+    existsSync(join(cwd, ".pi/pi-brain/runs/run-titolo.planner-rejected.md")),
+    false,
+    "a valid plan does not create a rejected planner artifact",
+  );
 });
 
 test("the planner's TASKS validator rejects placeholders and duplicate ids", () => {
   assert.equal(hasValidTaskList("## TASKS\n- T1 implement it\n- T2 test it"), true);
   assert.equal(hasValidTaskList("## TASKS\n- TODO"), false);
+  assert.equal(hasValidTaskList("## TASKS\n- T1 TODO"), false);
+  assert.equal(hasValidTaskList("## TASKS"), false);
+  assert.equal(hasValidTaskList("## TASKS\nThe plan includes T1 in prose, not as a task."), false);
   assert.equal(hasValidTaskList("## TASKS\n- T1 first\n- T1 duplicate"), false);
 });
 
+test("the planner's TASKS validator rejects Markdown-wrapped placeholder descriptions", () => {
+  for (const tasks of [
+    "## TASKS\n- T1 — **TODO**",
+    "## TASKS\n- T1 — _TBD_",
+    "## TASKS\n- T1 — concrete implementation\n- T2 — **TODO**",
+  ]) {
+    const validation = validateTaskList(tasks);
+    assert.equal(validation.valid, false, tasks);
+    if (validation.valid) throw new Error("expected placeholder rejection");
+    assert.equal(validation.reason, "placeholder_description", tasks);
+  }
+});
+
+test("the planner's TASKS validator accepts reasonable Markdown task markers", () => {
+  const variants = [
+    "## TASKS\n- T1 — concrete description. Files: `path/a`, `path/b`.",
+    "## TASKS\n1. T1 — concrete description. Files: `path/a`.",
+    "## TASKS\n### T1 — concrete description. Files: `path/a`.",
+    "## TASKS\n- **T1** — concrete description. Files: `path/a`.",
+    "## TASKS\n- [ ] T1 — concrete description. Files: `path/a`.",
+  ];
+
+  for (const variant of variants) assert.equal(hasValidTaskList(variant), true, variant);
+});
+
+test("the planner's TASKS diagnostics distinguish missing sections, invalid ids and duplicates", () => {
+  const missing = validateTaskList("## PRD\nNo task section");
+  const noIds = validateTaskList("## TASKS\n- TODO");
+  const duplicates = validateTaskList("## TASKS\n- T1 first\n- **T1** duplicate");
+  assert.equal(missing.valid, false);
+  assert.equal(noIds.valid, false);
+  assert.equal(duplicates.valid, false);
+  if (missing.valid || noIds.valid || duplicates.valid) throw new Error("expected invalid TASKS diagnostics");
+  assert.equal(missing.reason, "missing_section");
+  assert.equal(noIds.reason, "no_valid_ids");
+  assert.equal(duplicates.reason, "duplicate_ids");
+});
+
 test("a planner response without granular TASKS is escalated before the gate", async () => {
+  const rejectedText = "## PRD\nA plan with no executable tasks.\n";
   const { deps, agents, human } = harness((req) =>
     req.role === "planner"
-      ? { role: "planner", text: "## PRD\nA plan with no executable tasks.\n", aborted: false }
+      ? { role: "planner", text: rejectedText, aborted: false }
       : devResult,
   );
 
   const outcome = await runFeatureWorkflow(deps, DESCRIPTION, "run-no-tasks");
 
   assert.equal(outcome.status, "needs_human");
-  assert.match(outcome.status === "needs_human" ? outcome.reason : "", /valid granular TASKS/);
+  assert.match(outcome.status === "needs_human" ? outcome.reason : "", /TASKS section is missing/);
+  assert.match(outcome.status === "needs_human" ? outcome.reason : "", /run-no-tasks\.planner-rejected\.md/);
   assert.equal(agents.calls.length, 1, "only the planner may run");
   assert.equal(human.confirmCalls, 0, "the approval gate was never opened");
+  assert.equal(
+    readFileSync(join(deps.cwd, ".pi/pi-brain/runs/run-no-tasks.planner-rejected.md"), "utf8"),
+    rejectedText,
+    "the complete rejected planner response is persisted for diagnosis",
+  );
+  assert.equal(existsSync(join(deps.cwd, ".ai/features")), false, "rejected plans do not create feature artifacts");
+  assert.equal(human.notices.some((notice) => notice.includes(rejectedText)), false);
+});
+
+test("a rejected TASKS section reports its specific cause and artifact path", async () => {
+  for (const [suffix, tasks, expectedCause] of [
+    ["no-ids", "## TASKS\n- TODO\n", "no valid granular task IDs"],
+    ["duplicates", "## TASKS\n- T1 first\n- **T1** duplicate\n", "duplicate task IDs: T1"],
+  ] as const) {
+    const rejectedText = `## PRD\nRejected ${suffix}.\n\n${tasks}`;
+    const { deps, human } = harness((req) =>
+      req.role === "planner" ? { role: "planner", text: rejectedText, aborted: false } : devResult,
+    );
+
+    const outcome = await runFeatureWorkflow(deps, DESCRIPTION, `run-${suffix}`);
+
+    assert.equal(outcome.status, "needs_human");
+    const reason = outcome.status === "needs_human" ? outcome.reason : "";
+    assert.match(reason, new RegExp(expectedCause));
+    assert.match(reason, new RegExp(`run-${suffix}\\.planner-rejected\\.md`));
+    assert.equal(human.confirmCalls, 0);
+    assert.equal(
+      readFileSync(join(deps.cwd, ".pi/pi-brain/runs", `run-${suffix}.planner-rejected.md`), "utf8"),
+      rejectedText,
+    );
+  }
 });
 
 test("a developer cannot mutate the approved spec before verification or review", async () => {

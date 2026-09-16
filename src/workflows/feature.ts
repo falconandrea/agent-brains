@@ -33,6 +33,7 @@ import {
 } from "../review.ts";
 import { REVIEW_TOOL, PLANNER_PROMPT, DEVELOPER_PROMPT, REVIEWER_PROMPT } from "./feature-prompts.ts";
 import type { WorkflowEvent } from "../ports.ts";
+import { runsDir } from "../run-log.ts";
 
 export interface FeatureDeps {
   cwd: string;
@@ -207,10 +208,21 @@ export async function runFeatureWorkflow(
     // its earlier directory, found via the description marker — which also
     // covers reruns whose TITLE gets worded differently.
     const { title, prd, tasks } = splitPlannerOutput(plan.text);
-    if (!hasValidTaskList(tasks)) {
+    const taskValidation = validateTaskList(tasks);
+    if (!taskValidation.valid) {
+      const rejectedPath = plannerRejectedArtifactPath(deps.cwd, runId);
+      let persisted = true;
+      try {
+        mkdirSync(runsDir(deps.cwd), { recursive: true });
+        writeFileSync(rejectedPath, plan.text, "utf8");
+      } catch {
+        persisted = false;
+      }
       return {
         status: "needs_human",
-        reason: "planner returned no valid granular TASKS section; the plan cannot be approved safely",
+        reason:
+          `${taskValidation.message}; the plan cannot be approved safely. ` +
+          `${persisted ? "Rejected planner output saved to" : "Could not save rejected planner output; expected path:"} ${rejectedPath}`,
         usage,
       };
     }
@@ -663,7 +675,9 @@ export function slugify(description: string): string {
  * writing. Anything before the `## TITLE`/`## PRD` heading (conversational
  * preamble the model was told not to emit) never reaches the artifact files.
  * A missing or empty TITLE yields null and the caller falls back to the raw
- * description for the slug.
+ * description for the slug. A missing TASKS section is returned as an empty
+ * string so validation can report that specific failure without inventing an
+ * approvable-looking section.
  */
 export function splitPlannerOutput(text: string): { title: string | null; prd: string; tasks: string } {
   const titleMatch = /^#{1,3}\s*TITLE\b\s*\n?/im.exec(text);
@@ -676,14 +690,83 @@ export function splitPlannerOutput(text: string): { title: string | null; prd: s
   const marker = /^#{1,3}\s*TASKS\b/im;
   const match = marker.exec(body);
   if (!match) {
-    return { title, prd: body, tasks: "# Tasks\n\n_(planner returned no task section)_\n" };
+    return { title, prd: body, tasks: "" };
   }
   return { title, prd: body.slice(0, match.index).trim(), tasks: body.slice(match.index).trim() };
 }
 
+export type TaskListValidation =
+  | { valid: true; ids: string[] }
+  | {
+      valid: false;
+      reason: "missing_section" | "no_valid_ids" | "placeholder_description" | "duplicate_ids";
+      message: string;
+    };
+
+const TASKS_SECTION = /^#{1,3}\s*TASKS\b/im;
+const LIST_TASK = /^\s*(?:[-*]|\d+[.)])(?:\s+\[(?: |x|X)\])?\s+(?:\*\*)?(T\d+)(?:\*\*)?(?=\s|$|[—:])/i;
+const HEADING_TASK = /^\s*#{1,6}\s+(?:\*\*)?(T\d+)(?:\*\*)?(?=\s|$|[—:])/i;
+const PLACEHOLDER = /^(?:todo|tbd|placeholder|fill(?:\s+this)?\s+in)(?:\b|$)/i;
+
+/** Ignore Markdown emphasis when deciding whether a task description is a placeholder. */
+function normalizePlaceholderDescription(description: string): string {
+  return description.replace(/(`{1,3}|\*\*|__|~~|[*_~])/g, "").replace(/\s+/g, " ").trim();
+}
+
+/** Validate granular task IDs while tolerating common Markdown list syntax. */
+export function validateTaskList(tasks: string): TaskListValidation {
+  if (!TASKS_SECTION.test(tasks)) {
+    return {
+      valid: false,
+      reason: "missing_section",
+      message: "planner TASKS section is missing",
+    };
+  }
+
+  const ids: string[] = [];
+  let hasPlaceholder = false;
+  for (const line of tasks.split(/\r?\n/)) {
+    const match = LIST_TASK.exec(line) ?? HEADING_TASK.exec(line);
+    if (!match) continue;
+    const id = match[1]!.toUpperCase();
+    const description = line.slice(match[0].length).trim().replace(/^(?:—|[-:])\s*/, "").trim();
+    const normalizedDescription = normalizePlaceholderDescription(description);
+    if (!normalizedDescription || PLACEHOLDER.test(normalizedDescription)) hasPlaceholder = true;
+    ids.push(id);
+  }
+
+  if (hasPlaceholder) {
+    return {
+      valid: false,
+      reason: "placeholder_description",
+      message: "planner TASKS section contains a placeholder task description",
+    };
+  }
+
+  if (ids.length === 0) {
+    return {
+      valid: false,
+      reason: "no_valid_ids",
+      message: "planner TASKS section contains no valid granular task IDs",
+    };
+  }
+
+  const duplicates = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))];
+  if (duplicates.length > 0) {
+    return {
+      valid: false,
+      reason: "duplicate_ids",
+      message: `planner TASKS section contains duplicate task IDs: ${duplicates.join(", ")}`,
+    };
+  }
+
+  return { valid: true, ids };
+}
+
 /** A plan must contain at least one stable task id before the human gate. */
 export function hasValidTaskList(tasks: string): boolean {
-  if (!/^#{1,3}\s*TASKS\b/im.test(tasks)) return false;
-  const ids = [...tasks.matchAll(/^\s*(?:[-*]|\d+[.)])\s*(T\d+)\b/gim)].map((m) => m[1]!.toUpperCase());
-  return ids.length > 0 && new Set(ids).size === ids.length;
+  return validateTaskList(tasks).valid;
 }
+
+export const plannerRejectedArtifactPath = (cwd: string, runId: string): string =>
+  join(runsDir(cwd), `${runId}.planner-rejected.md`);

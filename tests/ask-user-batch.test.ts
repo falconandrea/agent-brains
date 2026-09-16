@@ -51,14 +51,15 @@ function fakeCtx() {
 const question = (over: Partial<BatchQuestion> = {}): BatchQuestion => ({
   question: "Which cache backend?",
   options: ["Redis", "In-memory"],
-  recommendation: "In-memory — no new dependency",
+  recommendedOption: "B",
+  recommendationReason: "No new dependency",
   ...over,
 });
 
 // --- schema: the hard limits live in the TypeBox schema ----------------------
 
 test("the batch schema enforces 1-6 questions and 2-3 options per question", () => {
-  const questions = ASK_USER_BATCH_PARAMETERS.properties.questions as {
+  const questions = ASK_USER_BATCH_PARAMETERS.properties.questions as unknown as {
     minItems?: number;
     maxItems?: number;
     items: {
@@ -66,7 +67,8 @@ test("the batch schema enforces 1-6 questions and 2-3 options per question", () 
       properties: {
         options: { minItems?: number; maxItems?: number };
         question: { type: string };
-        recommendation: { type: string };
+        recommendedOption: { anyOf?: Array<{ const?: string }> };
+        recommendationReason: { type: string; minLength?: number };
       };
     };
   };
@@ -74,7 +76,12 @@ test("the batch schema enforces 1-6 questions and 2-3 options per question", () 
   assert.equal(questions.maxItems, MAX_BATCH_QUESTIONS);
   assert.equal(questions.items.properties.options.minItems, 2);
   assert.equal(questions.items.properties.options.maxItems, 3);
-  for (const field of ["question", "options", "recommendation"]) {
+  assert.deepEqual(
+    questions.items.properties.recommendedOption.anyOf?.map((option) => option.const),
+    ["A", "B", "C"],
+  );
+  assert.equal(questions.items.properties.recommendationReason.minLength, 1);
+  for (const field of ["question", "options", "recommendedOption", "recommendationReason"]) {
     assert.ok(
       questions.items.required?.includes(field),
       `${field} is required on every question`,
@@ -103,7 +110,29 @@ test("parseBatchQuestions rejects empty batches and malformed decisions", () => 
     false,
     "bare-number options are a schema-filling mistake",
   );
-  assert.equal(parseBatchQuestions({ questions: [question({ recommendation: "" })] }).ok, false);
+  assert.equal(parseBatchQuestions({ questions: [question({ recommendationReason: "" })] }).ok, false);
+  assert.equal(
+    parseBatchQuestions({ questions: [{ ...question(), recommendedOption: "D" }] }).ok,
+    false,
+    "recommendations may only point to A, B or C",
+  );
+  assert.equal(
+    parseBatchQuestions({ questions: [question({ recommendedOption: "C" })] }).ok,
+    false,
+    "the recommendation must point to an option that exists",
+  );
+});
+
+test("parseBatchQuestions preserves the structured recommendation", () => {
+  const result = parseBatchQuestions({ questions: [question()] });
+  assert.equal(result.ok, true);
+  if (!result.ok) throw new Error("expected a valid structured recommendation");
+  assert.deepEqual(result.questions[0], {
+    question: "Which cache backend?",
+    options: ["Redis", "In-memory"],
+    recommendedOption: "B",
+    recommendationReason: "No new dependency",
+  });
 });
 
 // --- tool routing ------------------------------------------------------------
@@ -124,10 +153,20 @@ test("renderBatchQuestions produces one numbered list with options and recommend
   ]);
   assert.match(rendered, /^1\. Which cache backend\?$/m);
   assert.match(rendered, /^   A\. Redis$/m);
-  assert.match(rendered, /^   B\. In-memory$/m);
-  assert.match(rendered, /^   ★ In-memory — no new dependency$/m);
+  assert.match(rendered, /^   B\. In-memory ★$/m);
+  assert.match(rendered, /^   ↳ No new dependency$/m);
+  assert.doesNotMatch(rendered, /^\s+★/m, "the recommendation is not a separate option-like row");
   assert.match(rendered, /^2\. Dark mode at launch\?$/m);
   assert.match(rendered, /^   C\. Later$/m);
+});
+
+test("a recommendation cannot be interpreted as an additional option", () => {
+  const rendered = renderBatchQuestions([question()]);
+
+  assert.match(rendered, /A\. Redis/);
+  assert.match(rendered, /B\. In-memory ★/);
+  assert.match(rendered, /↳ No new dependency/);
+  assert.doesNotMatch(rendered, /^\s+[CD]\. /m, "no third/fourth option is created by the recommendation");
 });
 
 test("batch chrome is language-neutral: no fixed English labels reach the dialog", () => {
@@ -199,5 +238,7 @@ test("the planner prompt prescribes batching and assumption fallback, not sequen
   assert.match(prompt, /ONE exceptional second ask_user_batch call/, "one exceptional retry");
   assert.match(prompt, /NEVER fall back to question-by-question follow-ups/, "no sequential loop");
   assert.match(prompt, /assumption you\s+must list in the PRD's Assumptions/, "unclear answers become assumptions");
+  assert.match(prompt, /- T1 — concrete description.*Files:/, "tasks use the canonical list entry");
+  assert.match(prompt, /IDs.*unique[\s\S]*immediately after the list marker/i);
   assert.doesNotMatch(prompt, /\bask_user\b/, "the planner is never pointed at the single-decision tool");
 });
