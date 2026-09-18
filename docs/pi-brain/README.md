@@ -22,8 +22,8 @@ OpenCode/Codex through `setup.sh`.
 | Real `/feature` runs | several completed end-to-end (2026-08-21 → 2026-08-23): gates, ask_user mid-run, review rounds, classified warnings, run-state log persisted and read back via `/flow log` |
 
 Follow-up work on Pi plugins, context hygiene and skill improvements is tracked
-in the [plugin adoption roadmap](../plans/pi-plugin-adoption-roadmap.md). Its
-current next action is **R0.1: repair the local grilling path**.
+in the [plugin adoption roadmap](../plans/pi-plugin-adoption-roadmap.md), which
+is the source of truth for the next action.
 
 The spike proves every Pi primitive pi-brain uses (including `ask_user` mid-run).
 Real runs have since covered the whole pipeline on real features.

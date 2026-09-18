@@ -2,7 +2,7 @@
 
 **Created:** 2026-09-08
 
-**Status:** planned — next action is R0.1
+**Status:** planned — next action is R0.2
 
 **Source of truth for execution status:** this document
 
@@ -54,8 +54,7 @@ R2 Conditional runtime decision
 
 F0 is an adjacent `pi-brain` interaction fix, not part of the grilling repair.
 It is tracked here so the two question models remain explicit and cannot drift
-back into each other. It does not change R0.1's status as the current next
-action.
+back into each other.
 
 ## F0 — `/feature` interaction correction
 
@@ -66,7 +65,7 @@ action.
 schema/routing/rendering/validation), `#buildAskUserBatchTool` in
 `src/pi/pi-agent-runner.ts`, planner prompt in
 `src/workflows/feature-prompts.ts`, tests in `tests/ask-user-batch.test.ts`
-and `tests/unit.test.ts`. R0.1 remains the current next action.
+and `tests/unit.test.ts`.
 
 `/feature` and explicit grilling have different interaction contracts:
 
@@ -115,23 +114,26 @@ required to restore `/feature` batching and must not expand F0.1.
 
 ### R0.1 Repair the grilling path
 
-**Status:** NEXT
+**Status:** completed 2026-09-18 — official skill validation, policy parsing,
+structural acceptance checks and `git diff --check` pass. The behavioral evals
+are defined as manual protocols; no transcript is claimed until they are run.
 
-- [ ] Remove the unresolved `domain-modeling` dependency from
+- [x] Remove the unresolved `domain-modeling` dependency from
   `grill-with-docs`, or add an intentionally designed replacement.
-- [ ] Add a persistent shared-understanding checkpoint containing known facts,
+- [x] Add a persistent shared-understanding checkpoint containing known facts,
   open decisions, assumptions, coverage and decision branches.
-- [ ] Add an explicit `interview → output selection → output` phase boundary.
-- [ ] Keep the existing one-question-at-a-time behavior.
-- [ ] Add representative skill evals before replacing the current version.
+- [x] Add an explicit `interview → output selection → output` phase boundary.
+- [x] Keep the existing one-question-at-a-time behavior.
+- [x] Add representative skill evals before replacing the current version.
 
 **Acceptance:** invoking `grill-with-docs` uses only available skills, preserves
 one current checkpoint and cannot enter an output-producing phase without
-explicit user approval.
+explicit user approval. The repaired skill and its three behavioral eval cases
+are in `.agents/skills/grill-with-docs/`.
 
 ### R0.2 Tighten the context templates
 
-**Status:** pending — may run after R0.1
+**Status:** NEXT
 
 - [ ] Reduce `templates/AGENTS.md` to stable directives, authority order and
   routing pointers; remove duplicated skill catalogs and workflow tutorials.
@@ -292,4 +294,4 @@ A future session should:
 4. Change exactly one item to `IN PROGRESS`.
 5. Record evidence and the promote/reject decision here when the item ends.
 
-**Next action:** R0.1 — repair and test the local grilling path.
+**Next action:** R0.2 — tighten the project context templates.
