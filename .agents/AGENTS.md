@@ -4,8 +4,7 @@
 
 - To update project progress → edit `.ai/memory/progress.md`
 - To log a new lesson learned → edit `.ai/memory/lessons.md`
-- To track a blocker → edit `.ai/memory/blockers.md`
-- To update API contracts → edit `.ai/context/API_CONTRACTS.md`
+- To track a blocker → record it in `.ai/memory/progress.md` under Blockers
 - To update tech stack info → edit `.ai/context/TECH_STACK.md`
 
 > [!WARNING]

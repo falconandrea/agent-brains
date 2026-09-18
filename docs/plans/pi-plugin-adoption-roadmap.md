@@ -2,7 +2,7 @@
 
 **Created:** 2026-09-08
 
-**Status:** planned — next action is R0.2
+**Status:** planned — next action is R0.3
 
 **Source of truth for execution status:** this document
 
@@ -133,16 +133,20 @@ are in `.agents/skills/grill-with-docs/`.
 
 ### R0.2 Tighten the context templates
 
-**Status:** NEXT
+**Status:** completed 2026-09-18 — `templates/AGENTS.md` reduced to
+ownership/precedence plus routing pointers (no skill catalog, no workflow
+tutorials), `templates/.ai/memory/progress.md` reduced to a current-state
+snapshot, the stale per-blocker file reference and the malformed heading
+character removed, `git diff --check` clean. No R0.3 code introduced.
 
-- [ ] Reduce `templates/AGENTS.md` to stable directives, authority order and
+- [x] Reduce `templates/AGENTS.md` to stable directives, authority order and
   routing pointers; remove duplicated skill catalogs and workflow tutorials.
-- [ ] Simplify `templates/.ai/memory/progress.md` to current phase, active task,
+- [x] Simplify `templates/.ai/memory/progress.md` to current phase, active task,
   blockers and next actions.
-- [ ] Remove the reference to the missing `blockers.md` or deliberately add the
-  file to the scaffold.
-- [ ] Fix the malformed heading character in `progress.md`.
-- [ ] Document one owner per fact type: instructions, context, feature specs,
+- [x] Remove the reference to the missing per-blocker file (blockers live in
+  `progress.md`; no separate file added to the scaffold).
+- [x] Fix the malformed heading character in `progress.md`.
+- [x] Document one owner per fact type: instructions, context, feature specs,
   lessons, progress and session history.
 
 **Acceptance:** the templates have no broken references or duplicated sources
@@ -156,6 +160,9 @@ the whole `.ai/` tree.
 - [ ] Extend `lessons-gardener` or add a sibling `context-audit` skill.
 - [ ] Detect stale implementation claims, contradictions with code/ADRs,
   duplicate authority, broken references and abnormal file growth.
+- [ ] Classify references by role and authority: validate operational paths,
+  distinguish historical or descriptive mentions, and treat non-canonical
+  research as evidence rather than current project truth.
 - [ ] Keep diagnosis read-only until the user approves a proposed rewrite.
 - [ ] Preserve the current lessons admission rule: retain only non-obvious,
   project-specific knowledge an agent would otherwise lose.
@@ -294,4 +301,4 @@ A future session should:
 4. Change exactly one item to `IN PROGRESS`.
 5. Record evidence and the promote/reject decision here when the item ends.
 
-**Next action:** R0.2 — tighten the project context templates.
+**Next action:** R0.3 — add a read-only context audit.
