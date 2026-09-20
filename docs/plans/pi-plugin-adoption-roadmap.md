@@ -2,7 +2,7 @@
 
 **Created:** 2026-09-08
 
-**Status:** planned — next action is R0.3
+**Status:** planned — next action is R0.4
 
 **Source of truth for execution status:** this document
 
@@ -155,16 +155,33 @@ the whole `.ai/` tree.
 
 ### R0.3 Add a read-only context audit
 
-**Status:** pending — depends on R0.2
+**Status:** completed 2026-09-20 — implemented as a sibling skill in
+`.agents/skills/context-audit/` (SKILL.md with the read-only contract,
+authority model, reference classification, staleness/contradiction evidence
+rules, duplicate-authority and growth heuristics; implicit invocation left
+enabled so natural-language audit requests load the skill; a strictly
+read-only mechanical helper `scripts/context-audit.mjs` plus
+`context-audit.d.mts`, with a path-deduplicated inventory so ADRs stored under
+`.ai/context/adr(s)` are counted once). Verified: official
+skill validator passes; `npm test` 203/203 including new tests
+(`tests/context-audit.test.ts`: inventory roles, ADR detection and
+`.ai/context/adrs` deduplication, lesson/completed
+counting, unresolved-link candidates, byte+mtime read-only proof on fixtures;
+`tests/unit.test.ts`: `context-audit` resolves through `common`, is classified
+`operational` in `src/skill-router.ts`, and never reaches planner, developer,
+reviewer, tester or security-reviewer children); `tsc --noEmit` clean;
+`git diff --check` clean. The four behavioral evals (CA-1–CA-4) are defined as
+manual protocols in `.agents/skills/context-audit/evals/README.md`; they have
+not been executed and no transcript is claimed.
 
-- [ ] Extend `lessons-gardener` or add a sibling `context-audit` skill.
-- [ ] Detect stale implementation claims, contradictions with code/ADRs,
+- [x] Extend `lessons-gardener` or add a sibling `context-audit` skill.
+- [x] Detect stale implementation claims, contradictions with code/ADRs,
   duplicate authority, broken references and abnormal file growth.
-- [ ] Classify references by role and authority: validate operational paths,
+- [x] Classify references by role and authority: validate operational paths,
   distinguish historical or descriptive mentions, and treat non-canonical
   research as evidence rather than current project truth.
-- [ ] Keep diagnosis read-only until the user approves a proposed rewrite.
-- [ ] Preserve the current lessons admission rule: retain only non-obvious,
+- [x] Keep diagnosis read-only until the user approves a proposed rewrite.
+- [x] Preserve the current lessons admission rule: retain only non-obvious,
   project-specific knowledge an agent would otherwise lose.
 
 **Acceptance:** the audit reports actionable findings with source paths and
@@ -301,4 +318,4 @@ A future session should:
 4. Change exactly one item to `IN PROGRESS`.
 5. Record evidence and the promote/reject decision here when the item ends.
 
-**Next action:** R0.3 — add a read-only context audit.
+**Next action:** R0.4 — pilot an explicit complexity review.

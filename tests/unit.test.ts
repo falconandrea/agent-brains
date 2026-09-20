@@ -121,6 +121,7 @@ const AVAILABLE_SKILLS = (() => {
     "setup",
     "to-tickets",
     "lessons-gardener",
+    "context-audit",
     "long-horizon-brief",
     "improve-codebase-architecture",
   ]) {
@@ -148,9 +149,20 @@ test("each role gets only its categories: developer plans nothing, reviewer revi
 test("no operational skill reaches any pipeline role", () => {
   for (const role of ["planner", "developer", "reviewer", "tester", "security-reviewer"] as const) {
     const sel = selectSkills(PROFILES_DIR, "full", role, AVAILABLE_SKILLS);
-    for (const banned of ["handoff", "start", "setup", "to-tickets", "lessons-gardener", "long-horizon-brief", "improve-codebase-architecture"]) {
+    for (const banned of ["handoff", "start", "setup", "to-tickets", "lessons-gardener", "context-audit", "long-horizon-brief", "improve-codebase-architecture"]) {
       assert.ok(!sel.skills.includes(banned), `${banned} must not reach ${role}`);
     }
+  }
+});
+
+test("context-audit resolves through common and never reaches a pipeline role", () => {
+  const common = resolveProfile(PROFILES_DIR, "common");
+  assert.ok(common.skills.includes("context-audit"), "context-audit must be listed in common.list");
+  const available = new Set(common.skills);
+  for (const role of ["planner", "developer", "reviewer", "tester", "security-reviewer"] as const) {
+    const sel = selectSkills(PROFILES_DIR, "common", role, available);
+    assert.ok(!sel.skills.includes("context-audit"), `context-audit must not reach ${role}`);
+    assert.ok(!sel.missing.includes("context-audit"), `context-audit must not surface as missing for ${role}`);
   }
 });
 
