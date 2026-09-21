@@ -2,7 +2,7 @@
 
 **Created:** 2026-09-08
 
-**Status:** planned — next action is R0.4
+**Status:** R0 complete — next action is R1.1 (starts only on explicit request)
 
 **Source of truth for execution status:** this document
 
@@ -189,16 +189,49 @@ does not mutate any context file before approval.
 
 ### R0.4 Pilot an explicit complexity review
 
-**Status:** pending — independent after R0.1
+**Status:** completed 2026-09-21 — `ponytail-review` added under `extra/skills/`
+(adapted from upstream ponytail at `356918e` with attribution and MIT `LICENSE`
+retained; `agents/openai.yaml` sets `allow_implicit_invocation: false`). Verified:
+official skill validator passes (`quick_validate.py` from the skill-creator
+system skill, run with PyYAML installed in a throwaway venv); `npm test` 210/210 including new structural
+invariants (`tests/extra-skills.test.ts`: location under `extra/skills`,
+explicit-only policy, license and attribution, absence from profiles,
+`src/skill-router.ts` and `setup.sh`); `tsc --noEmit` clean; `git diff --check`
+clean. Ten read-only evaluator runs of record (3 single-lens skills x 2 real
+diffs — `96c639b..763387a` implementation-heavy, `906c47e..ed43993`
+skill/doc-heavy — plus `code-review` executed faithfully per its two-sub-agent
+contract per diff; an initial single-context proxy run of `code-review` is
+preserved superseded) with findings, overlap matrix and decision preserved in
+[docs/evals/complexity-review/R0.4-ponytail-pilot.md](../evals/complexity-review/R0.4-ponytail-pilot.md);
+the exact prompts, verbatim evaluator outputs and configuration snapshot are
+preserved beside it in
+[docs/evals/complexity-review/runs/](../evals/complexity-review/runs/README.md)
+(classified as substantial evidence with documented limitation: per-run model
+variant and tool-call transcripts not exported). Explicit invocation path
+documented in the report from the official Codex/OpenCode docs: the skill is
+verified absent from every auto-load surface and is dormant until manually
+installed (Codex: symlink into `$HOME/.agents/skills/`; OpenCode: a skills
+directory); explicit-only is enforced by the skill's own files — Codex:
+`agents/openai.yaml` `allow_implicit_invocation: false`; OpenCode V2:
+`metadata.opencode/autoinvoke: false` in the frontmatter (ignored by the
+locally installed V1, where only approval-gated `ask` or disabling `deny` are
+available); a live invocation check remains an open follow-up.
+Decision: keep `ponytail-review` as an explicit standalone skill (promotion
+criterion met via the actionable `--adr-dir` YAGNI deletion); do not merge into
+`code-review` during R0.4. `ponytail-audit` deliberately omitted — no distinct
+whole-repo need emerged and `improve-codebase-architecture` already covers
+repo-wide surveys. No pilot findings were applied.
 
-- [ ] Add `ponytail-review` and optionally `ponytail-audit` under
-  `extra/skills`, with attribution and license retained.
-- [ ] Keep them explicit-only; do not add the Ponytail base persona to
+- [x] Add `ponytail-review` and optionally `ponytail-audit` under
+  `extra/skills`, with attribution and license retained. (Review skill only;
+  audit omitted with recorded evidence.)
+- [x] Keep them explicit-only; do not add the Ponytail base persona to
   `profiles/common.list`.
-- [ ] Compare findings on two real diffs against `karpathy-guidelines`,
+- [x] Compare findings on two real diffs against `karpathy-guidelines`,
   `simplify` and `code-review`.
-- [ ] If useful, decide between keeping a standalone skill or adding a clearly
-  separate Complexity axis to local review.
+- [x] If useful, decide between keeping a standalone skill or adding a clearly
+  separate Complexity axis to local review. (Keep standalone; revisit after
+  further real use.)
 
 **Acceptance:** the pilot finds actionable deletions or native/stdlib
 replacements without duplicating correctness, security or spec findings.
@@ -318,4 +351,5 @@ A future session should:
 4. Change exactly one item to `IN PROGRESS`.
 5. Record evidence and the promote/reject decision here when the item ends.
 
-**Next action:** R0.4 — pilot an explicit complexity review.
+**Next action:** R1.1 — trial `pi-vcc`; start only after an explicit user
+request. Do not install `pi-vcc` as part of R0.4 or before that request.
