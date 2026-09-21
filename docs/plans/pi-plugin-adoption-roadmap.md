@@ -218,9 +218,13 @@ locally installed V1, where only approval-gated `ask` or disabling `deny` are
 available); a live invocation check remains an open follow-up.
 Decision: keep `ponytail-review` as an explicit standalone skill (promotion
 criterion met via the actionable `--adr-dir` YAGNI deletion); do not merge into
-`code-review` during R0.4. `ponytail-audit` deliberately omitted — no distinct
-whole-repo need emerged and `improve-codebase-architecture` already covers
-repo-wide surveys. No pilot findings were applied.
+`code-review` during R0.4. Use it as an optional complexity pass after the normal
+Standards/Spec review for substantial diffs that introduce abstractions,
+configuration, dependencies, refactors or significant code volume; do not run it
+by default for every small or documentation-only review. `ponytail-audit`
+deliberately omitted — no distinct whole-repo need emerged and
+`improve-codebase-architecture` already covers repo-wide surveys. No pilot
+findings were applied.
 
 - [x] Add `ponytail-review` and optionally `ponytail-audit` under
   `extra/skills`, with attribution and license retained. (Review skill only;
@@ -230,8 +234,9 @@ repo-wide surveys. No pilot findings were applied.
 - [x] Compare findings on two real diffs against `karpathy-guidelines`,
   `simplify` and `code-review`.
 - [x] If useful, decide between keeping a standalone skill or adding a clearly
-  separate Complexity axis to local review. (Keep standalone; revisit after
-  further real use.)
+  separate Complexity axis to local review. (Keep standalone as an optional
+  post-Standards/Spec complexity pass; revisit default integration after further
+  real use.)
 
 **Acceptance:** the pilot finds actionable deletions or native/stdlib
 replacements without duplicating correctness, security or spec findings.
