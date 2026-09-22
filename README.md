@@ -2,10 +2,10 @@
 
 Centralized repository for AI agent configurations, skills, and project templates. Share cognitive abilities across projects and bootstrap AI-native context structures.
 
-> **Branch `pi-brain`** — experimental: turns this repo into a [Pi](https://pi.dev)
+> **Pi workflow harness** — this repository is also a [Pi](https://pi.dev)
 > package that orchestrates plan → develop → verify → independent review as a
 > `/feature` workflow, reusing the same `.agents/skills/` and `profiles/*.list`.
-> See [docs/pi-brain/README.md](docs/pi-brain/README.md). `main` is unaffected.
+> The harness is part of `main`; see [docs/pi-brain/README.md](docs/pi-brain/README.md).
 
 ## Repository structure
 

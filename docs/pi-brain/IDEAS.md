@@ -361,9 +361,10 @@ both plan-review and dev-review re-correlates "rules" with their enforcement
 **Status:** IMPLEMENTED 2026-08-25 (`/flow resume <runId>`, src/workflows/resume.ts).
 Kept for design context.
 
-**Status:** idea, well-supported by existing pieces. Triggered by the first
-real need: a run that died at review because the reviewer provider's quota
-was exhausted (2026-08-18) forced a full restart, planner questions included.
+**Status (historical, pre-implementation):** idea, well-supported by existing
+pieces. Triggered by the first real need: a run that died at review because
+the reviewer provider's quota was exhausted (2026-08-18) forced a full
+restart, planner questions included.
 
 **What already exists.** Every workflow event is persisted via
 `pi.appendEntry` (survives crashes); the developer's state IS the uncommitted

@@ -7,8 +7,8 @@ Local multi-agent workflow harness for [Pi](https://pi.dev), built on top of the
 deterministic checks → independent reviewer agent (different model) → bounded
 fix loop → summary. **It never commits.**
 
-This lives on the `pi-brain` branch. `main` is unchanged and still serves
-OpenCode/Codex through `setup.sh`.
+Pi-brain is part of the repository's canonical `main` branch and coexists with
+the OpenCode/Codex setup managed through `setup.sh`.
 
 ---
 
@@ -16,7 +16,7 @@ OpenCode/Codex through `setup.sh`.
 
 | | |
 |---|---|
-| Pi-free logic (profiles, stack, context routing, verification, tri-state gate, review loop, run lock, workflow) | implemented, 196 tests green |
+| Pi-free logic (profiles, stack, context routing, verification, tri-state gate, review loop, run lock, workflow) | implemented, 212 tests green |
 | Pi SDK layer (`src/pi/`, `extensions/pi-brain.ts`) | typechecked against pi-coding-agent 0.84.2, **exercised by real runs since 2026-08-21** |
 | Spike proving the Pi APIs | **passed 2026-08-17 on 0.84.2** — all checks, see [SPIKE.md](./SPIKE.md) |
 | Real `/feature` runs | several completed end-to-end (2026-08-21 → 2026-08-23): gates, ask_user mid-run, review rounds, classified warnings, run-state log persisted and read back via `/flow log` |
@@ -34,8 +34,8 @@ Real runs have since covered the whole pipeline on real features.
 
 ```bash
 npm install -g --ignore-scripts @earendil-works/pi-coding-agent
-cd ~/dev/personal/agent-brains && git checkout pi-brain
-npm install                      # peer deps only
+cd /path/to/agent-brains
+npm install                      # devDeps + the Pi peer deps
 pi install .                     # or: pi install -l . inside a project
 ```
 
@@ -126,8 +126,8 @@ src/                       everything else — no Pi, unit-tested
   context-router.ts        which .ai/ docs each role/task actually needs
   run-lock.ts              one writing run per repository
   workflows/feature.ts     the deterministic state machine
-profiles/*.list            unchanged, shared with main
-.agents/skills/            unchanged canonical skill store
+profiles/*.list            skill lists per stack; setup.sh ships the same lists to OpenCode
+.agents/skills/            canonical skill store shared by Pi and OpenCode
 spike/                     capability spike, run before trusting src/pi/
 ```
 

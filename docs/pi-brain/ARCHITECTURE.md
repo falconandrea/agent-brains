@@ -93,8 +93,9 @@ never reaches an Astro developer, a planning skill never reaches the
 developer/reviewer, and operational/session skills (handoff, start, setup…)
 never reach any pipeline child.
 
-**Profiles stay `.list`.** Same files `setup.sh` uses on `main`. The spec sketched
-YAML; converting would have broken the OpenCode path for no gain.
+**Profiles stay `.list`.** The same canonical manifests drive both
+`setup.sh` and pi-brain's role routing. The spec sketched YAML; converting
+would have broken the OpenCode path for no gain.
 
 **Config is JSON.** Zero dependencies. Swap `loadFile()` in `src/config.ts` if
 YAML ever becomes worth a dep.
@@ -113,10 +114,6 @@ code it was never shown. Nothing is committed.
 
 ## Known gaps
 
-- `src/pi/` primitives are proven by the spike (2026-08-17, 0.84.2). The
-  `/feature` pipeline's spec phase (planner → PRD/TASKS → gate) has run
-  against real models (2026-08-18, glm-5.3 planner); developer → verify →
-  reviewer have not yet.
 - The `ask_user`-mid-child-run path **works** for a single dialog (spike
   check 4). Two failure modes surfaced on 2026-08-18 (runs against
   search-flights, Pi 0.84.2):
@@ -178,11 +175,12 @@ code it was never shown. Nothing is committed.
   tolerance. `/flow log` reads from this file and `/flow log-all` lists every
   persisted run. This exists BECAUSE `pi.appendEntry` proved unreliable —
   two incidents (2026-08-21/22) of completed runs leaving no session trace
-  and a lost needs_human outcome with all its review findings. Resume UX on
-  top of this log is still missing (IDEAS.md).
+  and a lost needs_human outcome with all its review findings. `/flow
+  resume` rebuilds an interrupted run from this log
+  (src/workflows/resume.ts; design context in IDEAS.md).
 - Per-agent token usage is captured from `agent_end`, aggregated per role in
   the workflow (`UsageByRole`) and surfaced in the final summary and
   `/flow status` (live, folded from `agent.completed` events). Caveat:
   `pi.appendEntry` durability is NOT guaranteed — a completed run left no
-  session trace on disk (2026-08-21); the persisted-usage story belongs to
-  the run-state file planned in IDEAS.md (resume mode).
+  session trace on disk (2026-08-21); per-role usage is persisted to the
+  run-state file and `/flow resume` seeds its counters from it.
