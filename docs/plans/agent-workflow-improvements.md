@@ -2,7 +2,8 @@
 
 **Created:** 2026-08-08
 
-**Updated:** 2026-08-30 (W4 promoted; W1.1 approval pending)
+**Updated:** 2026-09-22 (W1.1 design review, W1.6 pilot contract resolved in
+D15; approval pending)
 
 **Status:** in progress — W1.1 design approval pending; W1 trial not started
 
@@ -219,7 +220,9 @@ Create a solution only if **at least three** of these conditions hold:
 - **W1.5** Extend `lessons-gardener` to detect broken references, duplicates
   and potentially obsolete solutions, always with approval before writing.
 - **W1.6** Try capture and retrieval on at least two different real
-  problems.
+  problems: one captured solution per problem, retrieval of both verified in
+  a subsequent fresh session, and a trivial fast-path passage embedded in
+  one case that must produce no capture proposal or artifact.
 
 ### Design defaults
 
@@ -231,8 +234,8 @@ Create a solution only if **at least three** of these conditions hold:
 
 ### Trial success and abandonment
 
-- **Success:** at least one solution is retrieved and used correctly in a
-  subsequent task.
+- **Success:** both captured solutions are retrieved from symptom terms and
+  used correctly in a subsequent fresh session.
 - **Abandonment:** unused folder; obvious documents; duplication of
   `lessons.md`; disproportionate manual maintenance. In any of these cases
   W1 is discarded and `solutions/` removed.
@@ -503,6 +506,7 @@ Allowed status values: `pending`, `in_progress`, `completed`, `blocked`,
 | 2026-08-30 | D12 | W1.1 pilot contract uses the existing `lessons.md` format, a positive-verification precondition plus the literal three-of-five eligibility rule, and a provisional 180-day review signal | Preserves the documented index contract; keeps verification and capture eligibility distinct; makes staleness testable without automatic invalidation; W1.6 evidence can revise the threshold before promotion |
 | 2026-08-30 | D13 | W0/W4 gates remain open until raw session exports, run configuration and comparison evidence are persisted in the repository | Temporary reports and incomplete metadata are not reproducible evidence; statuses must follow the protocol rather than an agent summary |
 | 2026-08-30 | D14 | Promote W4 assessment routing in the existing `research` skill | The persisted pino rerun exposes `assessment` for decisions and `research` for neutral comparisons, preserves the shared evidence contract, adds no dependency or source change, and passes the explicit user promotion gate |
+| 2026-09-22 | D15 | W1.6 pilot contract: capture on two distinct real problems plus verified retrieval of both in a subsequent fresh session; the fast-path check is a trivial passage embedded in one case, not a third problem | The literal capture-and-retrieval-on-two-problems demand is satisfiable within the two-session/two-problem budget only in this form, and two captured solutions make the retrieval check discriminating instead of vacuous |
 
 ## Questions to decide during the work
 
@@ -530,8 +534,10 @@ phase with evidence.
 | 2026-08-30 | W4 promotion gate audit | Reopened the W4 gate; the existing promotion claim is not supported until the baseline and W4 comparison meet the protocol | [D13](#decision-log), [W4 result](../evals/agent-workflows/results/W4-2026-08-30.md) | Keep W1 blocked until W4 is explicitly promoted or abandoned |
 | 2026-08-30 | W4 promotion gate | Promoted the updated `research` skill after the persisted pino assessment/neutral reruns passed the routing and report-only checks | [D14](#decision-log), [W4 result](../evals/agent-workflows/results/W4-2026-08-30.md) | Start the W1.1 design approval gate |
 | 2026-08-30 | W1.1 | Defined the solution document shape, three-of-five eligibility rule with separate positive-verification precondition, single approval step, provisional 180-day review signal, progressive retrieval contract, and two-session/two-problem pilot checks | [W1 design](../evals/agent-workflows/W1-solution-capture-design.md), D12 | After W0/W4 evidence is accepted, return to the W1.1 design approval gate |
+| 2026-09-22 | W1.1 design review | Verified the design candidate against the plan, the lessons index contract and the eval protocol; required persisted run-sheet evidence for the pilot and tightened the correctness check; resolved the W1.6 conformance blocker via the D15 pilot contract (two captures, retrieval of both, embedded fast-path passage); no template, scaffold or workflow-skill changes | [W1 design](../evals/agent-workflows/W1-solution-capture-design.md), D15 | User decides the W1.1 design approval gate under the D15 contract |
 
 ## Next step
 
-W4 is promoted. Start the W1.1 design approval gate, keeping the trial within
-the existing budget of two sessions and two real problems.
+W4 is promoted. The W1.1 design candidate incorporates the D15 pilot
+contract and awaits the explicit user approval decision; on approval, W1.2
+starts within the existing budget of two sessions and two real problems.

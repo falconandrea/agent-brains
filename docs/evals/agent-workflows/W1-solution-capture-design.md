@@ -204,25 +204,36 @@ The W1 trial must demonstrate all of the following:
 
 - **Fast path:** an obvious or one-line task produces no solution artifact and
   no unnecessary capture ceremony.
-- **Correctness:** a candidate containing an unsupported claim is corrected or
-  rejected before the approval gate.
+- **Correctness:** a proposal containing an unsupported claim is corrected
+  before being presented or rejected at the gate; no written document
+  presents an unverified claim as fact.
 - **Neutrality:** the workflow does not silently introduce a product or
   architecture decision; decisions remain explicit and user-approved.
 - **Approval:** capture has one clear gate between proposal and writing.
-- **Retrieval:** from a known symptom, a fresh agent finds the pertinent
-  solution using targeted terms without reading every solution.
+- **Retrieval:** from a known symptom, a fresh agent finds each pertinent
+  solution among those captured using targeted terms, without reading every
+  solution in full.
 - **No duplication:** `lessons.md` stays in single-line format and the
   extended document contains the detail.
 - **Fact boundaries:** the template makes observed symptoms, verified causes,
   failed attempts, applied solution, and verification distinguishable.
 
-The two-problem trial records evidence for each check in a run sheet. One
-problem must be an obvious fast-path task, and the other must be a difficult,
-verified problem that qualifies for capture. A subsequent fresh session uses
-only the symptom terms and the index to retrieve the captured solution. The
-trial is successful only if that solution is found and used correctly; no
-solution is captured for the fast-path task. The trial is capped at two
-sessions and two real problems; it is not extended to compensate for a
+Both real problems qualify for capture, and each produces exactly one
+approved solution and one index line. The fast-path check is a trivial
+passage embedded inside one of the two cases; it must produce no capture
+proposal or artifact, and it is not a third problem. If a second qualifying
+problem does not arise live, the explicit-invocation path of the capture
+gate may be used on a recently solved real problem, through the same
+proposal and approval gate. A subsequent fresh session verifies retrieval of
+both captured solutions: starting from the symptom terms and the index
+alone, the agent must find each pertinent document among those captured,
+without reading every solution in full, and use it correctly.
+
+Each check is recorded in a run sheet persisted under
+`docs/evals/agent-workflows/` with its complete raw session export and
+configuration snapshot, following the repository's evaluation protocol; an
+agent-generated summary alone is not trial evidence. The trial is capped at
+two sessions and two real problems; it is not extended to compensate for a
 negative or neutral result.
 
 ## Deferred work
