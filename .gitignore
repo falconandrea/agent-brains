@@ -9,3 +9,5 @@ dist/
 # local pi runtime plumbing (tracked .pi/*.json config stays visible)
 .pi/pi-brain.lock
 .pi/pi-brain/
+# per-skill symlinks into .agents/skills/, created by `npx skills update` for Pi discovery
+.pi/skills/
