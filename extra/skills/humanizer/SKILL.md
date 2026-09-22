@@ -3,18 +3,20 @@ name: humanizer
 description: |
   Remove signs of AI-generated writing from text. Use when editing or reviewing
   text to make it sound more natural and human-written. Based on Wikipedia's
-  comprehensive "Signs of AI writing" guide. Detects and fixes patterns including:
-  inflated symbolism, promotional language, superficial -ing analyses, vague
-  attributions, em dash overuse, rule of three, AI vocabulary words, passive
-  voice, negative parallelisms, and filler phrases. Includes operational tests
-  for genuine vs. rhythmic 3-item lists, a write-around-or-mark protocol for
-  facts you don't have (never invent them), a remediation-artifact check so
-  the fix pass doesn't just relocate the tell it was meant to remove, and
+  "Signs of AI writing" guide, extended with patterns from no-ai-slop. Detects
+  and fixes inflated symbolism, promotional language, superficial -ing
+  analyses, vague attributions, em dash overuse, rule of three, AI vocabulary,
+  passive voice, negative parallelisms, filler phrases, colon reveals,
+  faux-insight setups, rhetorical question setups, interpretive metadiscourse,
+  and formulaic endings. Includes operational tests for genuine vs. rhythmic
+  3-item lists, a portability test for filler sentences, a write-around-or-mark
+  protocol for facts you don't have (never invent them), a remediation-artifact
+  check so the fix pass doesn't just relocate the tell it was meant to remove,
   detection guidance for what NOT to flag so clean human prose isn't
-  over-edited.
+  over-edited, and a detect-only mode that quotes patterns without rewriting.
 license: MIT
 metadata:
-  version: "2.10.0"
+  version: "2.11.0"
 ---
 
 # Humanizer: Remove AI Writing Patterns
@@ -53,6 +55,10 @@ Two moves, in this order, for anything you (or the draft) can't verify:
 2. **Mark it, only if the sentence can't do its job without the fact.** Use `[TK: exact question]` inline, then surface it as a numbered question when you hand back the draft. Never resolve a TK by guessing a plausible-sounding number.
 
 This matters most for LinkedIn posts and blog articles when citing a metric, a client result, a before/after comparison, or a specific date/version. If the real number isn't in front of you, don't let the rewrite smooth over the gap with a made-up one; flag it instead.
+
+## The Portability Test
+
+If a sentence could move unchanged to another person, company, product, or country, it is probably filler. "We are committed to delivering exceptional value" describes nobody in particular. Cut the portable sentence, or replace it with something only this subject could own: a fact, a mechanism, a number, a consequence, or a judgment specific to the piece. The test also works on rewrites: if the replacement sentence is still portable, it is still filler.
 
 ## PERSONALITY AND SOUL
 
@@ -128,7 +134,7 @@ When voice is appropriate, avoid uniform sentence structures, bloodless neutrali
 
 ### 7. Overused "AI Vocabulary" Words
 
-**High-frequency AI words:** Actually, additionally, align with, crucial, delve, emphasizing, enduring, enhance, fostering, garner, highlight (verb), interplay, intricate/intricacies, key (adjective), landscape (abstract noun), pivotal, showcase, tapestry (abstract noun), testament, underscore (verb), valuable, vibrant
+**High-frequency AI words:** Actually, additionally, align with, beacon (figurative), cutting-edge, crucial, delve, elevate, embark, empower, emphasizing, enduring, enhance, ever-evolving, facilitate, fostering, game changer, garner, harness, highlight (verb), interplay, intricate/intricacies, key (adjective), landscape (abstract noun), leverage (verb), meticulous, multifaceted, paramount, paradigm shift, pivotal, realm (figurative), robust, showcase, streamline, supercharge, tapestry (abstract noun), testament, transformative, underscore (verb), utilize, valuable, vibrant
 **Problem:** These words appear far more frequently in post-2023 text. They often co-occur.
 **Before:**
 > Additionally, a distinctive feature of Somali cuisine is the incorporation of camel meat. An enduring testament to Italian colonial influence is the widespread adoption of pasta in the local culinary landscape, showcasing how these dishes have integrated into the traditional diet.
@@ -369,6 +375,56 @@ Before returning the final rewrite, scan it for `—` and `–`. Any hit means t
 **After:**
 > Whether it's worth the price depends on how often you'll use it.
 
+### 34. Colon Reveals
+
+**Signs to watch:** A noun phrase, a colon, then a lowercase dramatic reveal: "The best part: it learns." "The detail nobody mentions: setup takes two minutes."
+**Problem:** The colon-plus-fragment construction manufactures a drumroll before an ordinary point. It reads like ad copy. Use colons for lists, labels, and quotes, not fake drama; write the reveal as a plain sentence.
+**Before:**
+> The best part: it learns. The thing nobody expects: setup takes two minutes.
+**After:**
+> The best part is that it learns. Setup takes two minutes, which surprises people.
+
+### 35. Faux-Insight Setups
+
+**Phrases to watch:** What nobody tells you, the part everyone misses, what most people get wrong, here's the part most people skip, the secret no one talks about
+**Problem:** These setups cast the writer as the lone expert who sees what everyone else missed. The claim that follows is usually ordinary. Cut the setup and let the claim stand on its own; if it can't stand on its own, it wasn't an insight.
+**Before:**
+> What nobody tells you about caching: invalidation is the hard part.
+**After:**
+> Invalidation is the hard part of caching.
+
+### 36. Rhetorical Setups and Self-Answered Questions
+
+**Phrases to watch:** What if I told you..., Think about it:, Plot twist:, and "Question? Answer." pairs where the writer poses a question and immediately answers it
+**Problem:** The writer stages a conversation with an imaginary reader to manufacture engagement. State the point instead of rehearsing a pitch.
+**Before:**
+> What if I told you your queries could get 10x faster? Plot twist: they already are. You just need the right indexes.
+**After:**
+> The right indexes can speed up those queries by up to 10x.
+
+### 37. Interpretive Metadiscourse
+
+**Phrases to watch:** That last part matters more than it sounds, the key point is, as you can see, this distinction matters, notice how, in other words (when nothing is being clarified)
+**Problem:** The text steps outside its subject to tell the reader what to notice or how much weight to give a point, instead of making the point land on its own. If the point is clear, delete the aside. If it isn't, replace it with support that is already in the content.
+**Before:**
+> Every write invalidates the cache. That last part matters more than it sounds. As you can see, writes are expensive.
+**After:**
+> Every write invalidates the cache, so writes are expensive.
+
+### 38. Formulaic Endings: Recaps and Kickers
+
+**Phrases to watch:** In conclusion, ultimately, overall, to summarize, a final paragraph that restates the piece; endings that turn the point into a metaphor, aphorism, or mic-drop line
+**Problem:** Two ending tells. (a) The recap: the reader was just there, restating the piece adds nothing. (b) The kicker: a final "deep" line that dresses an ordinary point in a cute metaphor.
+**Rule for kickers:** Delete the kicker. Do not rewrite it into a better metaphor, and do not preserve its rhythm. End on the clearest concrete sentence already in the draft; if the ending needs closure, add a plain takeaway or next action.
+**Before (recap):**
+> In conclusion, this post covered indexing, caching, and query planning. Overall, performance is a journey.
+**After (recap):**
+> (Cut the paragraph. End on the last concrete point.)
+**Before (kicker):**
+> The cache is a garden. Tend it and it feeds you. Neglect it and it poisons the well.
+**After (kicker):**
+> (Delete the kicker, don't rewrite it. End on the last concrete sentence of the draft.)
+
 ## DETECTION GUIDANCE
 
 ### What NOT to flag (false positives)
@@ -413,6 +469,8 @@ When you see these, lean toward leaving the prose alone, they are evidence of a 
 
 **Embedded mode.** Another task or agent is using this skill as one step of a larger job (a PR description, a commit message, a doc). Run the loop internally and output only the final text. No draft, no audit bullets, no summary. The caller wants prose, not ceremony.
 
+**Detect mode.** The user asks whether a piece reads as AI, or asks to audit, scan, or flag a draft without rewriting. Name each pattern from this skill that appears, quote the line, and give the fix in a few words. Do not rewrite the whole piece, do not score it, and do not guess whether AI wrote it: detectors guess, while named patterns are evidence the user can check. Apply "What NOT to flag" strictly, and offer to run the full edit afterward.
+
 ## Process and Output
 
 1. Read the input carefully and identify every instance of the patterns above.
@@ -430,3 +488,5 @@ In pasted-text mode, deliver the draft, the brief "still-AI" bullets, the final 
 This skill is based on [Wikipedia:Signs of AI writing](https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing), maintained by WikiProject AI Cleanup. The patterns documented there come from observations of thousands of instances of AI-generated text on Wikipedia.
 
 Key insight from Wikipedia: "LLMs use statistical algorithms to guess what should come next. The result tends toward the most statistically likely result that applies to the widest variety of cases."
+
+Additional patterns (colon reveals, faux-insight setups, rhetorical setups, interpretive metadiscourse, formulaic endings, the portability test, and the extended vocabulary list) are adapted from [no-ai-slop](https://github.com/petergyang/no-ai-slop) by Peter Yang.

@@ -18,6 +18,9 @@ grilling
 handoff
 long-horizon-brief
 improve-codebase-architecture
+codebase-design
+domain-modeling
+prototype
 karpathy-guidelines
 research
 tdd
@@ -26,3 +29,5 @@ to-spec
 verification-before-completion
 product-thinking
 simplify
+resolving-merge-conflicts
+writing-for-agents

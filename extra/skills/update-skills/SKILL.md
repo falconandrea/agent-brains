@@ -1,0 +1,119 @@
+---
+name: update-skills
+description: Update the skill store with npx skills update, then repair what the update breaks. Re-applies the .ai/ path remap to mattpocock skills via the bundled script, hand-fixes what the script cannot, checks for broken skill dependencies, missing tracker config, and profile orphans, then reports everything and asks before installing or committing anything. Invoke explicitly ($update-skills / /update-skills); do not auto-trigger.
+---
+
+# Update Skills
+
+One command updates every skill still listed in `skills-lock.json` to its upstream latest, and silently reverts the local patches this repo depends on. Skills that are absent from the lockfile — adopted/derived skills whose `SKILL.md` declares `metadata.management: local` (currently `grill-with-docs` and `research`) — are locally authoritative and are never updated through this flow. This skill runs the update, undoes the damage, and surfaces everything that needs a human decision.
+
+## What the update breaks (and this skill repairs)
+
+`npx skills update` overwrites files under `.agents/skills/<skill>/` with upstream content, ignoring local edits (verified empirically: no warning, no conflict, the lock's computedHash does not protect you). It does not touch anything outside skill dirs: `.ai/`, `templates/`, `scaffold.sh`, `profiles/`, `.agents/AGENTS.md` are safe.
+
+The remap this repo applies to mattpocock-sourced skills (documented in `.agents/AGENTS.md`):
+
+- `docs/agents/issue-tracker.md` → `.ai/agents/issue-tracker.md`
+- `docs/adr/` → `.ai/adr/`
+- `CONTEXT.md` → `.ai/context/GLOSSARY.md` (and `CONTEXT-MAP.md` → `GLOSSARY-MAP.md`)
+- `.scratch/<feature>/` → `.ai/features/<feature>/`
+
+## Process
+
+### 1. Preflight
+
+- `git status --short` must be clean; if not, stop and ask the user how to proceed.
+- Skills-store work is committed on `main`. If on another branch, say so and ask whether to continue here or switch.
+- Ask for scope, preferring named updates (`npx skills@latest update <skill...> -p -y`); bulk update (`npx skills@latest update -p -y`) only on an explicit user choice. Every name in scope must still be present in `skills-lock.json`: if a requested skill is not in the lockfile, or its `SKILL.md` declares `metadata.management: local` (e.g. `grill-with-docs`, `research`), exclude it, say so, and stop if that empties the scope.
+
+### 2. Run the update
+
+Run the agreed command. Report which skills changed and which version they moved to.
+
+### 3. Re-apply the remap (mechanical part)
+
+```bash
+bash extra/skills/update-skills/scripts/remap-matt-paths.sh
+```
+
+The script only touches skills whose `source` is `mattpocock/skills` in `skills-lock.json`, is idempotent, and prints a leftovers list at the end.
+
+### 4. Agent pass (judgment part)
+
+The script cannot fix prose and diagrams. Review the leftovers it reported plus `git diff` on the mattpocock skills, and hand-fix:
+
+- Tree/diagram blocks showing `CONTEXT.md` or `docs/adr/`: rewrite them to the `.ai/` layout (see domain-modeling's File structure section for the target shape).
+- Phrases like "at the repo root" around glossary/ADR paths: adjust to `.ai/context/` and `.ai/adr/`.
+- References to `/setup-matt-pocock-skills` (not installed): replace with "ask the user where issues live and record it in `.ai/agents/issue-tracker.md`".
+- Triage-label instructions (`ready-for-agent`) in to-spec/to-tickets: keep only where they describe a real tracker (GitHub/Linear); the local tracker uses `Status:` lines.
+
+### 5. Health checks
+
+Run all of these after the remap. They are the "things that end up broken":
+
+a. **Broken dependencies** (a skill invoking a skill that is not installed):
+
+```bash
+grep -rn "Skill tool" .agents/skills/*/SKILL.md | grep -oE '"[a-z][a-z0-9-]+"' | tr -d '"' | sort -u
+```
+
+For every name found, check a directory exists in `.agents/skills/`. This is how domain-modeling and codebase-design were discovered missing.
+
+b. **Tracker config exists**: `.ai/agents/issue-tracker.md` is present.
+
+c. **Profile integrity (bidirectional — both directions must come back empty):**
+
+```bash
+ls .agents/skills/ | sed 's:/$::' | sort > /tmp/a.txt
+grep -h -v "^#\|@include" profiles/*.list | sed '/^$/d' | sort -u > /tmp/p.txt
+comm -23 /tmp/a.txt /tmp/p.txt   # installed but unprofiled (orphans)
+comm -13 /tmp/a.txt /tmp/p.txt   # profiled but not installed (broken manifest)
+```
+
+The second direction is the dangerous one: `setup.sh` warns and skips missing
+skills instead of failing, so a typo'd or stale entry silently ships less than
+the manifest promises.
+
+This skill lives in `extra/skills/` on purpose: it maintains this repo's canonical store and never ships to scaffolded projects (nothing in `extra/` is profiled or symlinked by `setup.sh`).
+
+d. **Smoke test** (fail-fast — run for `common`, `frontend`, and the affected stack profiles, at minimum `laravel` and `nextjs`):
+
+```bash
+failed=0
+for p in common frontend laravel nextjs; do
+    TMP=$(mktemp -d)
+    OUT=$(./setup.sh "$TMP" "$p" 2>&1); RC=$?
+    rm -rf "$TMP"
+    if [ "$RC" -ne 0 ] || echo "$OUT" | grep -q "⚠️"; then
+        echo "FAIL $p:"; echo "$OUT"
+        failed=1
+    else
+        echo "PASS $p"
+    fi
+done
+exit "$failed"
+```
+
+`setup.sh` exits 0 even when it skips missing skills, so the `⚠️` grep is the
+only real failure signal there; the `RC` check catches hard errors (unknown
+profile, missing manifest). The loop exits non-zero if any profile fails. Any
+FAIL blocks the report until fixed.
+
+### 6. Report and ask
+
+Present one compact report:
+
+- Skills updated (old → new version where known) and files re-patched
+- Leftovers hand-fixed in the agent pass
+- Broken dependencies: `<skill> → <missing skill>`, each with the suggested install command (`npx -y skills@latest add mattpocock/skills --skill <name> -y`)
+- Profile orphans with the suggested manifest (usually `common.list`)
+- Anything else in the upstream diff that looks breaking (removed files, renamed entry points, new required config)
+
+Then ask the user to choose: install missing skills / update profiles / commit on `main` / do nothing. Never install, add, or commit without an explicit pick from this list.
+
+## Rules
+
+- Never run `npx skills add` or `--all` without the user picking from the report.
+- Only update skills still present in `skills-lock.json`. Never update a skill absent from the lockfile or whose `SKILL.md` declares `metadata.management: local` (adopted/derived): those are locally authoritative.
+- Skills-store changes are committed on `main`, never on feature branches.
+- If the update was a no-op (nothing changed upstream), say so and stop: no remap, no report, no commit.

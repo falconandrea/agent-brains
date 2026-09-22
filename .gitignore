@@ -1,9 +1,11 @@
 # agents-skills-custom repo files
 .DS_Store
 
-# pi-brain (node package on this branch)
+# node package build output (this repo is a node package)
 node_modules/
 dist/
 *.tsbuildinfo
+
+# local pi runtime plumbing (tracked .pi/*.json config stays visible)
 .pi/pi-brain.lock
 .pi/pi-brain/

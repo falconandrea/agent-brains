@@ -72,6 +72,9 @@ copy_if_missing "$TEMPLATE_DIR/context/database_schema.mmd"  "$AI_DIR/context/da
 echo "   📂 features/"
 copy_if_missing "$TEMPLATE_DIR/features/_TEMPLATE.md"        "$AI_DIR/features/_TEMPLATE.md"
 
+echo "   📂 agents/"
+copy_if_missing "$TEMPLATE_DIR/agents/issue-tracker.md"      "$AI_DIR/agents/issue-tracker.md"
+
 echo "   📂 memory/"
 copy_if_missing "$TEMPLATE_DIR/memory/lessons.md"            "$AI_DIR/memory/lessons.md"
 copy_if_missing "$TEMPLATE_DIR/memory/progress.md"           "$AI_DIR/memory/progress.md"
