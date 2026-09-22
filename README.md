@@ -122,11 +122,20 @@ live in `extra/` and are intentionally outside the setup/profile flow.
 How you update depends on the tool:
 
 - **`npx skills`** (mattpocock, anthropics, vercel, …) runs **here**, in this repo —
-  it downloads from GitHub and needs no project context:
+  it downloads from GitHub and needs no project context. It may only update
+  skills still listed in `skills-lock.json`. A skill whose `SKILL.md` declares
+  `metadata.management: local` (currently `grill-with-docs` and `research`) is
+  locally authoritative — never update it through `npx skills`. Reviewed
+  workflow, one skill at a time:
   ```bash
-  npx skills@latest add <source>
-  npx skills update
+  git status --short             # start from a clean working tree
+  npx skills update <name>       # named update of one lock-managed skill
+  git diff                       # inspect the resulting diff
+  npm test && npm run typecheck  # run proportional checks
+  git commit                     # commit that skill's update separately
   ```
+  Prefer a named update over bulk `npx skills update` — an unreviewed bulk
+  update changes behaviour in every symlinked project at once.
 - **`php artisan boost:update`** (`laravel/boost`) must run **inside a Laravel project** —
   it reads the project's composer/packages to generate project-relevant skills. Run it
   in any Laravel project whose `.agents/skills/` links back here; the write flows through

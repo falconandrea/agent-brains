@@ -1,6 +1,29 @@
 ---
 name: grill-with-docs
 description: Stress-test a plan or design against project docs through a one-question-at-a-time interview and produce only explicitly approved documentation.
+license: MIT
+metadata:
+  management: local
+  provenance: adopted
+  origins:
+    - repository: https://github.com/mattpocock/skills
+      path: skills/engineering/grill-with-docs/SKILL.md
+      commit: 658d53e6ded8cc0eaa26a96e0580bee9381ca0e3
+      license: MIT — full text in LICENSE in this folder
+  adopted_at: 2026-09-22
+  adaptation: >
+    Upstream is a seven-line stub that delegates to the grilling and
+    domain-modeling skills. The local copy replaces it with a self-contained
+    checkpoint-based workflow (.ai/features/<slug>/grill-checkpoint.md,
+    interview / output selection / output phases, repository-facts-first
+    questions, explicit output approval) and drops the domain-modeling
+    dependency, which is not installed here. Explicit-only activation is kept
+    via agents/openai.yaml instead of upstream's disable-model-invocation
+    flag, and a manual behavioral eval protocol is added under evals/.
+  last_upstream_review:
+    date: 2026-09-22
+    commit: 447ca70872026d5b79d6073a546dac082117fed7
+    outcome: no-action
 ---
 
 # Grill with Docs

@@ -1,6 +1,28 @@
 ---
 name: research
 description: Investigate a question against high-trust primary sources and capture the findings as a Markdown file in the repo. Use when the user wants a topic researched, docs or API facts gathered, or reading legwork delegated to a background agent.
+license: MIT
+metadata:
+  management: local
+  provenance: adopted
+  origins:
+    - repository: https://github.com/mattpocock/skills
+      path: skills/engineering/research/SKILL.md
+      commit: 0d74d01cbc64ca27778a49b38599f70c534e76a0
+      license: MIT — full text in LICENSE in this folder
+  adopted_at: 2026-09-22
+  adaptation: >
+    Keeps the upstream stub (background-agent instruction and job steps 1-3)
+    verbatim, then adds local behaviour: research/assessment mode selection
+    reported as Mode: near the title, repository-implementation inspection
+    and the upstream-facts / local-evidence / inference separation (steps
+    4-5), assessment-mode comparison and the single adopt / trial /
+    selectively-import / reject verdict with revisit triggers, and a
+    report-only boundary.
+  last_upstream_review:
+    date: 2026-09-22
+    commit: 321658273cb1d20b76026717d027d505790106d4
+    outcome: no-action
 ---
 
 Spin up a **background agent** to do the research, so you keep working while it reads.

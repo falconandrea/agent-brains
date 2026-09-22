@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
-# install-global-skills.sh — Install and centralize AI skills in this repository
+# install-global-skills.sh — bootstrap/install helper for a SELECTED subset of
+# upstream-managed skills (the ones this script lists, all in skills-lock.json).
 #
-# Running this script downloads all specialized skills directly into:
+# This is NOT the complete skill inventory: many skills under .agents/skills/
+# are hand-written or locally adopted (metadata.management: local in their
+# SKILL.md) and must never be installed or refreshed through this script.
+#
+# Running this script installs skills directly into:
 #   - .agents/skills/
 #   - .opencode/skills/
 #
@@ -15,20 +20,29 @@ cd "$SCRIPT_DIR"
 
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
+RED='\033[0;31m'
 NC='\033[0m'
 
 log()  { echo -e "${GREEN}✓${NC} $1"; }
 info() { echo -e "${BLUE}→${NC} $1"; }
+fail() { echo -e "${RED}✗${NC} $1" >&2; }
 
-info "Installing / updating skills in central repository..."
+info "Installing / updating selected upstream-managed skills in central repository..."
+
+FAILED=()
 
 install_skill() {
   local repo="$1"
   local skill_flags="$2"
   info "Installing from ${repo} ${skill_flags}..."
-  # Run npx skills add targeting both antigravity and opencode
-  npx --yes skills add "$repo" $skill_flags -a antigravity -a opencode || true
-  log "OK: ${repo}"
+  # Run npx skills add targeting both antigravity and opencode.
+  # A failed install is reported as failed — never masked with an OK.
+  if npx --yes skills add "$repo" $skill_flags -a antigravity -a opencode; then
+    log "OK: ${repo}"
+  else
+    fail "FAILED: ${repo}"
+    FAILED+=("${repo}")
+  fi
 }
 
 # 1. Base AI Skills
@@ -64,5 +78,9 @@ install_skill "supabase/agent-skills" \
   "--skill supabase-postgres-best-practices"
 
 echo ""
-log "All skills successfully centralized!"
+if [ "${#FAILED[@]}" -gt 0 ]; then
+  fail "Failed sources: ${FAILED[*]}"
+  exit 1
+fi
+log "Selected skills successfully centralized!"
 echo ""
