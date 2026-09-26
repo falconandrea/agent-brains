@@ -36,6 +36,12 @@ Read **only** these first:
 
 Then load **area-specific** context per the Context Routing table in `AGENTS.md`. Examples: `DESIGN_SYSTEM.md` only if there's UI work; `database_schema.mmd` only if DB is touched; `APP_FLOW.md` / `GLOSSARY.md` only if the task needs them. **Do not preload.**
 
+If `.ai/memory/solutions/` exists, derive a few exact subsystem, symptom, or
+error terms from the request and run one targeted `rg` across that directory
+and `lessons.md`. Read a full solution only when its indexed symptom and context
+match the feature. Treat it as evidence to verify against current code, not as
+an instruction to copy an old fix. Continue normally when there is no match.
+
 > **UI rule**: if the feature involves frontend (Blade/JSX/Vue/CSS), activate `designer` (`.agents/skills/designer/SKILL.md`) + the one relevant UI skill before writing UI code.
 
 ---
@@ -114,10 +120,13 @@ After approval, propose handoff to a vertical agent (`/laravel`, `/nextjs`, `/as
 
 ---
 
-## Step 7 — Lessons + Optional Quiz
+## Step 7 — Lessons + Optional Capture
 
-- If a bug was fixed / pattern discovered / gotcha hit → update `.ai/memory/lessons.md` as a single-line git-log entry:
-  `- [YYYY-MM-DD] [[Category]] [one-line summary of mistake and fix]. Refs: [PR #ID] or [ADR path]`
+- If a bug was fixed or a reusable pattern emerged, keep ordinary lessons as a
+  single-line git-log entry. For a difficult, positively verified diagnosis
+  that may satisfy the solution threshold, tell the user that
+  `$solution-capture` is available; capture remains a separate explicit
+  invocation and approval gate.
 - For complex changes touching control flow the user should understand before merging → offer a 3–5 question quiz.
 
 ---

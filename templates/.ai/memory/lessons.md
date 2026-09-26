@@ -13,7 +13,7 @@ Each entry must be exactly **one line** following a git-log style format. Do not
 **Concision is mandatory.** A reader should grasp the lesson in <2 seconds. If you can't fit it in one line, the lesson is too generic — narrow it or drop it.
 
 Format:
-`- [YYYY-MM-DD] [[Category]] [One-line summary of mistake and fix]. Refs: [file-name](relative/path/to/file), [PR #ID], or [ADR-name](relative/path/to/adr)`
+`- [YYYY-MM-DD] [Category] [One-line summary of mistake and fix]. Refs: [file-name](relative/path/to/file), [PR #ID], or [ADR-name](relative/path/to/adr)`
 
 ### What NOT to log (drop these)
 - Generic framework knowledge anyone can google ("eager load to avoid N+1", "use transactions for atomic writes", "type your props").
@@ -31,4 +31,3 @@ Format:
 ## 📚 Lessons Log
 
 _No lessons logged yet. Add single-line entries here as mistakes are resolved during development._
-

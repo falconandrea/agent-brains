@@ -9,6 +9,13 @@ A discipline for hard bugs. Skip phases only when explicitly justified.
 
 When exploring the codebase, read `.ai/context/GLOSSARY.md` (if it exists) to get a clear mental model of the relevant modules, and check ADRs in the area you're touching.
 
+Before forming a hypothesis, derive a few exact terms from the reported symptom,
+error text, subsystem, and failing command. Search `.ai/memory/lessons.md` and,
+when present, `.ai/memory/solutions/` with one targeted `rg`. Read only a
+solution whose symptom and context match. Use it to sharpen the feedback loop;
+it never replaces reproduction, current-code inspection, or fresh verification.
+Continue normally when there is no match.
+
 ## Redact
 
 This skill has you show commands, outputs and captured artifacts. **Redact every secret first**: write `<REDACTED>` in its place. Build loops against env vars, so the credential stays in the environment rather than in what you show. Captured artifacts carry auth headers: quote only the lines that carry the signal.
@@ -136,3 +143,7 @@ Required before declaring done:
 - [ ] All `[DEBUG-...]` instrumentation removed (`grep` the prefix)
 - [ ] Throwaway prototypes deleted (or moved to a clearly-marked debug location)
 - [ ] The hypothesis that turned out correct is stated in the commit / PR message, so the next debugger learns
+
+If the finished diagnosis is positively verified and contains reusable,
+non-obvious knowledge, tell the user that `$solution-capture` can assess it.
+Do not invoke capture or write a solution automatically.

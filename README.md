@@ -38,7 +38,7 @@ Centralized repository for AI agent configurations, skills, and project template
 │       ├── agents/         #   issue-tracker.md (local tracker convention)
 │       ├── context/        #   PRD, GLOSSARY, APP_FLOW, TECH_STACK, ROADMAP, DB schema
 │       ├── features/       #   Feature tracking template
-│       └── memory/         #   lessons.md, progress.md
+│       └── memory/         #   lessons.md, progress.md, solutions/_TEMPLATE.md
 │
 ├── extra/                  # Optional/manual extras, not linked by profiles
 │   └── skills/             # Tool-specific skills for manual use
@@ -91,7 +91,8 @@ If your target project already has a physical `.agents` or `.opencode` directory
 
 ## Workflow agents → Codex + OpenCode
 
-The six workflow agents (`start`, `setup`, `feature`, `laravel`, `nextjs`, `astro`)
+The seven workflow skills (`start`, `setup`, `feature`, `laravel`, `nextjs`,
+`astro`, `solution-capture`)
 live as native skills in `.agents/skills/<name>/SKILL.md` and are invoked the same
 way in both tools:
 
@@ -100,14 +101,16 @@ way in both tools:
 | OpenCode | slash command | `/feature` |
 | Codex (CLI / IDE) | `$` mention or `/skills` | `$feature` |
 
-Profile membership: `start` / `feature` / `setup` are in `common.list` (every
-profile); `laravel` / `nextjs` / `astro` are in their own profile manifest.
+Profile membership: `start` / `feature` / `setup` / `solution-capture` are in
+`common.list` (every profile); `laravel` / `nextjs` / `astro` are in their own
+profile manifest.
 
-**Explicit-only activation.** In Codex, the invasive workflows (`feature`, `setup`,
-`laravel`, `nextjs`, `astro`) carry `agents/openai.yaml` with
+**Explicit-only activation.** In Codex, the invasive workflows (`feature`,
+`setup`, `laravel`, `nextjs`, `astro`) and the gated `solution-capture` workflow
+carry `agents/openai.yaml` with
 `allow_implicit_invocation: false`, so Codex will **not** auto-trigger them from a
-prompt — you must type `$feature`. `start` keeps implicit activation on (useful to
-auto-suggest when you ask "what's the status").
+prompt — you must type `$feature` or `$solution-capture`. `start` keeps implicit
+activation on (useful to auto-suggest when you ask "what's the status").
 
 `.opencode/agents/*.md` and `.agents/workflows/*.md` (symlinks) both point at the
 same `SKILL.md` — single source of truth per workflow, no duplication.
@@ -324,6 +327,11 @@ place it under `extra/skills/<name>/` instead. Do not add it to a profile or run
 6. **`improve-codebase-architecture`**: runs periodically to produce before/after refactoring reports.
 7. **`/handoff`**: when a chat becomes too long (deep context, many back-and-forths), compact the conversation into a doc the next agent can pick up in a fresh chat. Saved to `$TMPDIR` by default; `--keep` to persist it in `docs/handoffs/`.
 8. **`lessons-gardener`**: periodically prunes and compresses `.ai/memory/lessons.md` so it stays short and useful.
+9. **`solution-capture`**: after a difficult problem is positively verified,
+   `$solution-capture` assesses whether the diagnosis is reusable, stops at an
+   approval gate, then writes one detailed solution plus one `lessons.md` index
+   line. Feature and bug-diagnosis workflows search this memory progressively;
+   they do not preload every solution or trigger capture automatically.
 
 ### Frontend & Motion
 
@@ -354,4 +362,6 @@ The frontend skills are split by **intent**, not by "frontend" in general. Trigg
 - `.opencode` and `.agents` in consuming projects are **personal dev configs** (like `.vscode/`) → `.gitignore`
 - `.ai/` is **project documentation** → commit to the project repo
 - `extra/skills/` contains optional, tool-specific skills for manual use; it is not part of the agent profiles or setup flow
+- reusable diagnoses live in project-owned `.ai/memory/solutions/`; the
+  canonical template is scaffolded without overwriting existing project files
 - Keep secrets, private prompts, and project-specific context out of this public repository

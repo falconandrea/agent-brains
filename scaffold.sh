@@ -9,7 +9,7 @@
 # This will create:
 #   .ai/context/    — PRD, PROJECT, APP_FLOW, GLOSSARY, TECH_STACK, ROADMAP, DESIGN_SYSTEM, database_schema
 #   .ai/features/   — Feature tracking with template
-#   .ai/memory/     — lessons.md, progress.md
+#   .ai/memory/     — lessons.md, progress.md, reusable solution template
 #
 
 set -euo pipefail
@@ -78,6 +78,7 @@ copy_if_missing "$TEMPLATE_DIR/agents/issue-tracker.md"      "$AI_DIR/agents/iss
 echo "   📂 memory/"
 copy_if_missing "$TEMPLATE_DIR/memory/lessons.md"            "$AI_DIR/memory/lessons.md"
 copy_if_missing "$TEMPLATE_DIR/memory/progress.md"           "$AI_DIR/memory/progress.md"
+copy_if_missing "$TEMPLATE_DIR/memory/solutions/_TEMPLATE.md" "$AI_DIR/memory/solutions/_TEMPLATE.md"
 
 echo ""
 echo "🎉 Done! Now fill in the templates with your project's details."

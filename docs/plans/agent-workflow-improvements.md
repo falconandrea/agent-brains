@@ -2,10 +2,10 @@
 
 **Created:** 2026-08-08
 
-**Updated:** 2026-09-22 (W1.1 design review, W1.6 pilot contract resolved in
-D15; approval pending)
+**Updated:** 2026-09-26 (W1 promoted after the W1.6 behavioral trial)
 
-**Status:** in progress — W1.1 design approval pending; W1 trial not started
+**Status:** completed through W1; W2 and W3 remain evidence-triggered and
+deferred
 
 **Working mode:** interactive, evidence-driven, time-boxed phases with
 continuation gates
@@ -166,7 +166,7 @@ E2/E4/E5/E6.
 
 ## W1 — Structured knowledge loop (time-boxed trial)
 
-**Status:** pending — W1.1 design approval gate
+**Status:** completed — W1.1–W1.6 verified and promoted
 
 **Goal:** keep `lessons.md` cheap, adding retrievable solution documents for
 non-trivial problems.
@@ -507,6 +507,8 @@ Allowed status values: `pending`, `in_progress`, `completed`, `blocked`,
 | 2026-08-30 | D13 | W0/W4 gates remain open until raw session exports, run configuration and comparison evidence are persisted in the repository | Temporary reports and incomplete metadata are not reproducible evidence; statuses must follow the protocol rather than an agent summary |
 | 2026-08-30 | D14 | Promote W4 assessment routing in the existing `research` skill | The persisted pino rerun exposes `assessment` for decisions and `research` for neutral comparisons, preserves the shared evidence contract, adds no dependency or source change, and passes the explicit user promotion gate |
 | 2026-09-22 | D15 | W1.6 pilot contract: capture on two distinct real problems plus verified retrieval of both in a subsequent fresh session; the fast-path check is a trivial passage embedded in one case, not a third problem | The literal capture-and-retrieval-on-two-problems demand is satisfiable within the two-session/two-problem budget only in this form, and two captured solutions make the retrieval check discriminating instead of vacuous |
+| 2026-09-24 | D16 | Approve W1.1 and implement W1.2 as an explicit-only prototype in `extra/skills/solution-capture/` | The user accepted the capture timing and gate; keeping the prototype outside profiles, routing, templates and scaffold preserves the pilot boundary |
+| 2026-09-26 | D17 | Promote W1 while keeping capture explicit-only | The two-problem trial passed capture, fast-path and fresh-session retrieval checks; stable integration adds progressive retrieval and maintenance without automatic capture or write authority |
 
 ## Questions to decide during the work
 
@@ -535,9 +537,13 @@ phase with evidence.
 | 2026-08-30 | W4 promotion gate | Promoted the updated `research` skill after the persisted pino assessment/neutral reruns passed the routing and report-only checks | [D14](#decision-log), [W4 result](../evals/agent-workflows/results/W4-2026-08-30.md) | Start the W1.1 design approval gate |
 | 2026-08-30 | W1.1 | Defined the solution document shape, three-of-five eligibility rule with separate positive-verification precondition, single approval step, provisional 180-day review signal, progressive retrieval contract, and two-session/two-problem pilot checks | [W1 design](../evals/agent-workflows/W1-solution-capture-design.md), D12 | After W0/W4 evidence is accepted, return to the W1.1 design approval gate |
 | 2026-09-22 | W1.1 design review | Verified the design candidate against the plan, the lessons index contract and the eval protocol; required persisted run-sheet evidence for the pilot and tightened the correctness check; resolved the W1.6 conformance blocker via the D15 pilot contract (two captures, retrieval of both, embedded fast-path passage); no template, scaffold or workflow-skill changes | [W1 design](../evals/agent-workflows/W1-solution-capture-design.md), D15 | User decides the W1.1 design approval gate under the D15 contract |
+| 2026-09-24 | W1.1 approval + W1.2 | User approved the W1.1 design; added the explicit-only `solution-capture` prototype and structural isolation checks without changing profiles, routing, templates, scaffold or stable workflow skills | [W1 design](../evals/agent-workflows/W1-solution-capture-design.md), [prototype](../../extra/skills/solution-capture/SKILL.md), D16 | Run W1.6 on two qualifying real problems under the persisted-evidence contract |
+| 2026-09-26 | W1.6 | Captured two approved real solutions in `ga-analytics`, rejected an embedded trivial edit with no artifact, retrieved both solutions from symptom-only prompts in a fresh read-only session, and retained a public-safe acceptance summary | [W1 result](../evals/agent-workflows/results/W1-2026-09-26.md) | Record the explicit promotion decision and resolve the provisional 180-day signal |
+| 2026-09-26 | W1 promotion | Promoted the explicit-only skill to the canonical store and all profiles; added idempotent solution-template scaffold, progressive retrieval in feature/diagnosis, and solution-aware lesson maintenance; removed the pilot copy | [W1 result](../evals/agent-workflows/results/W1-2026-09-26.md), [solution-capture](../../.agents/skills/solution-capture/SKILL.md), D17 | Keep W2/W3 deferred until their documented evidence triggers occur |
 
 ## Next step
 
-W4 is promoted. The W1.1 design candidate incorporates the D15 pilot
-contract and awaits the explicit user approval decision; on approval, W1.2
-starts within the existing budget of two sessions and two real problems.
+W1 is promoted and its evidence is persisted in the
+[W1 result](../evals/agent-workflows/results/W1-2026-09-26.md). W2 and W3 remain
+deferred until their documented evidence triggers occur; ordinary project work
+continues without starting another workflow phase.

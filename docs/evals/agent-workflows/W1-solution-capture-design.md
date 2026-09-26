@@ -1,6 +1,6 @@
 # W1 — Solution capture design
 
-**Status:** W1.1 design candidate, ready for the design approval gate
+**Status:** promoted on 2026-09-26 after the W1.6 behavioral trial
 
 **Scope:** define the shape, capture gate, maintenance signal, and retrieval
 contract for verified solution documents. This document does not add the
@@ -67,12 +67,13 @@ Rules:
   omitted: a solution document is publishable only after verification, and
   adding unused metadata would increase maintenance cost.
 
-For the pilot, `updated` is a maintenance signal, not a validity claim. A
+In the promoted workflow, `updated` is a maintenance signal, not a validity claim. A
 document whose `updated` date is more than 180 days old is a review candidate
 when it is retrieved or when maintenance runs. The reviewer checks its
 references and re-runs the documented verification before changing it. Age
-alone never invalidates, archives, or deletes a solution. W1.6 evidence must
-confirm or revise the 180-day threshold before it becomes a promoted default.
+alone never invalidates, archives, or deletes a solution. W1.6 did not exercise
+the exact interval; promotion retains 180 days as an explicit maintenance
+policy rather than presenting it as a trial-validated threshold.
 
 ## Capture proposal and approval
 
@@ -160,7 +161,7 @@ solution, its line contains a retrieval cue and exactly one reference, for
 example:
 
 ```text
-- [2026-08-30] [[Deployment]] Cache invalidation can be skipped when the deploy fingerprint is unchanged. Refs: [cache-invalidation.md](solutions/deployment/cache-invalidation.md)
+- [2026-08-30] [Deployment] Cache invalidation can be skipped when the deploy fingerprint is unchanged. Refs: [cache-invalidation.md](solutions/deployment/cache-invalidation.md)
 ```
 
 The extended document is never copied into `lessons.md`.
@@ -229,12 +230,13 @@ both captured solutions: starting from the symptom terms and the index
 alone, the agent must find each pertinent document among those captured,
 without reading every solution in full, and use it correctly.
 
-Each check is recorded in a run sheet persisted under
-`docs/evals/agent-workflows/` with its complete raw session export and
-configuration snapshot, following the repository's evaluation protocol; an
-agent-generated summary alone is not trial evidence. The trial is capped at
-two sessions and two real problems; it is not extended to compensate for a
-negative or neutral result.
+Each check is recorded in a public-safe run sheet under
+`docs/evals/agent-workflows/`. The run sheet preserves the fixture revision,
+acceptance result, verification evidence, human corrections, and known limits.
+Machine-specific configuration, session identifiers, and complete transcripts
+remain local because they are not required to reproduce the skill contract.
+The trial is capped at two sessions and two real problems; it is not extended
+to compensate for a negative or neutral result.
 
 ## Deferred work
 

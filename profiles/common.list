@@ -3,10 +3,11 @@
 # Add a skill here to make it available to all profiles that @include common.
 
 # Workflow skills (process / persona) — invoked explicitly via /name (opencode)
-# or $name (Codex). feature & setup are allow_implicit_invocation:false.
+# or $name (Codex). feature, setup & solution-capture are explicit-only.
 start
 feature
 setup
+solution-capture
 
 # Engineering-process & knowledge skills.
 diagnosing-bugs
