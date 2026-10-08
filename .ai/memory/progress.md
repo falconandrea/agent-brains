@@ -4,9 +4,73 @@
 
 - No queued agent-workflow follow-up. W2 and W3 remain evidence-triggered and
   deferred.
+- code-review-follow-ups T4–T10 pending (see
+  `.ai/features/code-review-follow-ups/tasks-…md`); T1–T3 done.
 
 ## Done
 
+- 2026-10-08 Remaining consumer alignment: refreshed `ardizio-design` with
+  `astro`, `itinerary-ai`, `linkedin-analytics`, and `ga-analytics` with
+  `laravel-analytics`, `careguru/carefinder-backend` and the Laravel boilerplate
+  with `laravel`, and the Next.js boilerplate with `nextjs`. Added project-owned
+  shared-workflow guidance and missing local trackers. Boost-generated blocks
+  were verified byte-identical; pointers outside those blocks survive Boost
+  regeneration. Ardizio's four local skill directories were preserved and
+  verified against canonical SKILL.md files; its two old flat skills were
+  archived outside discovery. Profile coverage and destinations are valid,
+  zero broken links, all seven project diff checks clean. Existing backend
+  changes were preserved; no commits or application-code edits made.
+- 2026-10-08 Consumer-project alignment: refreshed `andreafalcon.dev` and
+  `appuntidalgiappone` with `astro`, `craftcv.online` with `nextjs`, and
+  `careguru-brain` with `nodejs-ai-backend`. Replaced seven obsolete `.md`
+  symlinks, restored exact current manifest membership, added local Markdown
+  issue-tracker configuration, and corrected stale workflow/skill references
+  in each project's agent instructions while retaining project conventions.
+  Read-only verification confirmed 34/34/42/33 skills respectively, valid
+  canonical destinations, no broken links, tracker presence and clean
+  per-project `git diff --check`. Changes remain uncommitted; other consumers
+  were not modified.
+- 2026-10-08 code-review follow-ups T1–T3 (baseline `e5f8e56`): `setup.sh` and
+  `unlink.sh` are now ownership-aware — only symlinks whose resolved
+  destination is inside this repo (canonical store, `.agents/workflows`,
+  `.agents`, `.opencode`) are removed/replaced; relative destinations are
+  resolved against the link's directory, name alone proves nothing. Profile
+  manifests (incl. `@include` cycles and invalid entries) are validated before
+  any mutation, so invalid profiles leave installations intact. Real
+  files/dirs occupying a skill path are preserved with a clear skip diagnostic
+  (no nested links) and only correctly linked skills are counted. Curated↔full
+  profile switches convert in both directions, but only when the directory
+  holds exclusively agent-brains-owned links — otherwise the switch fails and
+  leaves the previous installation intact. Regression
+  coverage: `tests/setup-unlink.test.ts` (17 integration tests in a temp
+  fixture, nothing outside the temp workspace is touched). Known limitation:
+  after moving/renaming this repo, old links no longer resolve under the new
+  copy and unlink conservatively preserves them (reported, manual removal).
+  `npm test` 232/232, `npm run typecheck` clean, `bash -n` clean,
+  `git diff --check` clean; real-profile smoke test passed for all profiles.
+- 2026-10-08 T1–T3 review round (same baseline): fixed three defects in the
+  first implementation. (1) `full` no longer traverses a symlinked `.agents`
+  during cleanup — a repeated full setup could delete symlinks inside the
+  canonical store or inside a foreign destination; (2) curated→full now
+  validates convertibility BEFORE removing anything: a directory holding
+  non-managed content fails with exit 1 and the curated installation is left
+  intact (previously managed links were removed, the whole-dir link skipped,
+  and the command still succeeded); (3) removing a `skills → canonical store`
+  symlink no longer depends on `.agents/workflows` being present. Three new
+  regression tests (+ the corrected blocked-conversion test) failed on the
+  old code and pass now: 20/20 integration, `npm test` 235/235.
+- 2026-10-08 T1–T3 second review round: fixed two more P2s. (1) hidden
+  symlinks (`.alias → store`) were validated as removable by the curated→full
+  convertibility check but skipped by cleanup (`*` vs `* .[!.]* ..?*` globs),
+  leaving a half-destroyed installation with exit 0 — cleanup, curated
+  refresh and unlink now scan hidden entries with the same globs as
+  validation; (2) a real FILE at `.agents/skills` passed the convertibility
+  check vacuously, so cleanup removed the managed workflows link and skipped
+  `full` with success — now the check rejects it, and curated setup's
+  validation fails early (before any mutation) with a clear message for a
+  real file at `.agents` or `.agents/skills`. Both defects reproduced on the
+  pre-fix code (exit 0 + workflows link lost / .opencode linked before the
+  error); 4 new regression tests: integration 24/24, `npm test` 239/239.
 - 2026-09-26 W1 promoted: moved `solution-capture` into the canonical skill
   store and every profile while preserving explicit-only invocation; added the
   solution template to idempotent scaffold; added targeted, no-preload retrieval
