@@ -9,6 +9,11 @@
 **Assessment and rationale:**
 [Pi plugins and context structure assessment](../research/pi-plugins-and-context-structure-assessment.md)
 
+**Additional local optimization backlog:** S1–S3 below, recorded 2026-10-11
+after the [Spotify shunt assessment](../research/spotify-shunt-assessment.md).
+These items are independent of R1 external extension trials; recording them
+does not start implementation or change the R1 sequence.
+
 ## Goal
 
 Adopt only the external capabilities that measurably improve `agent-brains`
@@ -329,6 +334,62 @@ If triggered:
 
 **Explicitly excluded:** installing `pi-async-fork` alongside `pi-subagents`,
 or replacing `/feature` with the package's own orchestration workflow.
+
+## S — Local context and read-cost optimization
+
+**Status:** planned, implementation not started. Execute S1 → S2 → S3 when
+this workstream is selected. This roadmap owns task status; the research report
+owns supporting evidence and rationale.
+
+### S1 Deduplicate discovered and injected context
+
+- [ ] Deduplicate `DefaultResourceLoader` discovered files and
+  `request.contextFiles` by canonical absolute path, accounting for relative
+  paths and symlinks while preserving distinct scoped instruction files.
+- [ ] Add a focused regression check for a project-root `AGENTS.md` being
+  both discovered and routed, plus preservation of distinct context files.
+
+**Acceptance:** the root file enters the child context once, and distinct
+scoped instructions and curated documents remain present. Loader-level
+duplication was reproduced; no billed-session savings have been measured.
+
+### S2 Complete usage accounting and establish a baseline
+
+- [ ] Capture provider/model, input/output, cache-read/cache-write usage,
+  exposed cost and elapsed time; preserve them through run logs and resume.
+- [ ] Distinguish unavailable cost from zero cost. Label provider-reported
+  cost separately from actual subscription billing or estimated savings.
+- [ ] Record representative multi-file exploration tasks with direct reads,
+  including quality, follow-up reads, verification and review outcomes.
+
+**Acceptance:** the baseline supports a total-cost and latency comparison,
+including future worker calls; reduced parent tokens alone are insufficient.
+
+### S3 Trial an explicit optional bulk-reader
+
+**Depends on:** S1 and S2. Experimental and disabled by default.
+
+- [ ] Reuse the Pi/`AgentRunner` boundary with a configurable worker model
+  and an explicit `bulk_read(question, paths)` capability.
+- [ ] Define a minimal worker policy: read-only, bounded file count/payload,
+  output and execution; validate repository paths and symlink boundaries;
+  exclude secrets and binary files by default.
+- [ ] Disable human-input tools, recursive delegation and extensions or
+  custom tools that could grant writes. Keep reader context and skills minimal.
+- [ ] Return concise evidence with paths and symbols or source ranges;
+  require exact source rereads before edits. Allow fallback to direct reads.
+- [ ] Include every worker call in total usage/cost and latency accounting.
+- [ ] Compare direct reads and delegated reads on representative tasks; derive
+  thresholds from results rather than copying Spotify's 350-line threshold.
+
+**Promote when:** total cost improves with comparable task quality and
+acceptable latency. Record omissions, fallback reads and verification/review
+results. Otherwise retain direct reads and document the decision.
+
+**Deferred:** automatic read-blocking hooks until explicit delegation proves
+useful; code-writing workers until artifact handoff preserves writer ownership,
+repository locks, verification and review. Portal and Jev are not required for
+this trial.
 
 ## Parked ideas
 

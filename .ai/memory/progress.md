@@ -2,6 +2,15 @@
 
 ## Open items
 
+- Spotify-inspired context/read-cost workstream is planned, not started:
+  S1 deduplicate discovered/injected context → S2 complete cost/cache/latency
+  accounting and baseline → S3 trial an explicit optional read-only bulk-reader.
+  Status and acceptance criteria live in
+  [the adoption roadmap](../../docs/plans/pi-plugin-adoption-roadmap.md#s--local-context-and-read-cost-optimization);
+  evidence lives in
+  [the assessment](../../docs/research/spotify-shunt-assessment.md).
+  When resuming this workstream, start with S1. Automatic hooks, code-writing
+  workers and Jev remain deferred; no Portal installation is planned.
 - `test-review` remains an explicit experimental extra. Initial pilot and isolated
   mutation evidence are in `docs/evals/test-review/README.md`. Reminder requested
   by the user (2026-10-11): proactively suggest the trial on the next suitable
