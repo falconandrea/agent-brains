@@ -71,6 +71,8 @@ const SKILL_CATEGORIES: Record<string, SkillCategory> = {
   handoff: "operational",
   "lessons-gardener": "operational",
   "context-audit": "operational",
+  "agent-readiness": "operational",
+  "html-report": "operational",
   "to-tickets": "operational",
   "long-horizon-brief": "operational",
   "improve-codebase-architecture": "operational",

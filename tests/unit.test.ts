@@ -166,6 +166,19 @@ test("context-audit resolves through common and never reaches a pipeline role", 
   }
 });
 
+test("assessment and report skills stay available in common without entering pipeline roles", () => {
+  const common = resolveProfile(PROFILES_DIR, "common");
+  const available = new Set(common.skills);
+  for (const skill of ["agent-readiness", "html-report"]) {
+    assert.ok(available.has(skill), `${skill} must be available to the main session`);
+    for (const role of ["planner", "developer", "reviewer", "tester", "security-reviewer"] as const) {
+      const selection = selectSkills(PROFILES_DIR, "common", role, available);
+      assert.ok(!selection.skills.includes(skill), `${skill} must not reach ${role}`);
+      assert.ok(!selection.missing.includes(skill), `${skill} must not be reported missing for ${role}`);
+    }
+  }
+});
+
 test("interactive workflow skills no longer reach any pipeline role", () => {
   // Synthetic profile so every skill under test is present regardless of the
   // real manifests: the routing TABLE is the thing under test.

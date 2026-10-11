@@ -1,7 +1,7 @@
 ---
 name: humanizer
 description: |
-  Remove signs of AI-generated writing from text. Use when editing or reviewing
+  Compose prose or remove signs of AI-generated writing from text. Use when drafting, editing or reviewing
   text to make it sound more natural and human-written. Based on Wikipedia's
   "Signs of AI writing" guide, extended with patterns from no-ai-slop. Detects
   and fixes inflated symbolism, promotional language, superficial -ing
@@ -17,6 +17,14 @@ description: |
 license: MIT
 metadata:
   version: "2.11.0"
+  management: local
+  local_revision: "2026-10-11"
+  additional_origins:
+    - repository: https://github.com/alfonsograziano/skills
+      paths: skills/write-without-slop, skills/remove-ai-slop
+      commit: 6dc8f1d7cd7ce59b8b65b693f05050c9e7b70270
+      license: MIT — full text in LICENSE.alfonso
+  adaptation: Optional compose mode and local English candidate scanner with per-pattern before/after comparison; existing editorial rules retained.
 ---
 
 # Humanizer: Remove AI Writing Patterns
@@ -462,6 +470,16 @@ When you see these, lean toward leaving the prose alone, they are evidence of a 
 ---
 
 ## Invocation Modes
+
+**Compose mode.** The user requests new prose, including new sections of a
+document. Read [references/compose.md](references/compose.md) and deliver the
+requested text directly. This branch replaces the draft → audit → final loop
+used for editing existing text.
+
+**Optional long-text scan.** For reproducible scans or substantial file edits,
+read [references/scan.md](references/scan.md). Its helper returns candidates and
+per-pattern deltas, not editorial judgments. Short and embedded tasks do not
+need it. Combine with detect or file mode as appropriate.
 
 **Pasted text (default).** The user gives text in the conversation. Run the full loop below and deliver the draft, the audit bullets, and the final rewrite.
 

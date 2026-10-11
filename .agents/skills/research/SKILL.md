@@ -60,3 +60,8 @@ For `assessment`, also:
 Neutral `research` does not require a verdict. Both modes remain report-only:
 do not install dependencies, modify source code or commit unless the user
 separately requests that work.
+
+When the user requests a shareable visual report, use `html-report` to render
+the findings, retaining evidence links, uncertainty and the research/assessment
+distinction. A normal research request still produces Markdown; HTML is an
+optional presentation, not a replacement for source verification.

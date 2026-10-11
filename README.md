@@ -347,6 +347,16 @@ place it under `extra/skills/<name>/` instead. Do not add it to a profile or run
 
 ### Cross-cutting
 
+Optional assessments and reporting:
+
+- `agent-readiness` audits operational capabilities for coding agents, with
+  evidence and prioritized root fixes. `context-audit` owns documentation hygiene.
+- `html-report` creates offline HTML reports from a local kit and checks browser
+  rendering. Research remains Markdown by default; HTML is an optional deliverable.
+- `extra/skills/humanizer` supports composition, editing and optional English
+  candidate scanning for long prose. Manual copies must include its references
+  and scripts; see [the adoption note](docs/research/alfonso-skills-adaptation.md).
+
 5. **`diagnosing-bugs`**: auto-activates on bugs — build a reproducible case first, then fix.
 6. **`improve-codebase-architecture`**: runs periodically to produce before/after refactoring reports.
 7. **`/handoff`**: when a chat becomes too long (deep context, many back-and-forths), compact the conversation into a doc the next agent can pick up in a fresh chat. Saved to `$TMPDIR` by default; `--keep` to persist it in `docs/handoffs/`.

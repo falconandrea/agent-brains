@@ -2,6 +2,13 @@
 
 ## Open items
 
+- New `agent-readiness` and `html-report` skills are registered in common/full;
+  existing curated consumers need their next profile refresh to discover them.
+  `extra/skills/humanizer` now includes compose/scan references and a lexical
+  comparison helper; independent manual copies must receive the whole folder.
+  Consumer copies have not been updated in this task. Provenance, decisions and
+  the upstream README PR recipe are in
+  [the adaptation note](../../docs/research/alfonso-skills-adaptation.md).
 - Spotify-inspired context/read-cost workstream is planned, not started:
   S1 deduplicate discovered/injected context → S2 complete cost/cache/latency
   accounting and baseline → S3 trial an explicit optional read-only bulk-reader.
@@ -30,6 +37,16 @@
 
 ## Done
 
+- 2026-10-11 Adapted selected Alfonso Graziano skill ideas: evidence-based
+  operational readiness audit; local offline HTML kit with browser checker;
+  preventive composition and optional English lexical before/after scans in
+  the existing humanizer. Preserved MIT attribution and pinned origin metadata;
+  research optionally routes requested visual artifacts to html-report. Both
+  canonical additions are operational-only in the Pi role router. Validation:
+  three skill validators passed; focused helper/profile/routing checks 40/40;
+  typecheck clean; HTML template verified in Chrome desktop/mobile light/dark
+  and print, with no external asset requests, errors or overflow. Final full
+  suite passed 246/246, including routing and scanner regression additions.
 - 2026-10-11 Initial test-review pilot: created a read-only explicit extra outside
   profiles, routing and installers; evaluated historical implementation, skill
   and documentation diffs in separate contexts. A concrete unlink coverage gap
