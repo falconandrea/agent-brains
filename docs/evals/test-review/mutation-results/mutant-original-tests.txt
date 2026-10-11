@@ -1,0 +1,154 @@
+TAP version 13
+# Subtest: setup.sh and unlink.sh pass bash -n
+ok 1 - setup.sh and unlink.sh pass bash -n
+  ---
+  duration_ms: 7.6215
+  type: 'test'
+  ...
+# Subtest: curated setup links profile skills, workflows and .opencode
+ok 2 - curated setup links profile skills, workflows and .opencode
+  ---
+  duration_ms: 28.672708
+  type: 'test'
+  ...
+# Subtest: setup preserves foreign skill symlinks, including one occupying a profile skill name
+ok 3 - setup preserves foreign skill symlinks, including one occupying a profile skill name
+  ---
+  duration_ms: 74.630125
+  type: 'test'
+  ...
+# Subtest: setup preserves a foreign .agents/workflows symlink
+ok 4 - setup preserves a foreign .agents/workflows symlink
+  ---
+  duration_ms: 41.804125
+  type: 'test'
+  ...
+# Subtest: setup and unlink preserve a foreign whole-dir .agents symlink
+ok 5 - setup and unlink preserve a foreign whole-dir .agents symlink
+  ---
+  duration_ms: 89.432292
+  type: 'test'
+  ...
+# Subtest: invalid profiles fail before any mutation
+ok 6 - invalid profiles fail before any mutation
+  ---
+  duration_ms: 70.540375
+  type: 'test'
+  ...
+# Subtest: an invalid manifest leaves an existing installation intact
+ok 7 - an invalid manifest leaves an existing installation intact
+  ---
+  duration_ms: 43.492584
+  type: 'test'
+  ...
+# Subtest: repeated setup is idempotent and keeps foreign links
+ok 8 - repeated setup is idempotent and keeps foreign links
+  ---
+  duration_ms: 118.35525
+  type: 'test'
+  ...
+# Subtest: profile switches refresh managed links and preserve foreign ones
+ok 9 - profile switches refresh managed links and preserve foreign ones
+  ---
+  duration_ms: 210.405833
+  type: 'test'
+  ...
+# Subtest: relative symlink destinations are resolved for ownership
+ok 10 - relative symlink destinations are resolved for ownership
+  ---
+  duration_ms: 248.575084
+  type: 'test'
+  ...
+# Subtest: unlink removes only managed links and keeps directories that hold foreign content
+ok 11 - unlink removes only managed links and keeps directories that hold foreign content
+  ---
+  duration_ms: 101.348583
+  type: 'test'
+  ...
+# Subtest: unlink preserves a foreign .opencode symlink
+ok 12 - unlink preserves a foreign .opencode symlink
+  ---
+  duration_ms: 22.344584
+  type: 'test'
+  ...
+# Subtest: a real directory occupying a skill path is preserved, not nested-linked, not counted
+ok 13 - a real directory occupying a skill path is preserved, not nested-linked, not counted
+  ---
+  duration_ms: 72.192833
+  type: 'test'
+  ...
+# Subtest: a real file occupying a skill path is preserved
+ok 14 - a real file occupying a skill path is preserved
+  ---
+  duration_ms: 26.678916
+  type: 'test'
+  ...
+# Subtest: profile switches preserve local content occupying skill paths
+ok 15 - profile switches preserve local content occupying skill paths
+  ---
+  duration_ms: 79.6495
+  type: 'test'
+  ...
+# Subtest: switching curated → full replaces only fully-managed dirs with the whole-dir symlink
+ok 16 - switching curated → full replaces only fully-managed dirs with the whole-dir symlink
+  ---
+  duration_ms: 219.302042
+  type: 'test'
+  ...
+# Subtest: repeated full setup never traverses a foreign symlinked .agents
+ok 17 - repeated full setup never traverses a foreign symlinked .agents
+  ---
+  duration_ms: 56.121042
+  type: 'test'
+  ...
+# Subtest: repeated full setup leaves the canonical store untouched
+ok 18 - repeated full setup leaves the canonical store untouched
+  ---
+  duration_ms: 35.528708
+  type: 'test'
+  ...
+# Subtest: hidden managed links are included in the curated→full conversion
+ok 19 - hidden managed links are included in the curated→full conversion
+  ---
+  duration_ms: 119.945084
+  type: 'test'
+  ...
+# Subtest: hidden links are refreshed/unlinked like visible ones (managed removed, foreign kept)
+ok 20 - hidden links are refreshed/unlinked like visible ones (managed removed, foreign kept)
+  ---
+  duration_ms: 182.50325
+  type: 'test'
+  ...
+# Subtest: a real file at .agents/skills blocks the curated→full conversion before any removal
+ok 21 - a real file at .agents/skills blocks the curated→full conversion before any removal
+  ---
+  duration_ms: 51.688042
+  type: 'test'
+  ...
+# Subtest: curated setup refuses .agents or .agents/skills real files before any mutation
+ok 22 - curated setup refuses .agents or .agents/skills real files before any mutation
+  ---
+  duration_ms: 36.953334
+  type: 'test'
+  ...
+# Subtest: full conversion of a skills → canonical-store symlink works without .agents/workflows
+ok 23 - full conversion of a skills → canonical-store symlink works without .agents/workflows
+  ---
+  duration_ms: 26.365792
+  type: 'test'
+  ...
+# Subtest: switching full → curated removes the managed whole-dir link and installs the profile
+ok 24 - switching full → curated removes the managed whole-dir link and installs the profile
+  ---
+  duration_ms: 54.298833
+  type: 'test'
+  ...
+1..24
+# tests 24
+# suites 0
+# pass 24
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2111.661958

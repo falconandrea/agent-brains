@@ -1,0 +1,29 @@
+{
+  "date": "2026-10-11",
+  "host_model": "inherited; exact ID not exported",
+  "token_usage": null,
+  "cases": {
+    "A": {
+      "base": "96c639ba065a7ab7594fb8ea021d84ab4823e9e2",
+      "target": "763387a3ee55f371a5ab0d9e1aae7e75abcac789",
+      "patch_sha256": "e4a644b92a434742509ff8e35155e9e2739523f8af234eddb8d55b5a41234cd6"
+    },
+    "B": {
+      "base": "e5f8e56513820a49500e1226946ce34e0e4b78ea",
+      "target": "73acb85f01db38ad34f61cf7bf9f1c56a183d8e5",
+      "patch_sha256": "60712a75fc94cdbe89fb9fd403de382965301c33105d3b87bc25a43ac3b5d977"
+    },
+    "C": {
+      "base": "906c47e40019792d3aef538009c1592e2d36ef11",
+      "target": "ed4399305573bd3d7b86d44cc4f09658b9cfb2c8",
+      "patch_sha256": "81711c71ce8b5a8069879ad748c33e8ad61aaaad3e74ad4c1b171567803869eb"
+    },
+    "D": {
+      "base": "168532a30c855302d8c99d3697586440e6822316",
+      "target": "a71bbb64f07d0b6c11b93fd882381c3ee4ac3e1c",
+      "patch_sha256": "e886bee029495e7bab97914f07485b9a0853d1fca6d4b18f84c0524968a4e256"
+    }
+  },
+  "skill_v1_sha256": "27969a0617d5cfa6094de2ba827aef341f5936b6ee069dafc54ea3602971d62a",
+  "skill_current_sha256": "86200fc920b2c89c62504033aa9333297c9d77c3f8b864f1cce4542942cfd6c5"
+}

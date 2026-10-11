@@ -2,6 +2,18 @@
 
 ## Open items
 
+- `test-review` remains an explicit experimental extra. Initial pilot and isolated
+  mutation evidence are in `docs/evals/test-review/README.md`. Reminder requested
+  by the user (2026-10-11): proactively suggest the trial on the next suitable
+  substantial feature, especially permissions, persistence, external integrations,
+  async/resource lifecycle, or heavily mocked behavior. Suggest it during planning
+  and run the optional review after implementation, checks and normal review in
+  a separate context, without supplying the normal review's findings. Record
+  additional findings, overlap, false positives and overhead for 2–3 fresh
+  features before considering conditional workflow integration; small or purely
+  visual/documentation changes do not trigger it. Two
+  missing unlink preservation cases were verified in a temporary fixture only;
+  the shipping tests have not been changed.
 - No queued agent-workflow follow-up. W2 and W3 remain evidence-triggered and
   deferred.
 - code-review-follow-ups T4–T10 pending (see
@@ -9,6 +21,13 @@
 
 ## Done
 
+- 2026-10-11 Initial test-review pilot: created a read-only explicit extra outside
+  profiles, routing and installers; evaluated historical implementation, skill
+  and documentation diffs in separate contexts. A concrete unlink coverage gap
+  was verified by mutation: original suite passed 24/24 despite removed ownership
+  guards; two focused probes failed on mutated code and passed on restored code
+  (26/26). Narrowed the skill's handling of pending manual eval evidence. No
+  shipping implementation or automatic review phase changed.
 - 2026-10-08 Remaining consumer alignment: refreshed `ardizio-design` with
   `astro`, `itinerary-ai`, `linkedin-analytics`, and `ga-analytics` with
   `laravel-analytics`, `careguru/carefinder-backend` and the Laravel boilerplate

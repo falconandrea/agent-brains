@@ -1,0 +1,16 @@
+{
+  "baseline-original": {
+    "exit_code": 0
+  },
+  "mutant-original-tests": {
+    "exit_code": 0
+  },
+  "mutant-with-probes": {
+    "exit_code": 1
+  },
+  "restored-with-probes": {
+    "exit_code": 0
+  },
+  "target": "73acb85f01db38ad34f61cf7bf9f1c56a183d8e5",
+  "node": "v24.12.0"
+}
