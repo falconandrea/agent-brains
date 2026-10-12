@@ -35,6 +35,12 @@ C2 was explicitly instructed to review all changed skill, policy, eval and doc
 files. C3 repeated the complete review after a skill wording refinement. They
 are corrective iterations in the same agent, not additional independent samples.
 
+E (2026-10-11, same day as A–D) reviewed a live working-tree change (follow-ups
+T4) rather than a historical range, with the current skill, and was allowed the
+skill's own read-only execution rules. It compared against a fresh two-axis
+code review of the same diff that it never saw; see
+[E-test-review.md](E-test-review.md).
+
 ## Baseline comparison
 
 A and C compare against the previously persisted faithful two-axis reviews in

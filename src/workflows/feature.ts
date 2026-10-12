@@ -21,7 +21,7 @@ import type {
 } from "../ports.ts";
 import type { PiBrainConfig } from "../config.ts";
 import { roleConfig } from "../config.ts";
-import { detectStack, LOW_CONFIDENCE, type ProjectStack } from "../stack.ts";
+import { applyStackOverride, detectStack, LOW_CONFIDENCE, type ProjectStack } from "../stack.ts";
 import { resolveVerifyCommands } from "../verify.ts";
 import { selectSkills } from "../skill-router.ts";
 import { routeContext } from "../context-router.ts";
@@ -667,18 +667,10 @@ export async function runFeatureWorkflow(
 // ---------------------------------------------------------------------------
 
 async function resolveStack(deps: FeatureDeps): Promise<ProjectStack> {
-  if (deps.config.stack) {
-    return {
-      primary: deps.config.stack,
-      frameworks: [],
-      languages: [],
-      packageManagers: [],
-      capabilities: [],
-      confidence: 1,
-      evidence: ["configured in .pi/pi-brain.json"],
-    };
-  }
   const detected = detectStack(deps.cwd);
+  if (deps.config.stack) {
+    return applyStackOverride(detected, deps.config.stack);
+  }
   if (detected.confidence >= LOW_CONFIDENCE) return detected;
 
   const chosen = await deps.human.select({

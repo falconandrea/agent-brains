@@ -23,6 +23,51 @@ export interface ProjectStack {
 
 export const LOW_CONFIDENCE = 0.6;
 
+/** Capabilities discovered from composer.json; runnable only under a PHP primary. */
+const PHP_CAPABILITIES = new Set(["pest", "pint", "phpstan"]);
+
+/** The only PHP ecosystem primary; every other profile is node-based. */
+const isPhp = (primary: string): boolean => primary === "laravel";
+
+/** Framework token detection unshifts for its winning primary (F3 decision). */
+const PRIMARY_FRAMEWORK: Record<string, string> = {
+  laravel: "laravel",
+  astro: "astro",
+  nextjs: "next",
+};
+
+/**
+ * Apply a manual `stack` override to detected metadata (spec §7; PRD F3).
+ *
+ * Detection still runs: languages, package managers and secondary frameworks
+ * are repository facts and are always retained. Capabilities follow the
+ * configured ecosystem — they are kept wholesale when the configured primary
+ * lives in the same ecosystem as the detected one (an explicit `laravel` on a
+ * detected Laravel repo keeps pest/pint/phpstan), otherwise only the
+ * configured ecosystem's capabilities survive, because the other ecosystem's
+ * tooling can never run in that profile's prompts or verification path. The
+ * detected winner framework token is dropped when the primary changes: it
+ * encoded the detection decision the user just overrode.
+ */
+export function applyStackOverride(detected: ProjectStack, configured: string): ProjectStack {
+  const sameEcosystem = isPhp(detected.primary) === isPhp(configured);
+  const capabilities = sameEcosystem
+    ? detected.capabilities
+    : detected.capabilities.filter((c) => PHP_CAPABILITIES.has(c) === isPhp(configured));
+  const frameworks =
+    detected.primary === configured
+      ? detected.frameworks
+      : detected.frameworks.filter((f) => f !== PRIMARY_FRAMEWORK[detected.primary]);
+  return {
+    ...detected,
+    primary: configured,
+    frameworks,
+    capabilities,
+    confidence: 1,
+    evidence: [...detected.evidence, "primary stack configured in .pi/pi-brain.json"],
+  };
+}
+
 const has = (root: string, ...rel: string[]): boolean =>
   rel.some((r) => existsSync(join(root, r)));
 

@@ -29,7 +29,7 @@ export interface RoleConfig {
 
 export interface PiBrainConfig {
   roles: Record<string, RoleConfig>;
-  /** Manual stack override; when set, detection is skipped. */
+  /** Manual primary-stack override; detection still runs and its metadata is retained. */
   stack?: string;
   /** Extra skill roots beyond the bundled .agents/skills. */
   skillRoots: string[];

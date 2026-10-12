@@ -11,7 +11,7 @@ import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { resolveProfile, listProfiles } from "../src/profiles.ts";
-import { detectStack } from "../src/stack.ts";
+import { applyStackOverride, detectStack } from "../src/stack.ts";
 import { resolveVerifyCommands } from "../src/verify.ts";
 import { selectSkills } from "../src/skill-router.ts";
 import { decideNextRound, validateReviewResult, type ReviewResult } from "../src/review.ts";
@@ -96,6 +96,76 @@ test("node verification falls back to tsc when no typecheck script", () => {
   writeFileSync(join(root, "tsconfig.json"), "{}");
   const cmds = resolveVerifyCommands(root, detectStack(root), []);
   assert.ok(cmds.some((c) => c.command === "npx tsc --noEmit"));
+});
+
+// --- manual stack override --------------------------------------------------
+
+const laravelFixture = (): string => {
+  const root = fixture();
+  writeFileSync(
+    join(root, "composer.json"),
+    JSON.stringify({
+      require: { "laravel/framework": "^12", "pestphp/pest": "^3", "laravel/pint": "^1" },
+      "require-dev": { "phpstan/phpstan": "^2" },
+    }),
+  );
+  writeFileSync(join(root, "artisan"), "");
+  return root;
+};
+
+test("override to the detected stack keeps every capability and package manager", () => {
+  const root = laravelFixture();
+  const stack = applyStackOverride(detectStack(root), "laravel");
+  assert.equal(stack.primary, "laravel");
+  assert.equal(stack.confidence, 1);
+  assert.ok(stack.capabilities.includes("pest"));
+  assert.ok(stack.capabilities.includes("pint"));
+  assert.ok(stack.capabilities.includes("phpstan"));
+  assert.deepEqual(stack.packageManagers, ["composer"]);
+  assert.ok(stack.evidence.includes("primary stack configured in .pi/pi-brain.json"));
+});
+
+test("cross-ecosystem override keeps only configured-ecosystem capabilities", () => {
+  const root = laravelFixture();
+  writeFileSync(
+    join(root, "package.json"),
+    JSON.stringify({ devDependencies: { vitest: "^3", react: "^19" } }),
+  );
+  writeFileSync(join(root, "pnpm-lock.yaml"), "");
+  const detected = detectStack(root); // laravel wins on laravel/framework + artisan
+  assert.equal(detected.primary, "laravel");
+
+  const stack = applyStackOverride(detected, "nodejs");
+
+  assert.equal(stack.primary, "nodejs");
+  assert.ok(!stack.capabilities.includes("pest"), "php tooling cannot run in the nodejs profile");
+  assert.ok(!stack.capabilities.includes("pint"));
+  assert.ok(!stack.capabilities.includes("phpstan"));
+  assert.ok(stack.capabilities.includes("vitest"));
+  assert.ok(!stack.frameworks.includes("laravel"), "the overridden detection winner is dropped");
+  assert.ok(stack.frameworks.includes("react"), "manifest facts survive");
+  assert.deepEqual(stack.packageManagers, ["pnpm", "composer"]);
+  assert.equal(stack.confidence, 1);
+  assert.ok(stack.evidence.includes("primary stack configured in .pi/pi-brain.json"));
+});
+
+test("node repo overridden to laravel drops js capabilities and falls back to artisan test", () => {
+  const root = fixture();
+  writeFileSync(
+    join(root, "package.json"),
+    JSON.stringify({ devDependencies: { vitest: "^3", jest: "^29" } }),
+  );
+  const stack = applyStackOverride(detectStack(root), "laravel");
+  assert.deepEqual(stack.capabilities, []);
+  const cmds = resolveVerifyCommands(root, stack, []);
+  assert.deepEqual(cmds.map((c) => c.command), ["php artisan test"]);
+});
+
+test("explicit configured verify commands win over overridden-stack capabilities", () => {
+  const root = laravelFixture();
+  const stack = applyStackOverride(detectStack(root), "laravel");
+  const cmds = resolveVerifyCommands(root, stack, ["make ci"]);
+  assert.deepEqual(cmds.map((c) => c.command), ["make ci"]);
 });
 
 // --- skill routing ----------------------------------------------------------

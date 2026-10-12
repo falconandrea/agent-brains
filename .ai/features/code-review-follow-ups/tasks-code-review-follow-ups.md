@@ -1,6 +1,6 @@
 # Tasks — Code review follow-ups
 
-Status: in progress. T1–T3 are implemented and verified (2026-10-08); T4–T10 are pending. Requirements and review evidence are in the [PRD](prd-code-review-follow-ups.md).
+Status: in progress. T1–T4 are implemented and verified (T1–T3 on 2026-10-08, T4 on 2026-10-11); T5–T10 are pending. Requirements and review evidence are in the [PRD](prd-code-review-follow-ups.md).
 
 ## Safety fixes and regression coverage
 
@@ -10,7 +10,7 @@ Status: in progress. T1–T3 are implemented and verified (2026-10-08); T4–T10
 
 ## Verification reliability
 
-- [ ] **T4 — Retain metadata under stack overrides (F3).** Update stack resolution in `src/workflows/feature.ts` to detect metadata and apply the configured primary stack. Decide how incompatible capabilities are filtered. Test retained Laravel checks, non-npm package-manager selection, differing manual/detected stacks, and explicit `verify` precedence.
+- [x] **T4 — Retain metadata under stack overrides (F3).** `resolveStack` now always detects metadata and applies the configured primary through the pure `applyStackOverride` helper (`src/stack.ts`): languages, package managers and secondary frameworks are repository facts and always retained; explicit `config.verify` stays authoritative (unchanged, pinned by tests). Capability decision: when the configured primary lives in the same ecosystem as the detected one (only `laravel` is PHP; every other profile is node-based) all capabilities are kept — an explicit `laravel` on a detected Laravel repo keeps pest/pint/phpstan; on a cross-ecosystem override only the configured ecosystem's capabilities survive (PHP set: pest/pint/phpstan), because the other ecosystem's tooling can never run in that profile's verification path; the detected winner framework token is dropped when the primary changes. TDD regressions (4 failed pre-fix): Laravel checks preserved, pnpm selection, cross-ecosystem filtering both directions (artisan fallback), `config.verify` precedence — unit + workflow level. Verified: targeted tests, `npm test` 253/253, `npm run typecheck`, `git diff --check`. The interactive low-confidence human choice still swaps the primary without the ecosystem filter (pre-existing behavior, F3 targets `config.stack`).
 - [ ] **T5 — Define verification timeout configuration (F4).** Choose and document a finite default, a configuration key, validation bounds, and supported-platform behavior. Extend `src/config.ts` and its tests so missing or invalid values receive predictable defaults and existing configurations remain compatible.
 - [ ] **T6 — Enforce verification timeouts and cleanup (F4).** Implement the duration limit in `ShellVerifyRunner`; report timeout separately from an ordinary command failure. Test a fast success, ordinary failure, hanging command, child-process tree, and explicit cancellation. Verify that termination leaves no child processes and that workflow cleanup releases its lock. Depends on T5.
 

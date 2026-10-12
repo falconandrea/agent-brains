@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 
 import { DEFAULT_CONFIG, type PiBrainConfig } from "../src/config.ts";
+import type { VerifyCommand } from "../src/verify.ts";
 import { FakeAgentRunner, type AgentRunRequest, type AgentRunResult } from "../src/agent.ts";
 import type {
   CommandResult,
@@ -67,11 +68,14 @@ class FakeHuman implements HumanInput {
 
 class FakeVerifier implements VerifyRunner {
   calls = 0;
+  /** The commands each verify phase received, in order. */
+  readonly received: string[][] = [];
   readonly exitCodes: number[];
   constructor(exitCodes: number[]) {
     this.exitCodes = exitCodes;
   }
-  async run(): Promise<CommandResult[]> {
+  async run(commands: VerifyCommand[]): Promise<CommandResult[]> {
+    this.received.push(commands.map((c) => c.command));
     const code = this.exitCodes[Math.min(this.calls, this.exitCodes.length - 1)] ?? 0;
     this.calls += 1;
     return [{ command: "npm test", exitCode: code, output: code === 0 ? "ok" : "1 failing" }];
@@ -125,6 +129,23 @@ const reviewOf = (r: ReviewResult): AgentRunResult => ({
   structured: r,
   aborted: false,
 });
+
+const approvingResponder = (req: AgentRunRequest): AgentRunResult => {
+  if (req.role === "planner") return plannerResult;
+  if (req.role === "developer") return devResult;
+  return reviewOf({ verdict: "approved", summary: "ok", issues: [] });
+};
+
+const writeLaravelRepo = (cwd: string): void => {
+  writeFileSync(
+    join(cwd, "composer.json"),
+    JSON.stringify({
+      require: { "laravel/framework": "^12", "pestphp/pest": "^3", "laravel/pint": "^1" },
+      "require-dev": { "phpstan/phpstan": "^2" },
+    }),
+  );
+  writeFileSync(join(cwd, "artisan"), "");
+};
 
 const plannerResult: AgentRunResult = { role: "planner", text: PLAN, aborted: false };
 const devResult: AgentRunResult = { role: "developer", text: "DEV_INTERNAL_MONOLOGUE", aborted: false };
@@ -292,6 +313,56 @@ test("verification that never goes green escalates with the failing command", as
   assert.equal(outcome.status, "needs_human");
   assert.match((outcome as { reason: string }).reason, /npm test/);
   assert.equal(reviewerCalls, 0);
+});
+
+test("a manual laravel stack override keeps the detected pest/pint/phpstan checks", async () => {
+  const verifier = new FakeVerifier([0]);
+  const { deps, cwd } = harness(approvingResponder, { verifier, config: { stack: "laravel" } });
+  writeLaravelRepo(cwd);
+
+  const outcome = await runFeatureWorkflow(deps, "add invitations", "run-laravel-override");
+
+  assert.equal(outcome.status, "completed");
+  assert.deepEqual(verifier.received[0], [
+    "./vendor/bin/pest --compact",
+    "./vendor/bin/pint --test",
+    "./vendor/bin/phpstan analyse",
+  ]);
+});
+
+test("a manual stack override keeps the detected package manager for node scripts", async () => {
+  const verifier = new FakeVerifier([0]);
+  const { deps, cwd } = harness(approvingResponder, { verifier, config: { stack: "nodejs" } });
+  writeFileSync(
+    join(cwd, "package.json"),
+    JSON.stringify({
+      scripts: { test: "vitest run", lint: "eslint .", typecheck: "tsc --noEmit" },
+    }),
+  );
+  writeFileSync(join(cwd, "pnpm-lock.yaml"), "");
+
+  const outcome = await runFeatureWorkflow(deps, "add invitations", "run-pnpm-override");
+
+  assert.equal(outcome.status, "completed");
+  assert.deepEqual(verifier.received[0], [
+    "pnpm run test",
+    "pnpm run lint",
+    "pnpm run typecheck",
+  ]);
+});
+
+test("explicit config.verify stays authoritative over the stack override", async () => {
+  const verifier = new FakeVerifier([0]);
+  const { deps, cwd } = harness(approvingResponder, {
+    verifier,
+    config: { stack: "laravel", verify: ["make ci"] },
+  });
+  writeLaravelRepo(cwd);
+
+  const outcome = await runFeatureWorkflow(deps, "add invitations", "run-verify-precedence");
+
+  assert.equal(outcome.status, "completed");
+  assert.deepEqual(verifier.received[0], ["make ci"]);
 });
 
 test("reviewer that never approves stops at maxReviewRounds", async () => {
