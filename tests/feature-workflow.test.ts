@@ -102,7 +102,7 @@ class FakeGit implements GitService {
 
 function harness(
   responder: (req: AgentRunRequest, i: number) => AgentRunResult,
-  opts: { verifier?: VerifyRunner; config?: Partial<PiBrainConfig> } = {},
+  opts: { verifier?: VerifyRunner; config?: Partial<PiBrainConfig>; signal?: AbortSignal } = {},
 ) {
   const cwd = mkdtempSync(join(tmpdir(), "pi-brain-wf-"));
   const human = new FakeHuman();
@@ -119,6 +119,7 @@ function harness(
     verifier,
     git: new FakeGit(),
     events: { emit: (e) => events.push(e) },
+    ...(opts.signal !== undefined ? { signal: opts.signal } : {}),
   };
   return { deps, human, agents, events, cwd, verifier };
 }
@@ -313,6 +314,52 @@ test("verification that never goes green escalates with the failing command", as
   assert.equal(outcome.status, "needs_human");
   assert.match((outcome as { reason: string }).reason, /npm test/);
   assert.equal(reviewerCalls, 0);
+});
+
+test("a timed-out check is reported to the developer as a timeout, not an ordinary exit", async () => {
+  const verifier: VerifyRunner = {
+    async run(commands: VerifyCommand[]): Promise<CommandResult[]> {
+      return [
+        {
+          command: "npm test",
+          exitCode: 124,
+          output: "[pi-brain] npm test timed out after 60000ms; the command's process group was terminated.",
+          timedOut: true,
+        },
+      ];
+    },
+  };
+  const { deps, agents } = harness(approvingResponder, { verifier, config: { maxVerifyRetries: 2 } });
+
+  const outcome = await runFeatureWorkflow(deps, "add invitations", "run-timeout");
+
+  assert.equal(outcome.status, "needs_human", "three identical timeouts exhaust the retry budget");
+  assert.match((outcome as { reason: string }).reason, /npm test/);
+  const fixPrompt = agents.calls.filter((c) => c.role === "developer")[1]!.prompt;
+  assert.match(fixPrompt, /npm test.*timed out/s);
+  assert.doesNotMatch(fixPrompt, /exited 124/, "a timeout must not read like an ordinary exit code");
+});
+
+test("cancellation during verify returns a cancelled run instead of spending the retry budget", async () => {
+  const abort = new AbortController();
+  const verifier: VerifyRunner = {
+    async run(commands: VerifyCommand[], signal?: AbortSignal): Promise<CommandResult[]> {
+      // What the real runner reports when /flow stop kills the command.
+      abort.abort();
+      return [{ command: "npm test", exitCode: 143, output: "cancelled", cancelled: true }];
+    },
+  };
+  const { deps, agents } = harness(approvingResponder, {
+    verifier,
+    config: { maxVerifyRetries: 0 },
+    signal: abort.signal,
+  });
+
+  const outcome = await runFeatureWorkflow(deps, "add invitations", "run-cancel-verify");
+
+  assert.equal(outcome.status, "cancelled");
+  assert.equal((outcome as { at: string }).at, "verify");
+  assert.equal(agents.calls.filter((c) => c.role === "developer").length, 1, "no fix round after cancellation");
 });
 
 test("a manual laravel stack override keeps the detected pest/pint/phpstan checks", async () => {

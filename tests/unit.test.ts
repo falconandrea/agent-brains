@@ -401,6 +401,43 @@ test("a valid config passes through without warnings", () => {
   assert.deepEqual(config.verify, ["make ci"]);
 });
 
+// --- verification timeout (F4) ----------------------------------------------
+
+test("verifyTimeoutMs has a finite default and stays on it when absent", () => {
+  assert.ok(
+    Number.isInteger(DEFAULT_CONFIG.verifyTimeoutMs) && DEFAULT_CONFIG.verifyTimeoutMs > 0,
+    "the default must itself be a finite bound",
+  );
+  const { config, warnings } = normalizeConfig({
+    ...DEFAULT_CONFIG,
+    verifyTimeoutMs: undefined,
+  } as unknown as PiBrainConfig);
+  assert.equal(config.verifyTimeoutMs, DEFAULT_CONFIG.verifyTimeoutMs);
+  assert.deepEqual(warnings, [], "a missing key is the legacy case, not an error");
+});
+
+test("invalid verifyTimeoutMs values fall back to the default with a warning naming the bounds", () => {
+  for (const bad of ["soon", 0, 999, 3_600_001, 1.5, -1, null]) {
+    const { config, warnings } = normalizeConfig({
+      ...DEFAULT_CONFIG,
+      verifyTimeoutMs: bad,
+    } as unknown as PiBrainConfig);
+    assert.equal(config.verifyTimeoutMs, DEFAULT_CONFIG.verifyTimeoutMs, `fallback for ${JSON.stringify(bad)}`);
+    assert.ok(
+      warnings.some((w) => w.startsWith("verifyTimeoutMs:")),
+      `a warning for ${JSON.stringify(bad)}, got ${JSON.stringify(warnings)}`,
+    );
+  }
+});
+
+test("a verifyTimeoutMs inside the allowed bounds passes through unchanged", () => {
+  for (const value of [1000, 30_000, 3_600_000]) {
+    const { config, warnings } = normalizeConfig({ ...DEFAULT_CONFIG, verifyTimeoutMs: value });
+    assert.equal(config.verifyTimeoutMs, value, `pass-through for ${value}`);
+    assert.deepEqual(warnings, []);
+  }
+});
+
 test("a review that says approved while listing blocking issues is not approved", () => {
   const inconsistent: ReviewResult = {
     verdict: "approved",

@@ -17,18 +17,43 @@
  * .gitignore, so ignored paths stay out.
  */
 
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { promisify } from "node:util";
+import { DEFAULT_VERIFY_TIMEOUT_MS } from "./config.ts";
 import type { CommandResult, GitBaseline, GitService, VerifyRunner } from "./ports.ts";
 import type { VerifyCommand } from "./verify.ts";
 
 const exec = promisify(execFile);
 
 const MAX_BUFFER = 64 * 1024 * 1024;
+
+/** Reported exit code for a command that exceeded its timeout (GNU timeout convention). */
+const TIMEOUT_EXIT_CODE = 124;
+/** Reported exit code for a command terminated by explicit cancellation (128 + SIGTERM). */
+const CANCELLED_EXIT_CODE = 143;
+/** Grace between SIGTERM and SIGKILL of the process group. */
+const DEFAULT_KILL_GRACE_MS = 5000;
+/** Combined stdout+stderr a verification command may produce before it is killed. */
+const VERIFY_OUTPUT_LIMIT = 16 * 1024 * 1024;
+/** Poll interval while waiting for a terminated tree to disappear. */
+const SETTLE_POLL_MS = 10;
+/** After SIGKILL, how long settle() waits before giving up on an unkillable (D-state) survivor. */
+const SETTLE_UNKILLABLE_MS = 2000;
+/** Fallback resolution when 'close' never fires after forceSettle (D-state pipe holder). */
+const LAST_RESORT_MS = 2000;
+
+export interface ShellVerifyOptions {
+  /** Receives each command result as soon as it is available. */
+  onResult?: (r: CommandResult) => void;
+  /** Per-command duration limit in ms; defaults to the config default (10 min). */
+  timeoutMs?: number;
+  /** Grace period between SIGTERM and SIGKILL of the process group. */
+  killGraceMs?: number;
+}
 
 interface ExecFailure {
   code?: number | string;
@@ -260,10 +285,14 @@ export class RealGitService implements GitService {
 export class ShellVerifyRunner implements VerifyRunner {
   readonly #cwd: string;
   readonly #onResult?: (r: CommandResult) => void;
+  readonly #timeoutMs: number;
+  readonly #killGraceMs: number;
 
-  constructor(cwd: string, onResult?: (r: CommandResult) => void) {
+  constructor(cwd: string, options: ShellVerifyOptions = {}) {
     this.#cwd = cwd;
-    this.#onResult = onResult;
+    this.#onResult = options.onResult;
+    this.#timeoutMs = options.timeoutMs ?? DEFAULT_VERIFY_TIMEOUT_MS;
+    this.#killGraceMs = options.killGraceMs ?? DEFAULT_KILL_GRACE_MS;
   }
 
   async run(commands: VerifyCommand[], signal?: AbortSignal): Promise<CommandResult[]> {
@@ -277,21 +306,191 @@ export class ShellVerifyRunner implements VerifyRunner {
     return results;
   }
 
-  private async one(command: string, signal?: AbortSignal): Promise<CommandResult> {
-    try {
-      const { stdout, stderr } = await exec("bash", ["-lc", command], {
+  private one(command: string, signal?: AbortSignal): Promise<CommandResult> {
+    return new Promise((resolve) => {
+      // Single termination cause: the FIRST one wins and later triggers are
+      // ignored, so a late timeout can never relabel an ongoing cancellation
+      // (or vice versa). Independent boolean flags could both be true.
+      type Cause = "timeout" | "cancel" | "overflow";
+      let termination: Cause | undefined;
+      let terminatedAt = 0;
+      let stdout = "";
+      let stderr = "";
+      let escalation: NodeJS.Timeout | undefined;
+      let lastResort: NodeJS.Timeout | undefined;
+      let settled = false;
+
+      // `detached` puts the shell in its OWN process group, so a negative-pid
+      // kill reaches the whole tree (test runners, watchers, workers). Plain
+      // spawn() is required for this: the exec/execFile family silently drops
+      // `detached` on current Node (verified: the child keeps the parent's
+      // pgid), and Node's own `timeout`/`signal` options only ever signal
+      // the direct child, stranding grandchildren.
+      const child = spawn("bash", ["-lc", command], {
         cwd: this.#cwd,
-        signal,
-        maxBuffer: 16 * 1024 * 1024,
+        detached: true,
+        stdio: ["ignore", "pipe", "pipe"],
       });
-      return { command, exitCode: 0, output: `${stdout}${stderr}` };
-    } catch (err) {
-      const e = err as ExecFailure;
-      return {
-        command,
-        exitCode: typeof e.code === "number" ? e.code : 1,
-        output: `${e.stdout ?? ""}${e.stderr ?? ""}` || e.message,
+
+      const killTree = (sig: NodeJS.Signals): void => {
+        if (child.pid === undefined) return;
+        try {
+          process.kill(-child.pid, sig);
+        } catch {
+          // Group already gone, or a non-POSIX platform without group kill:
+          // fall back to the shell alone — the best the old code could do.
+          try {
+            child.kill(sig);
+          } catch {
+            // already gone
+          }
+        }
       };
-    }
+
+      const groupGone = (): boolean => {
+        if (child.pid === undefined) return true;
+        try {
+          process.kill(-child.pid, 0);
+          return false;
+        } catch (err) {
+          // Only ESRCH means "no member left". EPERM — a live group owned by
+          // someone else — must keep waiting, not read as gone.
+          return (err as NodeJS.ErrnoException).code === "ESRCH";
+        }
+      };
+
+      /**
+       * Last step of every termination: SIGKILL the group, drop our pipe
+       * ends (a straggler holding them would keep 'close' from firing), and
+       * resolve even if 'close' never arrives — a survivor stuck in
+       * uninterruptible sleep must not hold the workflow hostage.
+       */
+      const forceSettle = (): void => {
+        killTree("SIGKILL");
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+        if (lastResort === undefined) {
+          lastResort = setTimeout(
+            () => { if (!settled) finish((cleanupConfirmed) => resultFor(null, cleanupConfirmed)); },
+            LAST_RESORT_MS,
+          );
+        }
+      };
+
+      const terminate = (reason: Cause): void => {
+        if (termination !== undefined) return; // idempotent: first cause wins
+        termination = reason;
+        terminatedAt = Date.now();
+        if (reason === "overflow") {
+          forceSettle(); // runaway output: no grace, same contract maxBuffer had
+        } else {
+          // SIGTERM first (graceful teardown), forceSettle after a grace
+          // period for anything that traps or ignores it (watch-mode runners).
+          killTree("SIGTERM");
+          escalation = setTimeout(forceSettle, this.#killGraceMs);
+        }
+      };
+
+      /**
+       * The result must not reach the workflow — which proceeds and releases
+       * the repository lock — while any member of the terminated tree can
+       * still run. Waits for the group to empty, SIGKILLing once the grace
+       * is exhausted. Returns false in the unkillable (D-state) edge case
+       * instead of hanging, so the result can say so instead of claiming a
+       * cleanup that was not confirmed.
+       */
+      const settle = async (): Promise<boolean> => {
+        if (termination === undefined || groupGone()) return true;
+        const killAt = terminatedAt + (termination === "overflow" ? 0 : this.#killGraceMs);
+        const giveUpAt = killAt + SETTLE_UNKILLABLE_MS;
+        for (;;) {
+          if (groupGone()) return true;
+          if (Date.now() >= giveUpAt) return false; // best effort: never hang the run
+          if (Date.now() >= killAt) killTree("SIGKILL");
+          await new Promise((r) => setTimeout(r, SETTLE_POLL_MS));
+        }
+      };
+
+      const collect = (chunk: Buffer, stream: "out" | "err"): void => {
+        const total = stdout.length + stderr.length;
+        if (total >= VERIFY_OUTPUT_LIMIT) {
+          if (termination === undefined) terminate("overflow");
+          return;
+        }
+        const text = chunk.toString("utf8").slice(0, VERIFY_OUTPUT_LIMIT - total);
+        if (stream === "out") stdout += text;
+        else stderr += text;
+      };
+      child.stdout?.on("data", (c: Buffer) => collect(c, "out"));
+      child.stderr?.on("data", (c: Buffer) => collect(c, "err"));
+
+      const timer = setTimeout(() => terminate("timeout"), this.#timeoutMs);
+      const onAbort = (): void => {
+        clearTimeout(timer); // deactivate the concurrent timeout
+        terminate("cancel");
+      };
+      signal?.addEventListener("abort", onAbort, { once: true });
+
+      /**
+       * Resolves only after settle(): the result is built with the cleanup
+       * outcome, so the promise never claims a completed termination that
+       * was not confirmed.
+       */
+      const finish = (build: (cleanupConfirmed: boolean) => CommandResult): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        signal?.removeEventListener("abort", onAbort);
+        void settle().then((cleanupConfirmed) => {
+          if (escalation !== undefined) clearTimeout(escalation);
+          if (lastResort !== undefined) clearTimeout(lastResort);
+          resolve(build(cleanupConfirmed));
+        });
+      };
+
+      /** Partial output plus the pi-brain note explaining how the command ended. */
+      const annotated = (note: string): string => `${stdout}${stderr}\n[pi-brain] ${note}`;
+
+      const resultFor = (code: number | null, cleanupConfirmed: boolean): CommandResult => {
+        const outcomeNote = cleanupConfirmed
+          ? "the command's process group was terminated."
+          : "its process group could not be confirmed dead — check for leftover processes.";
+        if (termination === "timeout") {
+          return {
+            command,
+            exitCode: TIMEOUT_EXIT_CODE,
+            output: annotated(`${command} timed out after ${this.#timeoutMs}ms; ${outcomeNote}`),
+            timedOut: true,
+          };
+        }
+        if (termination === "cancel") {
+          return {
+            command,
+            exitCode: CANCELLED_EXIT_CODE,
+            output: annotated(`${command} was cancelled; ${outcomeNote}`),
+            cancelled: true,
+          };
+        }
+        if (termination === "overflow") {
+          return {
+            command,
+            exitCode: 1,
+            output: annotated(
+              `${command} produced more than ${VERIFY_OUTPUT_LIMIT} characters of output; ${outcomeNote}`,
+            ),
+          };
+        }
+        return { command, exitCode: code ?? 1, output: `${stdout}${stderr}` };
+      };
+
+      child.on("error", (err) => {
+        // spawn-level failure (bash missing, cwd gone): an ordinary failure.
+        finish(() => ({ command, exitCode: 1, output: err.message }));
+      });
+
+      child.on("close", (code) => {
+        finish((cleanupConfirmed) => resultFor(code, cleanupConfirmed));
+      });
+    });
   }
 }

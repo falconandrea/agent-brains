@@ -81,9 +81,36 @@ to repeat the global settings; specify only what you want to change:
   },
   "stack": "laravel",
   "maxReviewRounds": 2,
-  "verify": ["./vendor/bin/pest --compact", "./vendor/bin/pint --test"]
+  "verify": ["./vendor/bin/pest --compact", "./vendor/bin/pint --test"],
+  "verifyTimeoutMs": 300000
 }
 ```
+
+### Verification timeout
+
+Each verification command runs under a finite timeout so a hung test or a
+watch-mode script can never hold the workflow — and through it the repository
+lock — until someone intervenes. `verifyTimeoutMs` sets the per-command limit
+in milliseconds:
+
+- default **600000** (10 minutes); allowed range 1000–3600000 (1s–1h);
+- a missing key keeps the default (existing configs need no change); an
+  invalid value (non-integer, out of range) falls back to the default with a
+  warning naming the bounds;
+- a timed-out command reports exit code **124** with output identifying the
+  command and the limit, counts as a blocking failure, and goes back to the
+  developer like any failing check;
+- termination kills the command's whole process group (SIGTERM, then SIGKILL
+  after a 5s grace for anything trapping the signal) and the result is
+  reported once the tree is confirmed gone. The one edge case that cannot be
+  confirmed — a survivor stuck in uninterruptible sleep, which no signal can
+  kill — is reported as such ("could not be confirmed dead — check for
+  leftover processes") after a bounded wait, instead of claiming a clean
+  termination, so the workflow never proceeds — or releases the repository
+  lock — under a false guarantee. The group kill is a
+  POSIX mechanism; on platforms without it, only the direct shell is killed —
+  the same guarantee the pre-timeout code gave. pi-brain runs verification
+  through `bash`, so POSIX systems are the supported configuration.
 
 Role settings are merged per role and per field. For example, this project
 override changes only the reviewer's reasoning level while inheriting its

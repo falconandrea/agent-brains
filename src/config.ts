@@ -38,12 +38,26 @@ export interface PiBrainConfig {
   maxVerifyRetries: number;
   /** Explicit verification commands; when empty they are resolved per stack. */
   verify: string[];
+  /** Per-command verification timeout in ms; see DEFAULT_VERIFY_TIMEOUT_MS. */
+  verifyTimeoutMs: number;
   verbosity: "compact" | "normal" | "verbose";
   autoCommit: false;
   notifications: { bell: boolean; os: boolean };
 }
 
 export const DEFAULT_MAX_REVIEW_ROUNDS = 2;
+
+/**
+ * Finite per-command verification timeout (F4): a hung check must never hold
+ * the workflow — and through it the repository lock — until someone
+ * intervenes. Ten minutes covers real local suites (pest, vitest, astro
+ * check, tsc) while bounding a stuck run. Bounds keep hand-edited values
+ * useful: below 1s a check cannot even start, above 1h the timeout no longer
+ * protects the lock within a working session.
+ */
+export const DEFAULT_VERIFY_TIMEOUT_MS = 10 * 60 * 1000;
+export const MIN_VERIFY_TIMEOUT_MS = 1000;
+export const MAX_VERIFY_TIMEOUT_MS = 60 * 60 * 1000;
 
 export const DEFAULT_CONFIG: PiBrainConfig = {
   roles: {
@@ -56,6 +70,7 @@ export const DEFAULT_CONFIG: PiBrainConfig = {
   maxReviewRounds: DEFAULT_MAX_REVIEW_ROUNDS,
   maxVerifyRetries: 2,
   verify: [],
+  verifyTimeoutMs: DEFAULT_VERIFY_TIMEOUT_MS,
   verbosity: "normal",
   autoCommit: false,
   notifications: { bell: true, os: false },
@@ -113,6 +128,26 @@ export function normalizeConfig(raw: PiBrainConfig): { config: PiBrainConfig; wa
         return [];
       })();
 
+  // Missing means "legacy config file": the default applies silently. Only a
+  // value that is PRESENT but unusable is reported, naming the bounds.
+  const verifyTimeoutMs = (value: unknown): number => {
+    if (
+      typeof value === "number" &&
+      Number.isInteger(value) &&
+      value >= MIN_VERIFY_TIMEOUT_MS &&
+      value <= MAX_VERIFY_TIMEOUT_MS
+    ) {
+      return value;
+    }
+    if (value !== undefined) {
+      warnings.push(
+        `verifyTimeoutMs: expected an integer between ${MIN_VERIFY_TIMEOUT_MS} and ` +
+          `${MAX_VERIFY_TIMEOUT_MS}, got ${JSON.stringify(value)} — using ${DEFAULT_VERIFY_TIMEOUT_MS}`,
+      );
+    }
+    return DEFAULT_VERIFY_TIMEOUT_MS;
+  };
+
   return {
     config: {
       ...raw,
@@ -120,6 +155,7 @@ export function normalizeConfig(raw: PiBrainConfig): { config: PiBrainConfig; wa
       maxVerifyRetries: bounded(raw.maxVerifyRetries, DEFAULT_CONFIG.maxVerifyRetries, "maxVerifyRetries"),
       verbosity,
       verify,
+      verifyTimeoutMs: verifyTimeoutMs(raw.verifyTimeoutMs),
       stack: typeof raw.stack === "string" && raw.stack !== "" ? raw.stack : undefined,
       autoCommit: false, // never configurable to true (spec §5.5)
     },

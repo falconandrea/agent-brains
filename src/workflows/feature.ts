@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 import type { AgentRunner, AgentRunResult } from "../agent.ts";
 import type {
+  CommandResult,
   GitService,
   HumanInput,
   VerifyRunner,
@@ -478,13 +479,17 @@ export async function runFeatureWorkflow(
     // On a resumed pass, skip the checks only when re-entering straight at
     // review: the interrupted review round never consumed fresh results, and
     // the diff — not the verify output — is what the reviewer judges.
-    let results: { command: string; exitCode: number; output: string }[] = [];
+    let results: CommandResult[] = [];
     if (resumeEntry === undefined || !resumeEntry.startsWith("review #")) {
       events.emit({ type: "phase.started", runId, phase: "verify" });
       const commands = resolveVerifyCommands(deps.cwd, stack, config.verify);
       results = await deps.verifier.run(commands, deps.signal);
       for (const r of results)
         events.emit({ type: "command.completed", runId, command: r.command, exitCode: r.exitCode });
+
+      // A cancellation that landed mid-verify must not be reinterpreted as a
+      // failing check (and spend the retry budget or end as needs_human).
+      if (deps.signal?.aborted) return { status: "cancelled", at: "verify", usage };
 
       const blockingFailures = results.filter(
         (r, i) => r.exitCode !== 0 && (commands[i]?.blocking ?? true),
@@ -513,7 +518,11 @@ export async function runFeatureWorkflow(
           id: `verify-${verifyRetries}-${i}`,
           severity: "blocking" as const,
           category: "tests" as const,
-          problem: `\`${f.command}\` exited ${f.exitCode}:\n${tail(f.output)}`,
+          problem: `\`${f.command}\` ${
+            f.timedOut === true
+              ? "timed out (verification timeout)"
+              : `exited ${f.exitCode}`
+          }:\n${tail(f.output)}`,
         }));
         continue; // back to the developer — the reviewer is NOT called
       }

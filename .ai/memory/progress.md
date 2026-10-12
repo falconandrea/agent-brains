@@ -19,28 +19,63 @@
   When resuming this workstream, start with S1. Automatic hooks, code-writing
   workers and Jev remain deferred; no Portal installation is planned.
 - `test-review` remains an explicit experimental extra. Initial pilot and isolated
-  mutation evidence are in `docs/evals/test-review/README.md`. Reminder requested
-  by the user (2026-10-11): proactively suggest the trial on the next suitable
-  substantial feature, especially permissions, persistence, external integrations,
-  async/resource lifecycle, or heavily mocked behavior. Suggest it during planning
-  and run the optional review after implementation, checks and normal review in a
-  separate context, without supplying the normal review's findings. Record
-  additional findings, overlap, false positives and overhead for 2–3 fresh
-  features before considering conditional workflow integration; small or purely
-  visual/documentation changes do not trigger it. Two samples recorded so far:
-  the initial T1–T3 historical pilot (B) and a second fresh-feature run on
-  code-review follow-ups T4 (2026-10-11, `docs/evals/test-review/runs/E-test-review.md`):
-  no must-fix, one convergent minor overlap (interactive stack path), no false
-  positives, low overhead. One more suitable feature sample before deciding on
-  conditional integration. Two
+  mutation evidence are in `docs/evals/test-review/README.md`. Three samples
+  recorded so far: the initial T1–T3 historical pilot (B) and two fresh-feature
+  runs — code-review follow-ups T4 (2026-10-11, `docs/evals/test-review/runs/E-test-review.md`)
+  and T5+T6 (2026-10-12, `docs/evals/test-review/runs/F-test-review.md`): no
+  must-fix in either, E one convergent minor overlap, F two accepted minor
+  incomplete-coverage findings (one new, one sharpening a Spec-axis catch), no
+  false positives, bounded overhead in both. The recurrence condition for
+  reconsidering conditional workflow integration is met; the decision is the
+  user's. Two
   missing unlink preservation cases were verified in a temporary fixture only;
   the shipping tests have not been changed.
 - No queued agent-workflow follow-up. W2 and W3 remain evidence-triggered and
   deferred.
-- code-review-follow-ups T5–T10 pending (see
-  `.ai/features/code-review-follow-ups/tasks-…md`); T1–T4 done.
+- code-review-follow-ups T7–T10 pending (see
+  `.ai/features/code-review-follow-ups/tasks-…md`); T1–T6 done.
 
 ## Done
+
+- 2026-10-12 code-review follow-ups T5+T6 (F4, baseline `1239a20`, uncommitted):
+  verification commands are now bounded — `verifyTimeoutMs` (default 600000,
+  bounds 1000–3600000, missing key = silent legacy default, invalid value =
+  fallback + bounds-naming warning) in `src/config.ts`; `ShellVerifyRunner`
+  runs each command detached (own process group; plain `spawn` is required
+  because the exec family drops `detached` on current Node) and on timeout or
+  `/flow stop` SIGTERMs the group, escalates to SIGKILL after a 5s grace, and
+  destroys its pipe ends. Results distinguish timeout (exit 124, `timedOut`),
+  cancellation (exit 143, `cancelled`) and ordinary failures; the workflow
+  reports timeouts to the developer as timeout findings and returns
+  `cancelled` when the abort lands mid-verify (retry budget untouched);
+  runaway output >16MiB is truncated with the tree killed. Lock release after
+  timeout/cancellation is by construction (workflow returns an outcome,
+  extension `finally` releases — Pi surface, not unit-testable; precondition
+  tested).   TDD: hanging command blocked the full 30s pre-fix and cancellation
+  leaked the grandchild; 16 new tests (3 config, 11 runner incl. tree kill,
+  SIGKILL escalation, off-pipe grandchild, at-return tree-death guarantee,
+  cancel-vs-timeout race, overflow; 2 workflow routing). Third review round:
+  settle() returns the cleanup outcome so the result message (and the README)
+  says "could not be confirmed dead — check for leftover processes" in the
+  unkillable D-state edge case instead of claiming a clean termination
+  (branch not automated-testable, documented limit); groupGone() counts the
+  group absent only on ESRCH.
+  Two-axis review fixed one real defect (escalation timer must stay armed
+  after the shell closes — regression test verified by mutation) and cleaned
+  the finish branches. Second review round (user-reproduced, red-first): the
+  result could resolve at shell close while children were still being killed
+  (266ms return with a live child — now `settle()` waits for the group to be
+  empty before resolving, asserted at return time), and a late timeout could
+  overwrite an ongoing cancellation (single idempotent termination cause,
+  first wins; abort deactivates the timeout timer).   test-review trial F (separate context, review findings
+  withheld): no must-fix, two minor accepted (bounds off-by-one coverage,
+  overflow-kill detection via trailing `sleep 300`); two user-reproduced
+  races escaped both that trial and the two-axis review and are recorded in
+  the F run doc. Platform limit: group
+  kill is POSIX-only; elsewhere falls back to killing the shell (pre-existing
+  guarantee), documented in `docs/pi-brain/README.md`. `npm test` 269/269,
+  typecheck and `git diff --check` clean, no stray processes. T7–T9/S1
+  untouched.
 
 - 2026-10-11 code-review follow-ups T4 (F3, baseline `1239a20`, uncommitted):
   a manual `stack` override no longer discards detected metadata —

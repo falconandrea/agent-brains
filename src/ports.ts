@@ -37,6 +37,10 @@ export interface CommandResult {
   command: string;
   exitCode: number;
   output: string;
+  /** True when the command exceeded its verification timeout and was killed. */
+  timedOut?: boolean;
+  /** True when the command was terminated by an explicit cancellation. */
+  cancelled?: boolean;
 }
 
 export interface VerifyRunner {

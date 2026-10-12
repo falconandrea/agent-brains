@@ -47,6 +47,8 @@ Spec evaluators directly for the actual baseline.
 | B | `e5f8e56..73acb85` | Setup/unlink safety repairs and 24 integration tests | [Review](runs/B-test-review.md) |
 | C | `906c47e..ed43993` | Grilling skill and behavioral-eval protocols | [Corrected full-scope review](runs/C2-test-review.md) |
 | D | `168532a..a71bbb6` | W1 documentation-only contract update | [Negative control](runs/D-test-review.md) |
+| E | working tree vs `1239a20` | T4 stack-override metadata retention | [Review](runs/E-test-review.md) |
+| F | working tree vs `1239a20` | T5+T6 verification timeout and tree termination | [Review](runs/F-test-review.md) |
 
 All comparisons are two endpoints; each base is the target's ancestor, so the
 baseline code-review three-dot comparison yields the same patch. Full commit IDs
@@ -146,12 +148,20 @@ demonstrates useful test-evidence scrutiny; A and C show substantial overlap wit
 Spec review and some risk of excessive evidence requests. Default invocation
 on every change is not justified by this small, single-repository pilot.
 
-Next use: review a new substantial behavior change or regression fix with this
-skill after normal review, recording additional findings, false positives and
-review overhead. Prefer boundary-sensitive changes involving persistence,
-permissions, cleanup, external fixtures, or heavily mocked tests.
-
-Revisit conditional workflow integration after this value recurs on fresh work.
+Two further fresh-work samples were recorded under the standing reminder:
+[E (T4, 2026-10-11)](runs/E-test-review.md) — no must-fix, one convergent
+minor overlap, no false positives, low overhead; and
+[F (T5+T6, 2026-10-12)](runs/F-test-review.md) — no must-fix, two minor
+incomplete-coverage findings (one entirely new, one a sharpening of a
+Spec-axis catch), both accepted and applied, no false positives, bounded
+overhead. After the F run, the user reproduced two races in the same diff
+that both the test-review trial and the two-axis review had missed
+(early return before cleanup completes; timeout overwriting an ongoing
+cancellation) — recorded in the F run addendum as a bound on the lens:
+eventual-state assertions can mask ordering guarantees. With recurrence on
+fresh work now demonstrated (E and F), the condition for reconsidering
+conditional workflow integration is met; that decision is deliberately left
+to the user, not taken by the runs themselves.
 The likely seam is an optional independently scoped review lens alongside the
 existing reviewer, not a second unconditional phase or a replacement for
 deterministic checks. Any integration must keep structured results, read-only
