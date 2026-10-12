@@ -34,6 +34,12 @@
   deferred.
 - code-review-follow-ups T7–T10 pending (see
   `.ai/features/code-review-follow-ups/tasks-…md`); T1–T6 done.
+- 2026-10-12 `main-review-hardening` plan brought onto `main` from commit
+  `6c16a01`, originally drafted 2026-10-02 against `e5f8e56`
+  (`.ai/features/main-review-hardening/`). U5/F4 is already covered by
+  `07d74d7` (code-review-follow-ups T5–T6); remaining tasks are pending.
+  This transfer authorizes documentation integration only; the F13
+  `changes_requested` policy remains an open decision.
 
 ## Done
 
