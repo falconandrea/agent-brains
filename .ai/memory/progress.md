@@ -37,11 +37,56 @@
 - 2026-10-12 `main-review-hardening` plan brought onto `main` from commit
   `6c16a01`, originally drafted 2026-10-02 against `e5f8e56`
   (`.ai/features/main-review-hardening/`). U5/F4 is already covered by
-  `07d74d7` (code-review-follow-ups T5–T6); remaining tasks are pending.
+  `07d74d7` (code-review-follow-ups T5–T6); U1/F2 is implemented (2026-10-14,
+  see Done). Remaining tasks are pending.
   This transfer authorizes documentation integration only; the F13
   `changes_requested` policy remains an open decision.
 
 ## Done
+
+- 2026-10-14 main-review-hardening U1 (F2, baseline uncommitted on `main`):
+  developer write-path guard. New Pi-free `src/write-guard.ts` —
+  `checkWritablePath(path, repoRoot)` resolves the target through its nearest
+  existing ancestor and allows it only if, after symlink resolution, it is
+  inside the repo root with no `.git`/`.pi` segment in its repo-relative
+  path; a dangling symlink is followed link by link (`lstat` + `readlink`,
+  distinguished from a never-created file) so its real destination is judged,
+  and a `".."` inside a symlink target is resolved by the kernel component by
+  component (never collapsed lexically);
+  unresolvable paths are refused (fail closed). `guardedWriteTools()` in
+  `src/pi/pi-agent-runner.ts` builds Pi's write/edit definitions with guarded
+  `operations` and `run()` registers them as custom tools for writable roles —
+  custom tools override same-named built-ins, so nothing else changes; only
+  tools already present in an explicit allowlist get a replacement (read-only
+  roles and the planner's `read/grep/find/ls` list get none). Refusals throw
+  before any filesystem access; Pi's agent loop converts the throw into a
+  tool error whose message names the refused path and its resolution.
+  TDD + review round: the first implementation was reported back by
+  independent reviews with three P1s — (1) the planner gained write/edit
+  because `resolveTools` appended custom tool names to its allowlist, (2)
+  `realpath`'s ENOENT on a dangling symlink was read as "new file", letting a
+  write land outside the repo or under `.git` (reproduced, not TOCTOU), and
+  (3) a relative symlink target containing `".."` was collapsed lexically by
+  `join()` before resolution, so `dangling -> link-out/../victim.txt`
+  (link-out outside) was judged as `repo/victim.txt` while the write landed
+  outside — targets now keep their raw component sequence and the kernel
+  resolves them (the absolute-target variant was already handled and is
+  pinned by tests). Each defect has regression tests at policy level and
+  through the real write tool (nothing created outside the repo or under
+  `.git`); a planner-shaped session with the exact `run()` wiring asserts no
+  write/edit is active. `resolveTools` is now exported for that wiring test.
+  Final: `tests/write-guard.test.ts` 27 tests, all five decision branches
+  mutation-checked (each mutation fails exactly its tests — containment,
+  protected segments, dangling follow, lexical-`..` collapse, allowlist
+  filter), `npm test` 296/296, `npm run typecheck` clean, `git diff --check`
+  clean.
+  Residual limits: TOCTOU symlink swaps between check and write are not
+  covered (single-agent runs under the repo lock); the guard covers Pi's
+  write/edit tools only — `bash` remains available to writable roles without
+  an explicit `tools` allowlist (unchanged, pre-existing; the developer role
+  has one); no live model session was driven — the session tests use a fake
+  model and a hermetic agent dir. U2–U4, U6–U16 untouched; F13 policy
+  untouched.
 
 - 2026-10-12 code-review follow-ups T5+T6 (F4, baseline `1239a20`, uncommitted):
   verification commands are now bounded — `verifyTimeoutMs` (default 600000,

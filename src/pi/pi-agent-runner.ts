@@ -9,6 +9,8 @@
 
 import {
   createAgentSession,
+  createEditToolDefinition,
+  createWriteToolDefinition,
   defineTool,
   DefaultResourceLoader,
   getAgentDir,
@@ -27,6 +29,7 @@ import {
   renderBatchQuestions,
 } from "./ask-user-batch.ts";
 import { humanInputToolForRequest } from "./human-input-policy.ts";
+import { guardEditOperations, guardWriteOperations } from "../write-guard.ts";
 
 export interface PiAgentRunnerDeps {
   /** Repo root. Also drives session naming and tool path resolution. */
@@ -88,6 +91,12 @@ export class PiAgentRunner implements AgentRunner {
           : this.#buildAskUserTool(),
       );
     }
+    // U1/F2: writable roles get guarded write/edit definitions. Custom tools
+    // override same-named built-ins in the session's tool registry, so the
+    // model keeps the exact tools it had and only the filesystem operations
+    // gain the repo-root path policy. Read-only roles get nothing, so their
+    // allowlist stays read-only.
+    customTools.push(...guardedWriteTools(request, this.#deps.cwd));
 
     // Model resolution can hit the network (auth probes) and the session build
     // can be long. An abort during either arrives as a rejection, and must be
@@ -335,10 +344,45 @@ function buildResultTool(spec: ResultToolSpec, capture: (payload: unknown) => vo
 }
 
 /**
- * `tools` is an allowlist over built-ins AND custom tools, so custom tool names
- * must be listed explicitly whenever an allowlist is given.
+ * Guarded write/edit tool definitions for writable roles (U1/F2). The session
+ * registry keys tools by name and custom tools win over built-ins, so these
+ * REPLACE Pi's write/edit: same names, same schemas, same rendering — only the
+ * filesystem operations are wrapped by the path policy in `src/write-guard.ts`.
+ *
+ * Replacement, never grant: an explicit allowlist decides which write-capable
+ * tools exist at all, and only the tools it already declares get a guarded
+ * replacement (U1 review P1 — the planner declares `read/grep/find/ls`
+ * without `readOnly`, so pushing write/edit into its allowlist would silently
+ * grant write access before approval). Roles without an allowlist fall back
+ * to Pi's defaults (which include write/edit), both guarded. Read-only roles
+ * get an empty list and keep the read-only allowlist.
+ *
+ * The `any` generics mirror the SDK's own `AnyToolDefinition` idiom
+ * (`defineTool` returns the same intersection): concrete write/edit
+ * definitions are not variance-assignable to the default `ToolDefinition`.
  */
-function resolveTools(request: AgentRunRequest, customTools: ToolDefinition[]): string[] | undefined {
+export function guardedWriteTools(
+  request: Pick<AgentRunRequest, "readOnly" | "cwd" | "tools">,
+  repoRoot: string,
+): ToolDefinition<any, any, any>[] {
+  if (request.readOnly) return [];
+  const allowed = request.tools;
+  const guarded: ToolDefinition<any, any, any>[] = [];
+  if (allowed === undefined || allowed.includes("write")) {
+    guarded.push(createWriteToolDefinition(request.cwd, { operations: guardWriteOperations(repoRoot) }));
+  }
+  if (allowed === undefined || allowed.includes("edit")) {
+    guarded.push(createEditToolDefinition(request.cwd, { operations: guardEditOperations(repoRoot) }));
+  }
+  return guarded;
+}
+
+/**
+ * `tools` is an allowlist over built-ins AND custom tools, so custom tool names
+ * must be listed explicitly whenever an allowlist is given. Exported so the
+ * write-guard tests can build a session exactly the way `run()` does.
+ */
+export function resolveTools(request: AgentRunRequest, customTools: ToolDefinition[]): string[] | undefined {
   const custom = customTools.map((t) => t.name);
   if (request.readOnly) return [...READ_ONLY_TOOLS, ...custom];
   if (request.tools) return [...request.tools, ...custom];

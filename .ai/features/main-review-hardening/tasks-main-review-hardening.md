@@ -32,14 +32,43 @@ setting. Documentation integration does not authorize implementation.
 
 ## M1 — pi-brain harness
 
-- [ ] **U1 — Developer write-path guard** (F2). `src/write-guard.ts`,
+- [x] **U1 — Developer write-path guard** (F2). `src/write-guard.ts`,
   `src/pi/pi-agent-runner.ts`, `tests/write-guard.test.ts`.
-  Satisfy: writes outside the repo root, under `.git/`, or under `.pi/`
-  (including through a symlinked ancestor) return a tool error with the refused
-  path and leave the filesystem unchanged. In-repo writes and edits are
-  unchanged. Read-only roles keep the read-only tool set.
-  Tests: absolute outside path, `../` escape, `.git/hooks/pre-commit`,
-  `.pi/pi-brain.json`, symlink to outside, normal nested path.
+  Completed 2026-10-14 (uncommitted), after a review round that fixed three
+  P1s.
+  `checkWritablePath` is the Pi-free policy: resolve the target through its
+  nearest existing ancestor (so not-yet-created files and symlinked ancestors
+  are caught; a dangling symlink is followed link by link via `lstat` +
+  `readlink` — not mistaken for a new file — so its true destination is
+  judged; a `".."` inside a symlink target keeps its raw component sequence
+  and is resolved by the kernel, never collapsed lexically — otherwise
+  `dangling -> link-out/../victim.txt` would be judged as `repo/victim.txt`
+  while the write lands outside), then allow only paths inside the repo root
+  whose repo-relative segments contain no `.git` or `.pi`; unresolvable paths
+  fail closed.
+  `guardedWriteTools()` in `pi-agent-runner.ts` feeds Pi's
+  `createWrite/EditToolDefinition` guarded `operations` (built-ins replaced by
+  name via `customTools`, read-only roles get none) and only replaces
+  write-capable tools already present in the role's explicit allowlist — the
+  planner (`read/grep/find/ls`, no `readOnly`) gains nothing (review P1).
+  Refusals throw `WriteGuardError`, which Pi's agent loop renders as a tool
+  error naming the refused path, before any filesystem effect.
+  Tests: 27 in `tests/write-guard.test.ts` — the nine required scenarios
+  (absolute outside, `../` escape, `.git/hooks/pre-commit`,
+  `.pi/pi-brain.json`, symlink out, symlinked ancestor into `.git`, nested
+  allowed, new-file creation, write/edit refusals with no filesystem effect),
+  `.gitignore`-stays-editable, in-repo symlink allowed, read-only exclusion,
+  the two dangling-symlink regressions and the two `".."`-in-target
+  regressions (relative and absolute variants, each at policy level and
+  through the real write tool: no file created outside the repo or under
+  `.git`), and two session-level tests with a real offline
+  `createAgentSession` — the developer session resolves `write` to the
+  guarded definition, the planner-shaped session (same wiring as `run()` via
+  the exported `resolveTools`) gets no write/edit at all.
+  Mutation-checked all five decision branches (containment, protected
+  segments, dangling-symlink follow, lexical-`..` collapse, allowlist filter):
+  each mutation fails exactly its own tests. `npm test` 296/296, typecheck,
+  `git diff --check` clean.
 
 - [ ] **U2 — Freeze verify inputs** (F1). `src/verify.ts`, `src/ports.ts`,
   `src/workflows/feature.ts`, `src/workflows/resume.ts`, `extensions/pi-brain.ts`,
