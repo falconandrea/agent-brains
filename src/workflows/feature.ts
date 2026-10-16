@@ -23,7 +23,13 @@ import type {
 import type { PiBrainConfig } from "../config.ts";
 import { roleConfig } from "../config.ts";
 import { applyStackOverride, detectStack, LOW_CONFIDENCE, type ProjectStack } from "../stack.ts";
-import { resolveVerifyCommands } from "../verify.ts";
+import {
+  changedScriptKeys,
+  freezeVerifyInputs,
+  resolveVerifyCommands,
+  type VerifyCommand,
+  type VerifyFreeze,
+} from "../verify.ts";
 import { selectSkills } from "../skill-router.ts";
 import { routeContext } from "../context-router.ts";
 import {
@@ -105,6 +111,14 @@ export interface ResumeState {
    * a diff missing everything the interrupted develop phase wrote.
    */
   baseline?: GitBaseline;
+  /**
+   * The verification inputs persisted in workflow.started (U2, F1): frozen
+   * commands plus the manifest script sections they depend on. Absent for logs
+   * predating the freeze: those resumed runs re-resolve verify commands per
+   * phase (legacy behavior) and get no script-change check — a one-line
+   * notice says so.
+   */
+  verify?: VerifyFreeze;
 }
 
 /** Built-in tools the developer is allowed: everything except bash. */
@@ -136,6 +150,32 @@ export async function runFeatureWorkflow(
   const baseline = resume?.baseline ?? (await git.baseline(deps.cwd));
   human.notify(`stack: ${stack.primary} (${stack.frameworks.join(", ") || "no framework"})`);
 
+  // U2 (F1): verification inputs are resolved ONCE, here, and frozen for the
+  // whole run — commands plus the manifest script sections they run through.
+  // The developer has no shell but can edit manifests, so every later verify
+  // compares the live scripts against this baseline instead of trusting the
+  // tree. Resume replays the persisted freeze: an edited .pi/pi-brain.json
+  // cannot rewrite what runs. Logs predating the freeze have none — they keep
+  // the legacy per-verify resolution, with a one-line notice below.
+  let verifyFreeze: VerifyFreeze | undefined;
+  if (resume) {
+    verifyFreeze = resume.verify;
+    if (resume.verify === undefined) {
+      human.notify(
+        "pi-brain: run log predates the verify freeze — verify commands are re-resolved and script changes are not checked.",
+      );
+    }
+  } else {
+    const frozen = freezeVerifyInputs(deps.cwd, stack, config.verify);
+    if (!frozen.ok) {
+      // Fail closed: a perimeter that cannot be fully frozen cannot be
+      // verified safely. Nothing has run yet and no workflow.started was
+      // emitted, so the log holds no partial run to resume.
+      return { status: "needs_human", reason: frozen.reason, usage: {} };
+    }
+    verifyFreeze = frozen.freeze;
+  }
+
   // In resume mode, workflow.started was already emitted — skip it.
   if (!resume) {
     events.emit({
@@ -148,6 +188,7 @@ export async function runFeatureWorkflow(
       ...(baseline.ignoreRulesDigest !== undefined
         ? { ignoreRulesDigest: baseline.ignoreRulesDigest }
         : {}),
+      ...(verifyFreeze !== undefined ? { verify: verifyFreeze } : {}),
     });
   }
 
@@ -481,8 +522,30 @@ export async function runFeatureWorkflow(
     // the diff — not the verify output — is what the reviewer judges.
     let results: CommandResult[] = [];
     if (resumeEntry === undefined || !resumeEntry.startsWith("review #")) {
+      // Script-freeze guard (U2, F1): compare the manifest script sections the
+      // frozen commands depend on against the baseline taken at run start. A
+      // difference means someone rewrote what verify would execute — escalate
+      // before a single command runs. Same baseline on start, retry and
+      // resume, so a change between rounds is caught too.
+      let commands: VerifyCommand[];
+      if (verifyFreeze) {
+        const changedScripts = changedScriptKeys(deps.cwd, verifyFreeze);
+        if (changedScripts.length > 0) {
+          events.emit({ type: "workflow.completed", runId, status: "needs_human" });
+          return {
+            status: "needs_human",
+            reason:
+              `verify scripts changed since the run started (${changedScripts.join(", ")}) — ` +
+              `no verification command was executed. Restore the scripts or start a new run.`,
+            usage,
+          };
+        }
+        commands = verifyFreeze.commands;
+      } else {
+        // Legacy log without a persisted freeze: resolve per verify, as before.
+        commands = resolveVerifyCommands(deps.cwd, stack, config.verify);
+      }
       events.emit({ type: "phase.started", runId, phase: "verify" });
-      const commands = resolveVerifyCommands(deps.cwd, stack, config.verify);
       results = await deps.verifier.run(commands, deps.signal);
       for (const r of results)
         events.emit({ type: "command.completed", runId, command: r.command, exitCode: r.exitCode });

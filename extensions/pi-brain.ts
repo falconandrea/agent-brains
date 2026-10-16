@@ -614,6 +614,8 @@ export default function piBrain(pi: ExtensionAPI): void {
         return "log missing workflow.started event";
       case "missing_baseline":
         return "log missing baseline (old format, cannot resume)";
+      case "corrupt_verify_freeze":
+        return "the persisted verify freeze is corrupt (commands/scripts shape or digest mismatch) — cannot safely resume; start a new /feature run";
       case "gate_not_approved":
         return "spec gate was not approved";
       case "terminal_outcome":

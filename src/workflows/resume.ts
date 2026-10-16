@@ -12,6 +12,7 @@ import { join } from "node:path";
 
 import { DEFAULT_MAX_REVIEW_ROUNDS } from "../config.ts";
 import type { WorkflowEvent, GitBaseline, GitService, HumanInput } from "../ports.ts";
+import { digestScripts, isPlainRecord, type VerifyFreeze } from "../verify.ts";
 import type { ResumeState, UsageByRole } from "./feature.ts";
 import { descriptionMarker, hasValidTaskList } from "./feature.ts";
 import type { ReviewIssue, ReviewResult } from "../review.ts";
@@ -25,6 +26,14 @@ export type Refusal =
   | { type: "not_feature_workflow"; workflow: string }
   | { type: "missing_workflow_started" }
   | { type: "missing_baseline" }
+  | {
+      /**
+       * workflow.started carries a verify freeze (U2) whose shape is broken or
+       * whose scriptsDigest does not bind to its scripts. Absent ≠ corrupt:
+       * absent is legacy compatibility; corrupt is refused outright, because
+       * degrading would silently disable the freeze protection.
+       */
+      type: "corrupt_verify_freeze" }
   | { type: "gate_not_approved" }
   | { type: "terminal_outcome"; outcome: string }
   | {
@@ -55,6 +64,64 @@ export interface ReplayOptions {
 
 const isDeveloperPhase = (phase: string): boolean =>
   phase === "develop" || phase.startsWith("fix #");
+
+/**
+ * Validate the persisted verify freeze (U2). The run log is untrusted input,
+ * and a structurally broken freeze is worse than none: `scripts: []` would
+ * read as "no scripts to check" and silently void the guard. So:
+ * - absent (`verify` undefined) → "absent": legacy logs keep resuming with the
+ *   per-verify re-resolution and its one-line notice;
+ * - present but invalid (wrong shape, or scriptsDigest not binding to its
+ *   scripts) → "corrupt": the resume is refused with a clear reason instead
+ *   of downgrading protection.
+ */
+function replayVerifyFreeze(
+  started: Extract<WorkflowEvent, { type: "workflow.started" }>,
+): { kind: "absent" } | { kind: "ok"; freeze: VerifyFreeze } | { kind: "corrupt" } {
+  const candidate: unknown = started.verify;
+  if (candidate === undefined) return { kind: "absent" };
+  if (!isPlainRecord(candidate)) return { kind: "corrupt" }; // null, arrays, scalars
+
+  const { commands, scripts, scriptsDigest, perimeter } = candidate;
+  if (
+    !Array.isArray(commands) ||
+    commands.some(
+      (c) =>
+        !isPlainRecord(c) ||
+        typeof c.label !== "string" ||
+        typeof c.command !== "string" ||
+        typeof c.blocking !== "boolean",
+    )
+  ) {
+    return { kind: "corrupt" };
+  }
+  if (!isPlainRecord(scripts) || Object.values(scripts).some((s) => !isPlainRecord(s))) {
+    return { kind: "corrupt" };
+  }
+  // The two isPlainRecord guards above established the shape; the cast only
+  // re-narrows what TypeScript cannot track through Object.values().
+  if (
+    typeof scriptsDigest !== "string" ||
+    scriptsDigest !== digestScripts(scripts as VerifyFreeze["scripts"])
+  ) {
+    return { kind: "corrupt" };
+  }
+  // Perimeter: absent predates the field (normalize to "root" — those freezes
+  // did not scan the tree), but a present value must be one of the known
+  // perimeters. Garbage is refused rather than silently defaulted.
+  if (perimeter !== undefined && perimeter !== "root" && perimeter !== "tree") {
+    return { kind: "corrupt" };
+  }
+  return {
+    kind: "ok",
+    freeze: {
+      commands,
+      scripts: scripts as VerifyFreeze["scripts"],
+      scriptsDigest,
+      perimeter: perimeter === "tree" ? "tree" : "root",
+    },
+  };
+}
 
 const asReviewResult = (
   event: Extract<WorkflowEvent, { type: "review.completed" }>,
@@ -108,6 +175,14 @@ export function replayRunLog(events: WorkflowEvent[], options: ReplayOptions = {
     return { ok: false, refusal: { type: "missing_baseline" } };
   }
   const maxReviewRounds = options.maxReviewRounds ?? DEFAULT_MAX_REVIEW_ROUNDS;
+  // The frozen verify inputs (U2), when the log has them: replayed verbatim so
+  // the resumed run verifies with the commands frozen at the original start.
+  // A present-but-corrupt freeze refuses the resume (see replayVerifyFreeze).
+  const verifyReplay = replayVerifyFreeze(started);
+  if (verifyReplay.kind === "corrupt") {
+    return { ok: false, refusal: { type: "corrupt_verify_freeze" } };
+  }
+  const verify = verifyReplay.kind === "ok" ? verifyReplay.freeze : undefined;
 
   // Terminal outcomes are not resumable — except workflow.failed, which is
   // the very state resume exists for (provider crash, quota, Ctrl-C). A log
@@ -337,6 +412,7 @@ export function replayRunLog(events: WorkflowEvent[], options: ReplayOptions = {
       usage,
       interruptedPatchSha,
       ...(spec !== undefined ? { spec } : {}),
+      ...(verify !== undefined ? { verify } : {}),
     },
   };
 }

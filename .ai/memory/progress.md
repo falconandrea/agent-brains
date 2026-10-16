@@ -37,12 +37,90 @@
 - 2026-10-12 `main-review-hardening` plan brought onto `main` from commit
   `6c16a01`, originally drafted 2026-10-02 against `e5f8e56`
   (`.ai/features/main-review-hardening/`). U5/F4 is already covered by
-  `07d74d7` (code-review-follow-ups T5–T6); U1/F2 is implemented (2026-10-14,
-  see Done). Remaining tasks are pending.
+  `07d74d7` (code-review-follow-ups T5–T6); U1/F2 is implemented (2026-10-14)
+  and U2/F1 is implemented (2026-10-15), both uncommitted on `main` — see
+  Done. Remaining tasks are pending.
   This transfer authorizes documentation integration only; the F13
   `changes_requested` policy remains an open decision.
 
 ## Done
+
+- 2026-10-15 main-review-hardening U2 (F1, baseline uncommitted on `main`):
+  frozen verification inputs. `freezeVerifyInputs` (`src/verify.ts`) resolves
+  the verify commands once at run start and snapshots the involved manifest
+  script sections: stack-resolved commands (our own, plain single commands)
+  freeze the ecosystem's ROOT manifest — `package.json` for node primaries,
+  `composer.json` for Laravel — while explicit `config.verify` freezes the
+  whole reachable perimeter: both root manifests plus every nested
+  `package.json`/`composer.json` in the tree (see the review rounds below).
+  The perimeter (`"root"` | `"tree"`) is persisted on the freeze and
+  re-resolved before every verify, so a manifest CREATED mid-run is caught
+  too.
+  Sections are frozen wholesale — npm's `pre/post` hooks and script-to-script
+  calls make key-scoped freezing trivially bypassable — and persisted on
+  `workflow.started` as `{commands, scripts, scriptsDigest}` (optional field,
+  backward compatible). Before every verify (start, fix rounds, resume)
+  `changedScriptKeys` diffs the live sections against the freeze; any
+  changed/added/removed key ends the run `needs_human` before any command
+  executes, the reason naming the keys (`frontend/package.json scripts.test`).
+  Script bodies compare by canonical content because composer bodies can be
+  arrays (two structurally identical arrays from separate JSON parses are
+  different references — caught red-first). Capture and replay share
+  `isPlainRecord`, so a non-object `scripts` section captures as `{}` and the
+  program can never emit a freeze its own replay would reject. Resume replays
+  the persisted freeze: `resume.ts` validates it (structure plus digest
+  binding; absent → legacy path, present-but-corrupt → resume refused), and
+  the workflow prefers it over the freshly loaded config, so an edited
+  `.pi/pi-brain.json` cannot rewrite what runs. Logs predating the freeze
+  resume with the old per-verify resolution plus a one-line notice. The only
+  extension change is the `corrupt_verify_freeze` refusal message (replay
+  state already flows through); documented in `docs/pi-brain/README.md`.
+  TDD: 34 new tests across four rounds (unit, workflow, replay), all
+  red-first; disabling the changed-script gate failed exactly the blocking
+  workflow tests, disabling the nested scan failed exactly the nested
+  regressions, and disabling the perimeter re-scan failed exactly the
+  created-after-freeze tests (mutation checks). Review round 2 (user-reproduced, red-first)
+  fixed: (P1) compound commands bypassed the freeze — `true && npm run test`
+  on a Laravel run froze only composer.json (first-token detection saw
+  `true`), so a hijacked `scripts.test` was executed; (P2) `verify: null`
+  crashed the resume replay (`typeof null === "object"` passed the old
+  guard); (standards) the replay validation was incomplete — arrays passed as
+  the `scripts` container (silently voiding the guard) and any string passed
+  as `scriptsDigest`; the freeze is now validated structurally AND the digest
+  must bind to its scripts, with absent ≠ corrupt: absent keeps the legacy
+  compat path with its one-line notice, present-but-corrupt REFUSES the
+  resume (`corrupt_verify_freeze`, wired in the extension's refusalMessage)
+  instead of silently disabling protection. Round 3 (user-reproduced,
+  red-first) fixed: (P1) freezing only the two root manifests still missed
+  subfolder manifests — `cd frontend && npm run test` froze root only, so
+  editing `frontend/package.json scripts.test` ran the hijacked script;
+  explicit `config.verify` now freezes the whole reachable perimeter (root +
+  every nested manifest), the nested scan excludes `node_modules`, `vendor`,
+  `.git`, `.pi`, `bower_components` and symlinked dirs, and above 200
+  manifests `freezeVerifyInputs` returns `{ok:false, reason}` so the workflow
+  fails closed `needs_human` rather than verifying an incompletely frozen
+  perimeter; (standards) capture/replay were misaligned — `manifestScripts`
+  accepted an array `scripts` section that replay rejects, so the two now
+  share `isPlainRecord`; and the test count in this entry was wrong. Round 4
+  (user-reproduced, red-first) fixed: (P1) a nested manifest CREATED after the
+  freeze still escaped — `changedScriptKeys` only iterated the baseline paths,
+  so an author could add `frontend/package.json` mid-run and verify would run
+  its scripts; the scan perimeter (`"root"` | `"tree"`) is now persisted on
+  the freeze and re-resolved before every verify (start, rounds, resume), so a
+  newly created manifest (root or nested) is a detected change; replay
+  validates the perimeter (unknown value → refuse) and normalizes a missing
+  one to root-only for backward compat. Docs corrected too: U3 does not cover
+  test-runner binary swaps (it snapshots git state, not working-tree files).
+  `npm test` 330/330, `npm run typecheck` clean, `git diff --check` clean.
+  Residual limits: what a script BODY runs (other files, `node_modules/.bin`,
+  `vendor/bin`) is not resolved or frozen and U3 will not close that either;
+  the nested scan skips dependency/VCS and symlinked dirs (a script run from
+  inside one is outside the perimeter); a legacy freeze without the perimeter
+  field normalizes to root-only, so those resumed runs keep the round-3
+  behavior (no tree re-scan); explicit config over-freezes (whole perimeter,
+  e.g. package.json on Laravel even when unused) and above 200 manifests
+  refuses instead of truncating.
+  U1 is unaffected; U3–U16 untouched; F13 policy untouched.
 
 - 2026-10-14 main-review-hardening U1 (F2, baseline uncommitted on `main`):
   developer write-path guard. New Pi-free `src/write-guard.ts` —

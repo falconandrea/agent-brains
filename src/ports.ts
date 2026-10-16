@@ -4,7 +4,7 @@
  * be run end-to-end with no models and no Pi.
  */
 
-import type { VerifyCommand } from "./verify.ts";
+import type { VerifyCommand, VerifyFreeze } from "./verify.ts";
 
 export interface ConfirmQuestion {
   message: string;
@@ -90,6 +90,15 @@ export type WorkflowEvent =
       baseline?: string;
       /** Digest of ignore rules at workflow start, for resume-safe concealment detection. */
       ignoreRulesDigest?: string;
+      /**
+       * Verification inputs resolved once at start (U2, F1): the commands plus
+       * the manifest script sections they depend on, the scan perimeter they
+       * were resolved over, and a digest of the sections. Resume replays these
+       * instead of re-reading config; absent in logs that predate the freeze
+       * (those resume with the legacy re-resolve path), while a
+       * present-but-corrupt value refuses the resume outright.
+       */
+      verify?: VerifyFreeze;
     }
   | {
       type: "phase.started";

@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 
 import { replayRunLog, isResumable, validateResumePreconditions, hasPatchChanged, askResumeWithChangedDiff, type Refusal } from "../src/workflows/resume.ts";
+import { digestScripts } from "../src/verify.ts";
 import type { WorkflowEvent, GitService, GitBaseline, HumanInput } from "../src/ports.ts";
 
 // Simple fakes for testing
@@ -637,6 +638,117 @@ test("replay extracts the spec.approved hashes for the tamper guard", () => {
   const result = replayRunLog(events);
   assert.equal(result.ok, true);
   assert.deepEqual(result.state.spec, { prdSha: "aaa", tasksSha: "bbb" });
+});
+
+// -- persisted verify freeze (U2) ----------------------------------------------
+
+const validFreezeScripts = { "package.json": { test: "vitest run", lint: "eslint ." } };
+
+test("replay extracts the persisted verify freeze for resume", () => {
+  const freeze = {
+    commands: [
+      { label: "tests", command: "npm run test", blocking: true },
+      { label: "lint", command: "npm run lint", blocking: false },
+    ],
+    scripts: validFreezeScripts,
+    scriptsDigest: digestScripts(validFreezeScripts),
+    perimeter: "tree" as const,
+  };
+  const events: WorkflowEvent[] = [
+    { type: "workflow.started", runId: "run-1", workflow: "feature", baseline: "abc123", verify: freeze },
+    { type: "phase.started", runId: "run-1", phase: "develop" },
+  ];
+  const result = replayRunLog(events);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.state.verify, freeze, "the scan perimeter is preserved for the resumed re-scan");
+});
+
+test("replay defaults a freeze without a perimeter to root-only (legacy compat)", () => {
+  // A freeze written before the perimeter field existed did not scan the tree,
+  // so replaying it must not start flagging newly appeared nested manifests.
+  const legacyFreeze = {
+    commands: [{ label: "tests", command: "npm run test", blocking: true }],
+    scripts: validFreezeScripts,
+    scriptsDigest: digestScripts(validFreezeScripts),
+  };
+  const events: WorkflowEvent[] = [
+    { type: "workflow.started", runId: "run-1", workflow: "feature", baseline: "abc123", verify: legacyFreeze },
+    { type: "phase.started", runId: "run-1", phase: "develop" },
+  ];
+  const result = replayRunLog(events);
+  assert.equal(result.ok, true);
+  assert.equal(result.state.verify?.perimeter, "root");
+});
+
+test("replay treats a log without a verify freeze as legacy (state.verify undefined)", () => {
+  const events: WorkflowEvent[] = [
+    { type: "workflow.started", runId: "run-1", workflow: "feature", baseline: "abc123" },
+    { type: "phase.started", runId: "run-1", phase: "develop" },
+  ];
+  const result = replayRunLog(events);
+  assert.equal(result.ok, true);
+  assert.equal(result.state.verify, undefined);
+});
+
+test("replay refuses a verify freeze that is present but corrupt", () => {
+  // Absent field = legacy compat. Present but structurally broken or with a
+  // digest that does not bind to its scripts = refuse the resume outright:
+  // silently downgrading would disable the freeze protection (a corrupt
+  // scripts container — e.g. [] — reads as "no scripts to check").
+  const valid = {
+    commands: [{ label: "tests", command: "npm run test", blocking: true }],
+    scripts: validFreezeScripts,
+    scriptsDigest: digestScripts(validFreezeScripts),
+  };
+  const logOf = (verify: unknown): WorkflowEvent[] => [
+    {
+      type: "workflow.started",
+      runId: "run-1",
+      workflow: "feature",
+      baseline: "abc123",
+      verify: verify as typeof valid,
+    },
+    { type: "phase.started", runId: "run-1", phase: "develop" },
+  ];
+
+  for (const [name, freeze] of [
+    ["verify null", null],
+    ["verify an array", []],
+    ["verify a string", "frozen"],
+    ["commands not an array", { ...valid, commands: "nope" }],
+    ["command entry not an object", { ...valid, commands: ["npm run test"] }],
+    ["command with a non-string body", { ...valid, commands: [{ label: "x", command: 7, blocking: true }] }],
+    ["command with a non-boolean blocking", { ...valid, commands: [{ label: "x", command: "npm test", blocking: "yes" }] }],
+    ["scripts missing", { commands: valid.commands, scriptsDigest: valid.scriptsDigest }],
+    ["scripts an array", { ...valid, scripts: [] }],
+    ["scripts a string", { ...valid, scripts: "package.json" }],
+    ["script section an array", { ...valid, scripts: { "package.json": [] } }],
+    ["script section null", { ...valid, scripts: { "package.json": null } }],
+    ["scriptsDigest not a string", { ...valid, scriptsDigest: 42 }],
+    ["scriptsDigest not binding to the scripts", { ...valid, scriptsDigest: "0".repeat(64) }],
+    ["perimeter not a known value", { ...valid, perimeter: "elsewhere" }],
+    ["perimeter not a string", { ...valid, perimeter: 1 }],
+  ] as Array<[string, unknown]>) {
+    const result = replayRunLog(logOf(freeze));
+    assert.equal(result.ok, false, name);
+    if (!result.ok) {
+      assert.equal(result.refusal.type, "corrupt_verify_freeze", name);
+    }
+  }
+});
+
+test("isResumable is false for a corrupt verify freeze", () => {
+  const events: WorkflowEvent[] = [
+    {
+      type: "workflow.started",
+      runId: "run-1",
+      workflow: "feature",
+      baseline: "abc123",
+      verify: { commands: null } as never,
+    },
+    { type: "phase.started", runId: "run-1", phase: "develop" },
+  ];
+  assert.equal(isResumable(events), false);
 });
 
 test("validateResumePreconditions requires the tasks file too", async () => {

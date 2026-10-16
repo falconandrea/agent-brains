@@ -124,6 +124,68 @@ provider, model, and `readOnly` value from the global config:
 }
 ```
 
+### Frozen verification inputs
+
+Verification commands are resolved **once at run start** and persisted on the
+`workflow.started` event together with the manifest script sections they run
+through and a digest of those sections. Before every verify —
+first run, fix rounds, and resumed runs alike — the live scripts are diffed
+against that baseline: any changed, added or removed script key ends the run
+`needs_human` before a single command executes, with the reason naming the
+changed keys. The scan perimeter is persisted with the freeze and re-resolved
+at each check, so **a manifest created during the run** (a nested
+`package.json` that did not exist at start) is caught too, not just edits to
+the ones already frozen. `/flow resume` replays the persisted commands and
+baseline, so editing `.pi/pi-brain.json` (or a manifest) while a run is
+interrupted cannot rewrite what verify executes. Logs written before this
+feature resume as before — commands re-resolved from the current config — with
+a one-line notice that the script check is inactive for that run. A log whose
+persisted freeze is present but corrupt (wrong shape, a perimeter that is not
+`root`/`tree`, or a digest that does not bind to its scripts) is refused
+outright instead of silently resuming unprotected.
+
+The script sections are frozen **wholesale**, not per named key: npm, pnpm,
+yarn and bun execute `pre<script>`/`post<script>` hooks automatically and
+scripts commonly call other scripts, so key-scoped freezing would leave the
+easy bypass open. The cost: even an unrelated script edit escalates to a
+human — restoring the scripts or starting a new run is the way forward.
+
+Which manifests are frozen:
+
+- **Stack-resolved commands** (pi-brain's own resolution): the ecosystem's
+  root manifest — `package.json` for every node primary (npm, pnpm, yarn and
+  bun all execute package.json scripts through `<pm> run <key>`),
+  `composer.json` for Laravel.
+- **Explicit `verify` config: the whole reachable perimeter.** Explicit
+  commands are arbitrary shell, and no tokenizer can prove which manifest they
+  reach: `true && npm run test`, `sh -c '…'`, `cd frontend && pnpm test`,
+  `npm --prefix frontend run test` and `yarn workspace … run …` each defeat a
+  token heuristic, and the `cd`/`--prefix`/workspace forms execute a
+  **subfolder** manifest the root snapshot never saw. So both root manifests
+  **plus every nested `package.json`/`composer.json`** in the tree are frozen.
+  The perimeter is remembered on the freeze and re-scanned before each verify,
+  so a manifest **created mid-run** is a change too. Manifests that do not
+  exist at freeze time are snapshotted as empty sections, so their creation is
+  a detected change, not a silent pass.
+
+Known limits of the freeze perimeter:
+
+- **Excluded from the scan:** `node_modules`, `vendor`, `.git`, `.pi`,
+  `bower_components` and symlinked directories. They can hold thousands of
+  manifests (unbounded), and a command that deliberately executes a script
+  from inside one is outside the perimeter.
+- **Refused rather than truncated:** above 200 manifests the freeze is not
+  built at all; the run ends `needs_human` with the count, because an
+  incompletely frozen perimeter cannot be verified safely.
+- **Script bodies are not resolved:** what a script **body** executes (other
+  files, `node_modules/.bin`, `vendor/bin`) is neither resolved nor frozen — a
+  swapped test-runner binary is invisible to this check, and the planned
+  repository-state digest (U3) does **not** close that gap: it snapshots git
+  state (HEAD, refs, `.git/config`, hooks), not arbitrary working-tree files.
+
+The freeze lives in the run log under `.pi/`, which the developer's write
+guard already refuses to touch.
+
 Providers come from Pi (`/login`). pi-brain never reads or writes `auth.json`.
 JSON rather than YAML on purpose: keeps the package dependency-free.
 

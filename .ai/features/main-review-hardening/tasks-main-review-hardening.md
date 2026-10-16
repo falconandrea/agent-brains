@@ -70,20 +70,92 @@ setting. Documentation integration does not authorize implementation.
   each mutation fails exactly its own tests. `npm test` 296/296, typecheck,
   `git diff --check` clean.
 
-- [ ] **U2 — Freeze verify inputs** (F1). `src/verify.ts`, `src/ports.ts`,
+- [x] **U2 — Freeze verify inputs** (F1). `src/verify.ts`, `src/ports.ts`,
   `src/workflows/feature.ts`, `src/workflows/resume.ts`, `extensions/pi-brain.ts`,
   `tests/feature-workflow.test.ts`, `tests/resume.test.ts`.
-  Satisfy: commands are resolved once at run start and persisted on
-  `workflow.started` together with a digest of the scripts they depend on
-  (`package.json` `scripts`; `composer.json` `scripts` for Laravel). Before each
-  verify, a changed digest ends the run `needs_human` without executing anything,
-  and the reason names the changed script keys. Resume uses the persisted
-  commands and digest. A log without them resumes as today, with a one-line
-  notice.
-  Tests: unchanged scripts run verify; a changed `test` script escalates and
-  runs zero commands; the explicit `config.verify` path also checks the
-  `npm run …` scripts it invokes; a resume with an edited `.pi/pi-brain.json`
-  still runs the persisted commands; an old-format log gets the notice.
+  Completed 2026-10-15 (uncommitted), after three review rounds (P1 compound
+  command bypass + P2 `verify: null` crash + validation in round 2; P1 nested
+  manifest bypass + capture/replay alignment in round 3; P1 manifest created
+  mid-run escaping the diff + perimeter persistence in round 4). TDD
+  throughout (34 tests red-first across the rounds; the changed-script gate,
+  the nested scan and the perimeter re-scan each mutation-killed exactly their
+  blocking tests).
+  `freezeVerifyInputs` in `src/verify.ts` resolves the commands once and
+  snapshots the involved manifest script sections. Sections are frozen
+  wholesale, not per key: `pre/post` hooks and script-to-script calls make
+  key-scoped freezing trivially bypassable. Manifest involvement:
+  stack-resolved commands (plain, single, our own shape) freeze the
+  ecosystem's ROOT manifest (`package.json` for node primaries — npm/pnpm/
+  yarn/bun all run package.json scripts via `<pm> run`; `composer.json` for
+  Laravel); explicit `config.verify` freezes the whole reachable perimeter —
+  both root manifests PLUS every nested `package.json`/`composer.json` in the
+  tree. The perimeter (`"root"` | `"tree"`) is persisted on the freeze and
+  re-resolved by `changedScriptKeys` before EVERY verify (start, rounds,
+  resume), so a manifest CREATED mid-run — nested `frontend/package.json` that
+  did not exist at freeze time — is a detected change, not a silent pass
+  (round 4 P1: the diff only walked the baseline paths, reproduced then
+  fixed). Arbitrary shell cannot be tokenized safely and the `cd`/`--prefix`/
+  workspace forms execute a subfolder manifest the root snapshot never saw
+  (round 3 P1: `cd frontend && npm run test` froze only the root, so a
+  hijacked `frontend/package.json scripts.test` ran — reproduced, then fixed);
+  round 2 P1 was the compound `true && npm run test` that froze only
+  composer.json, and wrappers/`sh -c '…'` defeat heuristics too. A missing
+  root manifest snapshots as `{}`, so creating it mid-run is a detected change
+  as well; a newly created nested manifest is caught by the perimeter
+  re-scan.
+  The nested scan skips `node_modules`, `vendor`, `.git`, `.pi`,
+  `bower_components` and symlinked directories; above `MAX_FROZEN_MANIFESTS`
+  (200) `freezeVerifyInputs` returns `{ok:false, reason}` and the workflow
+  fails closed `needs_human` (an incompletely frozen perimeter is never
+  verified).
+  The freeze (`commands`, `scripts`, `scriptsDigest`) persists on
+  `workflow.started` (optional, backward compatible). Before every verify —
+  start, fix rounds, resume — `changedScriptKeys` diffs the live sections
+  against it; any change ends the run `needs_human` before any command runs,
+  naming the changed keys. Script bodies compare by canonical content
+  (composer bodies may be arrays). Capture and replay share `isPlainRecord`,
+  so a non-object `scripts` section is captured as `{}` — the program can
+  never emit a freeze its own replay would call corrupt (round 3 standards).
+  Resume: `resume.ts` validates the freeze structurally AND checks
+  `scriptsDigest` binds to `scripts` (round 2 P2/standards: `verify: null`
+  crashed the replay, and `scripts: []` passed as a valid empty guard,
+  silently voiding protection). Absent field → legacy path (per-verify
+  re-resolution + one-line notice); present but corrupt → resume REFUSED
+  (`corrupt_verify_freeze`, message wired in `extensions/pi-brain.ts`
+  refusalMessage) — protection is never silently downgraded. The workflow
+  prefers the persisted freeze over the freshly loaded config, so an edited
+  `.pi/pi-brain.json` cannot rewrite what runs.
+  Tests: `tests/unit.test.ts` (freeze/diff/digest; conservative explicit
+  freeze incl. the compound repro, wrappers/options/cd/workspace shapes and
+  the nested-frontend regression; nested-manifest + composer cases;
+  scan exclusions; stack-default scoping; over-cap refusal; capture/replay
+  alignment; perimeter persisted; created-after-freeze + new-subfolder
+  re-scan; root-only scope; array-body regression),
+  `tests/feature-workflow.test.ts` (persisted + executed on unchanged
+  scripts; changed `test` script → needs_human, zero commands, no verify
+  phase; explicit `config.verify` on Laravel → blocked; compound
+  `true && npm run test` regression → blocked; nested
+  `cd frontend && npm run test` regression → blocked with zero
+  verifier/reviewer calls; nested manifest CREATED mid-run → blocked;
+  change between rounds caught against the original baseline; resume uses
+  persisted commands despite edited config; resume blocked on post-crash
+  script change; resume blocked when a nested manifest appears after the
+  crash with a tree perimeter; legacy log → notice + re-resolve),
+  `tests/resume.test.ts` (freeze replayed with digest binding and preserved
+  perimeter; legacy absent → state.verify undefined; a freeze without a
+  perimeter normalizes to root-only; 16 corrupt shapes refused incl.
+  `verify: null`, `verify: []`, `scripts: []`, section arrays, digest
+  mismatch, unknown perimeter; isResumable false).
+  Limits: what a script BODY runs (other files, `node_modules/.bin`,
+  `vendor/bin`) is not resolved or frozen — and U3 does not close that gap
+  (it snapshots git state, not arbitrary working-tree files); the nested scan
+  excludes dependency/VCS directories and symlinked dirs (a script executed
+  from inside one is outside the perimeter); a legacy freeze without the
+  perimeter field normalizes to root-only, so those resumed runs keep the
+  round-3 behavior (no tree re-scan); explicit config over-freezes (whole
+  perimeter, e.g. package.json on Laravel even when unused) and above 200
+  manifests refuses rather than truncating. Documented in
+  `docs/pi-brain/README.md`.
 
 - [ ] **U3 — Repository-state invariant** (F1, F2). `src/shell.ts`,
   `src/ports.ts`, `src/workflows/feature.ts`, `tests/git.test.ts`,
