@@ -242,13 +242,49 @@ setting. Documentation integration does not authorize implementation.
   false})` so only a genuine ENOENT reads as absent, never a permission error.
   Documented in `docs/pi-brain/README.md`.
 
-- [ ] **U4 — Exclude pi-brain runtime files from snapshots** (F3). `src/shell.ts`,
+- [x] **U4 — Exclude pi-brain runtime files from snapshots** (F3). `src/shell.ts`,
   `tests/git.test.ts`.
-  Satisfy: the snapshot ignores `.pi/pi-brain.lock*` and `.pi/pi-brain/`
-  regardless of `.gitignore`. Other `.pi/` files (e.g. a committed
-  `.pi/pi-brain.json`) are still diffed.
-  Tests: the PRD reproduction (lock + run log written after baseline gives an
-  empty file list); an edit to `.pi/pi-brain.json` still appears.
+  Completed 2026-10-17 (uncommitted), TDD: five exclusion tests red-first on
+  the exact F3 reproduction; the committed-`.pi/pi-brain.json` test passed
+  before the change and still passes (a conservation test, not a regression).
+  `snapshotTree` adds exclude pathspecs to the scratch-index
+  `git add -A -- .`: `:(exclude).pi/pi-brain.lock*` — the glob covers the
+  lock, its takeover marker `lock.takeover-<inode>` and its staging file
+  `lock.<pid>.<runId>.tmp` — and `:(exclude).pi/pi-brain/` (the run-log
+  tree). The `-- .` semantics are otherwise unchanged, the scratch index
+  stays a scratch index (real index, working tree and .gitignore untouched),
+  and the same snapshot procedure serves the baseline, every later diff and
+  the submodule dirtiness check — so runtime files inside a submodule no
+  longer mark it dirty either (intended: same F3 rationale).
+  Tracked runtime files (committed by mistake) are covered by construction:
+  `read-tree` seeds HEAD's version into the scratch index and `git add` skips
+  the excluded paths entirely — modifications, deletions and new siblings are
+  never staged, both snapshots carry HEAD's version, the paths cancel out.
+  Tests (`tests/git.test.ts`, real temporary repos, no .gitignore): lock +
+  marker + staging + run log created after baseline → empty file list AND
+  empty patch (the PRD reproduction); runtime files already present at the
+  baseline (the real ordering — the lock is acquired before the workflow
+  starts) and removed before the diff → still empty (probes the baseline
+  side: a baseline-only exclusion would surface as a deletion); rewritten
+  after an earlier empty diff → still empty; a committed
+  `.pi/pi-brain.json` edit → exactly `[".pi/pi-brain.json"]` with the content
+  in the patch; an applicative edit + new source file + a NEW untracked
+  `.pi/pi-brain.json` next to runtime noise → exactly those three paths and
+  no run-log content in the patch; runtime files tracked in HEAD then
+  modified/appended/deleted → empty (the seed does not reintroduce them).
+  Mutation checks: dropping the lock exclusion → exactly the five lock tests;
+  dropping the dir exclusion → exactly the four run-log tests; exact-name
+  lock exclusion (no `*`) → exactly the four tests whose lock siblings change
+  between the snapshots; widening the exclusion to all of `.pi/` → exactly
+  the two json-visibility tests. `npm test` 365/365,
+  `npm run typecheck` clean, `git diff --check` clean.
+  Limits: the exclusion is path-based — anything under those paths is hidden
+  from the review diff, not just pi-brain's own files; the developer write
+  guard (U1) closes the write/edit channel into `.pi/`, but `bash` remains
+  available to writable roles without an explicit tools allowlist, so that
+  side channel is narrowed, not closed. U11 (.gitignore entries via
+  `setup.sh`) is still the defence-in-depth layer for `git status` and
+  ordinary commits.
 
 - [x] **U5 — Verify timeout with process-group kill** (F4). `src/shell.ts`,
   `src/config.ts`, `tests/unit.test.ts` (or a new `tests/shell.test.ts`).

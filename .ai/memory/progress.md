@@ -38,13 +38,57 @@
   `6c16a01`, originally drafted 2026-10-02 against `e5f8e56`
   (`.ai/features/main-review-hardening/`). U5/F4 is already covered by
   `07d74d7` (code-review-follow-ups T5–T6); U1/F2 is implemented (2026-10-14),
-  U2/F1 is implemented (2026-10-15) and U3/F1+F2 is implemented (2026-10-16),
+  U2/F1 is implemented (2026-10-15), U3/F1+F2 is implemented (2026-10-16) and
+  U4/F3 is implemented (2026-10-17),
   all uncommitted on `main` — see
   Done. Remaining tasks are pending.
   This transfer authorizes documentation integration only; the F13
   `changes_requested` policy remains an open decision.
 
 ## Done
+
+- 2026-10-17 main-review-hardening U4 (F3, baseline uncommitted on `main`):
+  pi-brain runtime files are excluded from reviewer snapshots.
+  `snapshotTree` (`src/shell.ts`) passes exclude pathspecs to the
+  scratch-index `git add -A -- .`: `:(exclude).pi/pi-brain.lock*` (the glob
+  covers the lock, its takeover marker and its staging file) and
+  `:(exclude).pi/pi-brain/` (the run-log tree). Everything else is
+  unchanged: same scratch index via GIT_INDEX_FILE (real index, working tree
+  and .gitignore untouched), same `-- .` semantics, one snapshot procedure
+  for the baseline, every later diff and the submodule dirtiness check — so
+  runtime files inside a submodule no longer mark it dirty either (intended:
+  same F3 rationale). Tracked runtime files (committed by mistake) cancel out
+  by construction: `read-tree` seeds HEAD's version and the excluded paths
+  are never re-staged, so modifications, deletions and new siblings never
+  differ between the two snapshots.
+  TDD: five exclusion tests red-first on the exact F3 reproduction
+  (`tests/git.test.ts`, real temp repos, no .gitignore): lock + marker +
+  staging + run log created after baseline → empty files and patch; runtime
+  present at the baseline (the real ordering — the lock is acquired before
+  the workflow starts) and removed before the diff → still empty (probes the
+  baseline side: a baseline-only exclusion would surface as a deletion);
+  rewritten after an earlier empty diff → still empty; applicative change +
+  a NEW untracked `.pi/pi-brain.json` next to runtime noise → exactly those
+  paths and no run-log content in the patch; tracked-in-HEAD runtime
+  modified/appended/deleted → empty (the seed does not reintroduce them).
+  The committed-`.pi/pi-brain.json`-edit test passed BEFORE the change and
+  still passes (conservation, not regression).
+  Mutation checks: lock exclusion dropped → exactly the five lock tests; dir
+  exclusion dropped → exactly the four run-log tests; exact-name lock
+  exclusion (no `*`) → exactly the four tests whose lock siblings change
+  between the snapshots; widening the exclusion to all of `.pi/` → exactly
+  the two json-visibility tests.
+  `npm test` 365/365, `npm run typecheck` clean, `git diff --check` clean.
+  Residual limits: the exclusion is path-based — anything under
+  `.pi/pi-brain/` or matching `.pi/pi-brain.lock*` is hidden from the review
+  diff, not just pi-brain's own files; the U1 write guard closes the
+  write/edit channel into `.pi/`, but `bash` (available to writable roles
+  without an explicit tools allowlist) can still write there, so the side
+  channel is narrowed, not closed; U11 (.gitignore entries via `setup.sh`)
+  is still pending as defence in depth for `git status` and ordinary
+  commits. Documented in `docs/pi-brain/README.md`. U1–U3 and U5–U16
+  untouched (U3's digest shares `src/shell.ts` but is unmodified); F13
+  policy untouched.
 
 - 2026-10-16 main-review-hardening U3 (F1, F2, baseline uncommitted on `main`):
   repository-state invariant. New `repoStateDigest` in `src/shell.ts`

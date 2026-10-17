@@ -253,10 +253,28 @@ JSON rather than YAML on purpose: keeps the package dependency-free.
 | Path | Commit? | Why |
 |---|---|---|
 | `.pi/pi-brain.json` | yes | project config: stack, verify commands, role overrides — shared with the repo |
-| `.pi/pi-brain.lock` | no (gitignore) | runtime state of the current run, machine-local |
-| `.pi/pi-brain/runs/` | no (gitignore) | per-run audit logs (`<runId>.jsonl`), machine-local history |
+| `.pi/pi-brain.lock*` | no | runtime state of the current run, machine-local |
+| `.pi/pi-brain/` | no | per-run audit logs (`<runId>.jsonl`), machine-local history |
 
-Consuming projects should add:
+The reviewer's diff is built from snapshots that **exclude `.pi/pi-brain.lock*`
+and `.pi/pi-brain/` by pathspec, in every repository** — with or without
+`.gitignore` entries. pi-brain's machine-local runtime state (the lock, its
+takeover marker and staging file, the run logs) never reaches the reviewer,
+even mid-run when those files are being rewritten. The exclusion is narrow on
+purpose: everything else under `.pi/` — a committed `.pi/pi-brain.json` above
+all — keeps appearing in the diff. Runtime files that were committed by
+mistake stay invisible too: both snapshots keep HEAD's version, so the paths
+cancel out. The submodule dirtiness check uses the same snapshots, so runtime
+files inside a submodule no longer mark it dirty either.
+
+Known limit: the exclusion is path-based, so anything put under those paths is
+hidden from the diff. The developer's write guard refuses write/edit into
+`.pi/`, which closes the tool channel; `bash` remains available to writable
+roles without an explicit tools allowlist, so that side channel is narrowed,
+not closed.
+
+Consuming projects should still add the entries to `.gitignore`, so the files
+never clutter `git status` or land in ordinary commits:
 
 ```gitignore
 .pi/pi-brain.lock

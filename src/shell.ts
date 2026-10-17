@@ -14,7 +14,9 @@
  *
  * Snapshotting uses a throwaway index file via GIT_INDEX_FILE, so the user's
  * real index and working tree are never touched. `git add -A` there honours
- * .gitignore, so ignored paths stay out.
+ * .gitignore, so ignored paths stay out. pi-brain's own runtime files are
+ * excluded by pathspec on top of that, so they never reach the reviewer even
+ * in a target repository without matching .gitignore entries.
  */
 
 import { execFile, spawn } from "node:child_process";
@@ -306,6 +308,24 @@ export async function repoStateDigest(repoRoot: string): Promise<string> {
 }
 
 /**
+ * pi-brain runtime paths excluded from every snapshot (F3): the run lock —
+ * the glob also covers its takeover marker (`lock.takeover-<inode>`) and
+ * staging file (`lock.<pid>.<runId>.tmp`) — and the run-log tree under
+ * `.pi/pi-brain/`. Machine-local state, not project changes: it must not
+ * reach the reviewer's diff, whatever the repository's .gitignore says.
+ * The exclusion also covers paths seeded into the scratch index from HEAD
+ * (runtime files committed by mistake): `git add` skips them entirely, so
+ * both snapshots carry HEAD's version and the paths cancel out.
+ *
+ * Deliberately narrow: other `.pi/` files — a committed `.pi/pi-brain.json`
+ * above all — keep reaching the diff.
+ */
+const RUNTIME_EXCLUDE_PATHSPECS = [
+  ":(exclude).pi/pi-brain.lock*",
+  ":(exclude).pi/pi-brain/",
+] as const;
+
+/**
  * Tree object for the current working tree, built in a SCRATCH index.
  *
  * The scratch index is what makes this trustworthy: `assume-unchanged` and
@@ -319,7 +339,7 @@ async function snapshotTree(repoRoot: string): Promise<string> {
   try {
     const head = await headSha(repoRoot);
     await git(repoRoot, head ? ["read-tree", head] : ["read-tree", "--empty"], env);
-    await git(repoRoot, ["add", "-A", "--", "."], env);
+    await git(repoRoot, ["add", "-A", "--", ".", ...RUNTIME_EXCLUDE_PATHSPECS], env);
     return (await git(repoRoot, ["write-tree"], env)).trim();
   } finally {
     rmSync(indexFile, { force: true });

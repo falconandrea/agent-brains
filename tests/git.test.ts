@@ -332,6 +332,120 @@ test("skip-worktree inside a submodule cannot hide it either", async () => {
   assert.deepEqual(dirtySubmodules, ["vendor/child"]);
 });
 
+// -- runtime-file exclusion from snapshots (U4, F3) -----------------------------
+//
+// In a target repo without .gitignore entries, the run lock (plus its takeover
+// marker and staging file) and the run-log tree under .pi/pi-brain/ used to
+// land in the reviewer's diff. They are machine-local runtime state, not
+// project changes: every snapshot must exclude them, while other .pi/ files —
+// a committed .pi/pi-brain.json above all — keep reaching the reviewer.
+
+/** The .pi/ runtime surface pi-brain itself creates while a run is alive. */
+function writeRuntimeFiles(dir: string): void {
+  mkdirSync(join(dir, ".pi", "pi-brain", "runs"), { recursive: true });
+  writeFileSync(join(dir, ".pi", "pi-brain.lock"), JSON.stringify({ pid: 4242, runId: "run-x" }));
+  // lock-protocol siblings: takeover marker and staging file (both lock*)
+  writeFileSync(join(dir, ".pi", "pi-brain.lock.takeover-12345"), "");
+  writeFileSync(join(dir, ".pi", "pi-brain.lock.999.run-x.tmp"), "partial");
+  writeFileSync(join(dir, ".pi", "pi-brain", "runs", "run-x.jsonl"), '{"event":"workflow.started"}\n');
+}
+
+test("lock and run log created after the baseline give an empty diff (no .gitignore)", async () => {
+  const dir = initRepo();
+  const baseline = await git.baseline(dir);
+
+  writeRuntimeFiles(dir);
+
+  const { patch, files } = await git.diffSince(baseline);
+  assert.deepEqual(files, [], `got ${JSON.stringify(files)}`);
+  assert.equal(patch, "");
+});
+
+test("runtime files already present at the baseline are excluded on the baseline side too", async () => {
+  const dir = initRepo();
+  // untracked and unignored: this is the real ordering — the lock is acquired
+  // before the workflow starts, so it always exists when the baseline is taken
+  writeRuntimeFiles(dir);
+  const baseline = await git.baseline(dir);
+
+  // the sharpest probe: removing a runtime file between the two snapshots
+  // must not surface as a deletion either (the release path unlinks the lock)
+  rmSync(join(dir, ".pi", "pi-brain.lock"));
+  rmSync(join(dir, ".pi", "pi-brain.lock.takeover-12345"));
+
+  const { patch, files } = await git.diffSince(baseline);
+  assert.deepEqual(files, [], `got ${JSON.stringify(files)}`);
+  assert.equal(patch, "");
+});
+
+test("runtime files modified after an earlier diff stay excluded", async () => {
+  const dir = initRepo();
+  const baseline = await git.baseline(dir);
+  writeRuntimeFiles(dir);
+  const first = await git.diffSince(baseline);
+  assert.deepEqual(first.files, []);
+
+  // the run continues: the lock is rewritten, another run log accumulates
+  writeFileSync(join(dir, ".pi", "pi-brain.lock"), JSON.stringify({ pid: 4243, runId: "run-y" }));
+  writeFileSync(join(dir, ".pi", "pi-brain", "runs", "run-y.jsonl"), '{"event":"review.round"}\n');
+
+  const second = await git.diffSince(baseline);
+  assert.deepEqual(second.files, []);
+  assert.equal(second.patch, "");
+});
+
+test("an edit to a committed .pi/pi-brain.json still appears in the diff", async () => {
+  const dir = initRepo();
+  mkdirSync(join(dir, ".pi"), { recursive: true });
+  writeFileSync(join(dir, ".pi", "pi-brain.json"), '{ "stack": "node" }\n');
+  execFileSync("git", ["add", "."], { cwd: dir });
+  execFileSync("git", ["commit", "-qm", "pi-brain config"], { cwd: dir });
+  const baseline = await git.baseline(dir);
+
+  writeFileSync(join(dir, ".pi", "pi-brain.json"), '{ "stack": "node", "maxReviewRounds": 3 }\n');
+
+  const { patch, files } = await git.diffSince(baseline);
+  assert.deepEqual(files, [".pi/pi-brain.json"]);
+  assert.match(patch, /maxReviewRounds/);
+});
+
+test("an applicative change next to runtime noise yields exactly the applicative diff", async () => {
+  const dir = initRepo();
+  const baseline = await git.baseline(dir);
+
+  writeRuntimeFiles(dir);
+  writeFileSync(join(dir, "existing.txt"), "one\nAGENT EDIT\n");
+  mkdirSync(join(dir, "src"), { recursive: true });
+  writeFileSync(join(dir, "src", "invite.ts"), "export const invitation = 1;\n");
+  // a NEW non-runtime .pi/ file must stay visible: only the runtime surface is excluded
+  writeFileSync(join(dir, ".pi", "pi-brain.json"), '{ "stack": "node" }\n');
+
+  const { patch, files } = await git.diffSince(baseline);
+  assert.deepEqual(files, [".pi/pi-brain.json", "existing.txt", "src/invite.ts"], `got ${JSON.stringify(files)}`);
+  assert.match(patch, /AGENT EDIT/);
+  assert.match(patch, /invitation/);
+  assert.ok(!patch.includes("run-x"), "run-log content must not reach the reviewer");
+});
+
+test("runtime files already tracked in HEAD do not re-enter the diff via the scratch-index seed", async () => {
+  const dir = initRepo();
+  writeRuntimeFiles(dir);
+  // committed by mistake before pi-brain was set up: read-tree seeds them into
+  // every scratch index, so the exclusion must hold for tracked files too —
+  // both snapshots keep HEAD's version and the paths cancel out
+  execFileSync("git", ["add", "."], { cwd: dir });
+  execFileSync("git", ["commit", "-qm", "oops: runtime files committed"], { cwd: dir });
+  const baseline = await git.baseline(dir);
+
+  writeFileSync(join(dir, ".pi", "pi-brain.lock"), JSON.stringify({ pid: 7, runId: "run-z" }));
+  writeFileSync(join(dir, ".pi", "pi-brain", "runs", "run-z.jsonl"), '{"event":"workflow.started"}\n');
+  rmSync(join(dir, ".pi", "pi-brain", "runs", "run-x.jsonl"));
+
+  const { patch, files } = await git.diffSince(baseline);
+  assert.deepEqual(files, [], `got ${JSON.stringify(files)}`);
+  assert.equal(patch, "");
+});
+
 // -- repository-state digest (U3, F1/F2) --------------------------------------
 //
 // The digest backs the no-commit/no-ref/no-config/no-hook invariant: whatever
