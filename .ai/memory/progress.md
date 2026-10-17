@@ -38,14 +38,53 @@
   `6c16a01`, originally drafted 2026-10-02 against `e5f8e56`
   (`.ai/features/main-review-hardening/`). U5/F4 is already covered by
   `07d74d7` (code-review-follow-ups T5–T6); U1/F2 is implemented (2026-10-14),
-  U2/F1 is implemented (2026-10-15), U3/F1+F2 is implemented (2026-10-16) and
+  U2/F1 is implemented (2026-10-15), U3/F1+F2 is implemented (2026-10-16),
   U4/F3 is implemented (2026-10-17) — U1–U4 are committed on `main` — and
-  U6/F7 is implemented (2026-10-17, uncommitted on `main`) — see
-  Done. Remaining tasks (U7–U16) are pending.
+  U6/F7 (2026-10-17) and U7/F5 (2026-10-17) are implemented, uncommitted on
+  `main` — see Done. Remaining tasks (U8–U16) are pending.
   This transfer authorizes documentation integration only; the F13
   `changes_requested` policy remains an open decision.
 
 ## Done
+
+- 2026-10-17 main-review-hardening U7 (F5, baseline `0815222`, uncommitted on
+  `main`): `/feature` acquires the run lock BEFORE its side effects. The run
+  log (`RunLog.open`) and the agent runtime (`PiAgentRunner.create`) are only
+  reached once the lock is held, so a refused `/feature` leaves no
+  `.pi/pi-brain/runs/<runId>.jsonl` for `/flow log-all` to list as
+  `in-progress-or-interrupted` and no runtime to tear down. To test the
+  ordering with fakes and no Pi session or model, the sequence is the new
+  Pi-free `startRun` in `src/run-launcher.ts` (the module U6 created and whose
+  header already reserved this fix): lock, runtime, log, active-state, UI
+  reporting and the hand-off are all injected. A refused/throwing lock
+  publishes nothing and creates nothing; a runtime failure releases the lock
+  exactly once and restores `active = null`; on success the lock's ownership
+  passes to `launch`, whose `launchRun` releases it when the run settles, and
+  `startRun` never releases it — the two paths are disjoint, so no run can
+  release twice. `/feature` (`extensions/pi-brain.ts`) is wiring only: the
+  detached `void launchRun(...)` hand-off, the started notify and the
+  lock-refusal wording are unchanged; the `onFailure` switch carries the three
+  messages (`lock_error`, `lock_refused`, `runtime_error`). Resume, the U1–U4
+  guards, the U5 timeout and the U6 launcher are untouched; F13 untouched.
+  Deviation from the task's extension-only file map: the ordering moved into
+  `src/run-launcher.ts` (+ `tests/run-start.test.ts`) because the U7 test
+  mandate (fakes, no Pi/model) cannot be met against an inline
+  `PiAgentRunner.create`.
+  TDD/mutation: 5 fakes-only tests pin the contract and the effect ORDER —
+  refused lock → `["lock"]`, nothing active, no runtime, no log; lock throw →
+  the same; runtime failure → `["lock", "agents"]` (no log), released exactly
+  once, active `[run, null]`; success → `["lock", "agents", "log", "launch"]`,
+  lock handed to the launcher and NOT released by `startRun`; a composition
+  test hands the lock to the real `launchRun` and observes it held while the
+  fake workflow is pending, released exactly once on settle. Each mutation
+  (drop the runtime-failure release, drop the active restore, double release
+  after the hand-off) is killed by exactly its covering tests.
+  `npm test` 380/380, `npm run typecheck` clean, `git diff --check` clean.
+  Limits: the extension file stays typecheck-only (no live Pi session was
+  driven, same as before) — the manual Pi check (a refused `/feature` adds no
+  row to `/flow log-all`) is not automated; the unit tests pin the ordering
+  that produces it. U5/U6 code paths untouched;
+  `extra/skills/ga4-analytics/` untouched.
 
 - 2026-10-17 main-review-hardening U6 (F7, baseline `fa5303f`, uncommitted on
   `main`): `/feature` and `/flow resume` share one run launcher. New

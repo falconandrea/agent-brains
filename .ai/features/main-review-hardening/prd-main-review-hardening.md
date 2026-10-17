@@ -109,8 +109,12 @@ Decision: **approach 1**.
       results report the timeout in ms and whether cleanup was confirmed.
       POSIX group kill falls back to shell-only termination on other platforms.
       Implemented in `07d74d7`; see `tests/shell-verify.test.ts`.
-- [ ] A `/feature` refused by the lock creates no run-log file and no agent
+- [x] A `/feature` refused by the lock creates no run-log file and no agent
       runtime.
+      Implemented 2026-10-17 (U7): `/feature` acquires the lock before
+      `RunLog.open` and `PiAgentRunner.create`; the ordered sequence is the
+      Pi-free `startRun` in `src/run-launcher.ts` (fakes-only tests in
+      `tests/run-start.test.ts`). `/flow resume` already had this order.
 - [ ] UI failures (`notify`, bell, status) in the detached runner never change
       the persisted outcome and never produce an unhandled rejection.
 - [x] `/feature` and `/flow resume` share one launcher; no duplicated outcome

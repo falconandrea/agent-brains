@@ -5,11 +5,13 @@
  * the lock release were duplicated across the two commands, so every fix
  * had to be applied twice.
  *
- * The extension does the wiring — lock acquisition, agent runtime, RunLog,
- * Pi-side history, UI — and injects every effect as a plain callback. This
- * module imports no Pi (only the port contract in ports.ts), so the whole
- * execution cycle runs in a unit test with fakes
- * (tests/run-launcher.test.ts).
+ * The extension does the wiring — agent runtime, RunLog, Pi-side history,
+ * UI — and injects every effect as a plain callback. `startRun` below owns
+ * the order in which that wiring runs: the run lock is acquired BEFORE the
+ * runtime and the audit log (F5/U7). This module imports no Pi (only the
+ * port contract in ports.ts), so both the start sequence and the execution
+ * cycle run in unit tests with fakes (tests/run-start.test.ts,
+ * tests/run-launcher.test.ts).
  *
  * It owns:
  *  - the event sink: the in-memory buffer `/flow status` folds, the
@@ -24,6 +26,11 @@
  *  - completion, cancellation (UserDismissedError) and error handling;
  *  - the run lock, released exactly once, when the run settles.
  *
+ * `startRun` is the ordered prologue `launchRun` cannot cover on its own:
+ * acquiring the lock before any side effect, releasing it exactly once if
+ * the runtime fails to come up, and handing it to `launchRun` when the run
+ * really starts.
+ *
  * Detached execution stays the caller's decision: `launchRun` returns the
  * promise of the run body and the extension ignores it
  * (`void launchRun(...)`) so `/flow status|log|stop` keep answering while
@@ -31,14 +38,11 @@
  * rejection — but until U8 a throwing UI effect (notify/bell/status) can
  * still reject that promise, exactly as the former inline runners could
  * (F6).
- *
- * U7 (lock before side effects) and U8 (best-effort UI) will be applied on
- * this single point; until then the call order below is exactly the one the
- * two former inline runners had.
  */
 
 import { UserDismissedError } from "./ports.ts";
 import type { WorkflowEvent, WorkflowEventSink } from "./ports.ts";
+import type { AcquireResult } from "./run-lock.ts";
 import type { FlowRunStatus } from "./pi/flow-stop.ts";
 import type { FeatureOutcome, UsageByRole } from "./workflows/feature.ts";
 
@@ -126,6 +130,89 @@ export function launchRun(
       deps.setStatus(undefined);
     }
   })();
+}
+
+/**
+ * Why the ordered start stopped before the run launched. The extension owns
+ * the wording (a UI concern); the shape carries what it needs.
+ */
+export type StartRunFailure =
+  | { kind: "lock_error"; error: unknown }
+  | { kind: "lock_refused"; lock: Extract<AcquireResult, { ok: false }> }
+  | { kind: "runtime_error"; error: unknown };
+
+export interface StartRunDeps<R extends LauncherRunState, Agents, Log> {
+  /** The run record to publish as active before the runtime is created. */
+  run: R;
+  /**
+   * Publish (or clear) the active run — `/feature` admission and `/flow stop`
+   * read it. Cleared on every failure, so a refused start leaves no ghost run.
+   */
+  setActive(run: R | null): void;
+  /** Acquire the repository run lock; may throw on a filesystem error. */
+  acquireLock(): AcquireResult;
+  /** Build the agent runtime (`PiAgentRunner.create` in production). */
+  createAgents(): Promise<Agents>;
+  /** Open the durable audit trail (`RunLog.open`); only after lock + runtime. */
+  openRunLog(): Log;
+  /** Report a failure to run. The active state is already restored. */
+  onFailure(failure: StartRunFailure): void;
+  /** Every effect succeeded: hand the lock to the launcher, which releases it. */
+  launch(input: { run: R; lock: { release(): void }; agents: Agents; runLog: Log }): void;
+}
+
+/**
+ * U7 (F5): the ordered prologue `/feature` runs before the detached launcher
+ * can take over. The run lock is acquired BEFORE any side effect — the agent
+ * runtime and the audit log — so a refused lock creates no
+ * `.pi/pi-brain/runs/<runId>.jsonl` (which `/flow log-all` would list as
+ * `in-progress-or-interrupted`) and no runtime to tear down. If the runtime
+ * fails to come up once the lock is held, the lock is released exactly once
+ * and the run stops being active. When every effect has succeeded, the lock's
+ * ownership passes to `launch`, whose `launchRun` releases it when the run
+ * settles: the two paths are disjoint, so no run can release twice.
+ *
+ * Every effect is injected, so the ordering is unit-tested with fakes and no
+ * Pi session or model (tests/run-start.test.ts). `/flow resume` keeps its own
+ * already lock-first sequence.
+ */
+export async function startRun<R extends LauncherRunState, Agents, Log>(
+  deps: StartRunDeps<R, Agents, Log>,
+): Promise<void> {
+  let lock: Extract<AcquireResult, { ok: true }>;
+  try {
+    const acquired = deps.acquireLock();
+    if (!acquired.ok) {
+      // No "run anyway": the refusal happens before any side effect, so
+      // there is nothing to roll back and the run never becomes active.
+      deps.setActive(null);
+      deps.onFailure({ kind: "lock_refused", lock: acquired });
+      return;
+    }
+    lock = acquired;
+  } catch (error) {
+    deps.setActive(null);
+    deps.onFailure({ kind: "lock_error", error });
+    return;
+  }
+
+  // The lock is held: only now does the run become active and the runtime
+  // get built. A failure here releases the lock exactly once.
+  deps.setActive(deps.run);
+  let agents: Agents;
+  try {
+    agents = await deps.createAgents();
+  } catch (error) {
+    lock.release();
+    deps.setActive(null);
+    deps.onFailure({ kind: "runtime_error", error });
+    return;
+  }
+
+  // Every refusal is past: opening the log touches the file, so it is the
+  // last side effect before the run is handed to the launcher.
+  const runLog = deps.openRunLog();
+  deps.launch({ run: deps.run, lock, agents, runLog });
 }
 
 /**

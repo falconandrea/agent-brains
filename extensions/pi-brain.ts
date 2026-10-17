@@ -29,7 +29,7 @@ import { runFeatureWorkflow, type UsageByRole } from "../src/workflows/feature.t
 import { replayRunLog, validateResumePreconditions, hasPatchChanged, askResumeWithChangedDiff, type Refusal } from "../src/workflows/resume.ts";
 import type { WorkflowEvent } from "../src/ports.ts";
 import { RunLog, readRunLog, listRunIds } from "../src/run-log.ts";
-import { fmtTokens, launchRun, renderUsage } from "../src/run-launcher.ts";
+import { fmtTokens, launchRun, renderUsage, startRun } from "../src/run-launcher.ts";
 
 const PACKAGE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PROFILES_DIR = join(PACKAGE_ROOT, "profiles");
@@ -96,7 +96,6 @@ export default function piBrain(pi: ExtensionAPI): void {
       for (const warning of warnings) ctx.ui.notify(`pi-brain config: ${warning}`, "warning");
       const runId = `run-${Date.now().toString(36)}`;
       const abort = new AbortController();
-      const runLog = RunLog.open(cwd, runId);
       const run: ActiveRun = {
         runId,
         workflow: "feature",
@@ -105,77 +104,81 @@ export default function piBrain(pi: ExtensionAPI): void {
         events: [],
         abort,
       };
-      active = run;
 
       // Always resolve the LIVE ctx — captured ones go stale in Pi.
       const human = new PiHumanInput(() => ctx, "live");
 
-      let agents;
-      try {
-        agents = await PiAgentRunner.create({
-          cwd,
-          askUser: (q) => human.askFromChild(q),
-          onEvent: (e) => human.status(`${e.role}: ${e.type}${e.detail ? ` ${e.detail}` : ""}`),
-        });
-      } catch (err) {
-        active = null;
-        ctx.ui.notify(`pi-brain: could not start the agent runtime — ${(err as Error).message}`, "error");
-        return;
-      }
-
-      // Another Pi terminal may already be writing in this repo (spec §21).
-      let lock;
-      try {
-        lock = acquireRunLock(cwd, { runId, workflow: "feature" });
-      } catch (err) {
-        active = null;
-        ctx.ui.notify(`pi-brain: cannot create the run lock in ${cwd}/.pi — ${(err as Error).message}`, "error");
-        return;
-      }
-      if (!lock.ok) {
-        // No "run anyway": one writer per repository is an invariant, not a
-        // preference. Two agents editing the same tree corrupt each other's
-        // work, and the reviewer's evidence along with it.
-        active = null;
-        ctx.ui.notify(lockRefusal(lock), "warning");
-        return;
-      }
-
-      // Run detached: awaiting here would hold Pi's command loop hostage for
-      // the whole pipeline and /flow status|log|stop could never answer. The
-      // launcher owns the event sink, the outcome event, the status
-      // transitions and the lock release — /flow resume uses the same one.
-      void launchRun(
-        {
-          run,
-          runLog,
-          history: (event) => pi.appendEntry("pi-brain.event", event),
-          setStatus: (text) => human.status(text),
-          notify: (message, level) => ctx.ui.notify(message, level),
-          bell: () => {
-            if (config.notifications.bell) process.stdout.write("\x07"); // terminal bell
-          },
-          lock,
+      // U7 (F5): the lock is acquired BEFORE the agent runtime and the run
+      // log, so a refused /feature leaves no file under .pi/pi-brain/runs/.
+      // The ordered sequence is Pi-free and unit-tested (tests/run-start.test.ts).
+      await startRun({
+        run,
+        setActive: (next) => {
+          active = next;
         },
-        (events) =>
-          runFeatureWorkflow(
+        acquireLock: () => acquireRunLock(cwd, { runId, workflow: "feature" }),
+        createAgents: () =>
+          PiAgentRunner.create({
+            cwd,
+            askUser: (q) => human.askFromChild(q),
+            onEvent: (e) => human.status(`${e.role}: ${e.type}${e.detail ? ` ${e.detail}` : ""}`),
+          }),
+        openRunLog: () => RunLog.open(cwd, runId),
+        onFailure: (failure) => {
+          switch (failure.kind) {
+            case "lock_error":
+              ctx.ui.notify(`pi-brain: cannot create the run lock in ${cwd}/.pi — ${(failure.error as Error).message}`, "error");
+              return;
+            case "lock_refused":
+              // No "run anyway": one writer per repository is an invariant,
+              // not a preference. Two agents editing the same tree corrupt
+              // each other's work, and the reviewer's evidence along with it.
+              ctx.ui.notify(lockRefusal(failure.lock), "warning");
+              return;
+            case "runtime_error":
+              ctx.ui.notify(`pi-brain: could not start the agent runtime — ${(failure.error as Error).message}`, "error");
+              return;
+          }
+        },
+        // Run detached: awaiting here would hold Pi's command loop hostage
+        // for the whole pipeline and /flow status|log|stop could never
+        // answer. The launcher owns the event sink, the outcome event, the
+        // status transitions and the lock release — /flow resume uses the
+        // same one, and startRun has handed the lock over for good.
+        launch: ({ lock, agents, runLog }) => {
+          void launchRun(
             {
-              cwd,
-              profilesDir: PROFILES_DIR,
-              availableSkills: availableSkills(),
-              config,
-              agents,
-              human,
-              verifier: new ShellVerifyRunner(cwd, { timeoutMs: config.verifyTimeoutMs }),
-              git: new RealGitService(),
-              events,
-              signal: abort.signal,
+              run,
+              runLog,
+              history: (event) => pi.appendEntry("pi-brain.event", event),
+              setStatus: (text) => human.status(text),
+              notify: (message, level) => ctx.ui.notify(message, level),
+              bell: () => {
+                if (config.notifications.bell) process.stdout.write("\x07"); // terminal bell
+              },
+              lock,
             },
-            description,
-            runId,
-          ),
-      );
-      ctx.ui.notify(`pi-brain: ${runId} started — /flow status, /flow log, /flow stop.`);
+            (events) =>
+              runFeatureWorkflow(
+                {
+                  cwd,
+                  profilesDir: PROFILES_DIR,
+                  availableSkills: availableSkills(),
+                  config,
+                  agents,
+                  human,
+                  verifier: new ShellVerifyRunner(cwd, { timeoutMs: config.verifyTimeoutMs }),
+                  git: new RealGitService(),
+                  events,
+                  signal: abort.signal,
+                },
+                description,
+                runId,
+              ),
+          );
+          ctx.ui.notify(`pi-brain: ${runId} started — /flow status, /flow log, /flow stop.`);
+        },
+      });
     },
   });
 

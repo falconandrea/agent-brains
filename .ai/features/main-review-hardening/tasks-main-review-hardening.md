@@ -354,13 +354,44 @@ setting. Documentation integration does not authorize implementation.
   runners.
   `npm test` 375/375, `npm run typecheck` clean, `git diff --check` clean.
 
-- [ ] **U7 — Lock before side effects in `/feature`** (F5). `extensions/pi-brain.ts`.
-  Satisfy: the lock is acquired before `RunLog.open` and `PiAgentRunner.create`.
-  A failed runtime creation releases the lock. A refused run leaves no file
-  under `.pi/pi-brain/runs/`. This matches the ordering the resume path
-  already documents.
-  Tests: covered through U6's launcher contract plus a typecheck; manual check in
-  Pi: a refused `/feature` adds no row to `/flow log-all`.
+- [x] **U7 — Lock before side effects in `/feature`** (F5).
+  `extensions/pi-brain.ts`, `src/run-launcher.ts`, `tests/run-start.test.ts`.
+  Completed 2026-10-17 (baseline `0815222`, uncommitted on `main`).
+  `/feature` acquires the run lock BEFORE `RunLog.open` and
+  `PiAgentRunner.create`: a refused run opens neither the audit log (no
+  `.pi/pi-brain/runs/<runId>.jsonl` for `/flow log-all` to list as
+  `in-progress-or-interrupted`) nor the agent runtime. The ordering is
+  extracted into the Pi-free `startRun` in `src/run-launcher.ts` — the module
+  U6 created for the shared execution cycle, whose header already reserved
+  this fix — so it can be tested with fakes and no Pi session or model: every
+  effect (lock, runtime, log, active-state, UI reporting, hand-off) is
+  injected. `startRun` acquires the lock, publishes the run as active, builds
+  the runtime, and only then opens the log. A refused/throwing lock publishes
+  nothing (active cleared, the old net state) and creates nothing; a runtime
+  failure releases the lock exactly once and restores `active = null`; on
+  success the lock's ownership passes to `launch`, whose `launchRun` releases
+  it when the run settles, and `startRun` never releases it — the two paths
+  are disjoint, so no run can release twice. `/feature` keeps the detached
+  `void launchRun(...)` hand-off, the started notify and the lock-refusal
+  wording; the `onFailure` switch carries the three messages (`lock_error`,
+  `lock_refused`, `runtime_error`). Resume, the U1–U4 guards, the U5 timeout
+  and the U6 launcher are untouched; F13 untouched.
+  Tests (`tests/run-start.test.ts`, 5, fakes-only): refused lock →
+  `order === ["lock"]`, no runtime, no log, never active; lock throw → the
+  same; runtime failure → `["lock", "agents"]` (no log), released exactly
+  once, active `[run, null]`; success → `["lock", "agents", "log", "launch"]`,
+  log last, lock handed to the launcher and NOT released by `startRun`; a
+  composition test hands the lock to the real `launchRun` and observes it
+  held while the fake workflow is pending and released exactly once on
+  settle. Mutation checks, each killed by exactly its covering tests:
+  dropping the runtime-failure release → the runtime-failure test; dropping
+  the active restore → the same; a double release after the hand-off → the
+  success and composition tests.
+  Deviation from the original file map (extension-only): the sequence lives in
+  `src/run-launcher.ts` + `tests/run-start.test.ts` because the U7 test
+  mandate (fakes, no Pi/model) cannot be met against an inline
+  `PiAgentRunner.create`; the extension keeps wiring only.
+  `npm test` 380/380, `npm run typecheck` clean, `git diff --check` clean.
 
 - [ ] **U8 — Best-effort UI in the detached runner** (F6). `src/run-launcher.ts`,
   `extensions/pi-brain.ts`, `tests/run-launcher.test.ts`.
