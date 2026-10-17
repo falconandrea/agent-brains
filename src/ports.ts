@@ -59,10 +59,24 @@ export interface GitBaseline {
   baseCommit: string;
   /** Digest of tracked .gitignore files and Git exclude files at baseline. */
   ignoreRulesDigest?: string;
+  /**
+   * Digest of the git repository state (HEAD, refs, config, hooks) at
+   * baseline (U3, F1/F2). Re-checked after every developer pass and after
+   * verify; any difference ends the run needs_human before the reviewer.
+   * Absent when replaying logs that predate the digest — those runs get no
+   * repository-state check and are told so.
+   */
+  repoStateDigest?: string;
 }
 
 export interface GitService {
   baseline(cwd: string): Promise<GitBaseline>;
+  /**
+   * Digest of HEAD, all refs, the repository config and git hooks (U3
+   * repository-state invariant). Throws when the state cannot be read —
+   * callers must treat that as changed, never as unchanged.
+   */
+  repoStateDigest(cwd: string): Promise<string>;
   diffSince(baseline: GitBaseline): Promise<{
     patch: string;
     files: string[];
@@ -90,6 +104,15 @@ export type WorkflowEvent =
       baseline?: string;
       /** Digest of ignore rules at workflow start, for resume-safe concealment detection. */
       ignoreRulesDigest?: string;
+      /**
+       * sha256 digest of the git repository state (HEAD, refs, config,
+       * hooks) at run start (U3, F1/F2). Re-checked after every developer
+       * pass and after verify; any difference ends the run needs_human
+       * before the reviewer. Absent in logs that predate the digest: those
+       * resumed runs get no repository-state check (with a one-line notice),
+       * never a silently downgraded one.
+       */
+      repoStateDigest?: string;
       /**
        * Verification inputs resolved once at start (U2, F1): the commands plus
        * the manifest script sections they depend on, the scan perimeter they

@@ -20,6 +20,9 @@ class FakeGit implements GitService {
   async baseline(cwd: string): Promise<GitBaseline> {
     return { repoRoot: cwd, branch: "main", headSha: "abc123", baseCommit: "snap-base" };
   }
+  async repoStateDigest(_cwd: string): Promise<string> {
+    return "stable-digest";
+  }
   async diffSince(baseline: GitBaseline) {
     return { patch: "diff content", files: ["src/file.ts"], dirtySubmodules: [] };
   }

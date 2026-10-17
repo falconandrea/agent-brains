@@ -19,7 +19,7 @@
 
 import { execFile, spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -88,6 +88,21 @@ function fileForDigest(path: string): Buffer | string {
 }
 
 /**
+ * Content of a file that belongs to the repository state (config, hooks), for
+ * digesting: its bytes when readable, "<missing>" when absent — an absent
+ * config or hook is a state, not an error. Unlike fileForDigest (used for the
+ * ignore rules), any other failure — an unreadable file, a path of the wrong
+ * type — propagates: a read error must never collapse into a stable marker, or
+ * an unreadable state would read as unchanged.
+ */
+function stateFileForDigest(path: string): Buffer | string {
+  // statSync only swallows ENOENT: a path behind an inaccessible parent throws
+  // EACCES instead of reading as absent, and a wrong-type path throws on read.
+  if (statSync(path, { throwIfNoEntry: false }) === undefined) return "<missing>";
+  return readFileSync(path);
+}
+
+/**
  * Digest the ignore rules that influence snapshotTree(). The repository's
  * .gitignore files are tracked by Git, but .git/info/exclude and the optional
  * global excludes file are not; keeping them in the digest makes changes to
@@ -97,8 +112,7 @@ export async function ignoreRulesDigest(repoRoot: string): Promise<string> {
   const tracked = splitZ(await git(repoRoot, ["ls-files", "-z"]))
     .filter((path) => path === ".gitignore" || path.endsWith("/.gitignore"))
     .sort();
-  const gitDirRaw = (await git(repoRoot, ["rev-parse", "--git-dir"])).trim();
-  const gitDir = isAbsolute(gitDirRaw) ? gitDirRaw : resolve(repoRoot, gitDirRaw);
+  const gitDir = await resolveGitDirPath(repoRoot, "--git-dir");
   const entries: Array<[string, string]> = tracked.map((path) => [path, join(repoRoot, path)]);
   entries.push([".git/info/exclude", join(gitDir, "info", "exclude")]);
 
@@ -127,6 +141,168 @@ async function headSha(repoRoot: string): Promise<string | null> {
   } catch {
     return null; // repository with no commits yet
   }
+}
+
+/** Like git(), but returns null instead of throwing — for expected failures only. */
+async function quietGit(cwd: string, args: string[]): Promise<string | null> {
+  try {
+    return (await exec("git", args, { cwd, maxBuffer: MAX_BUFFER })).stdout.trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * `git config --get <key>` for the digest: the trimmed value, or null when the
+ * key is simply not set. Git exits 1 for an absent key — the normal case — but
+ * any other failure (a broken config, a fatal error) is a real read failure and
+ * propagates, so "nothing configured" can never be confused with "could not
+ * read the configuration".
+ */
+async function configuredPath(cwd: string, key: string): Promise<string | null> {
+  let stdout: string;
+  try {
+    ({ stdout } = await exec("git", ["config", "--path", "--get", key], {
+      cwd,
+      maxBuffer: MAX_BUFFER,
+    }));
+  } catch (err) {
+    const e = err as ExecFailure;
+    if (e.code === 1) return null; // the key is not set
+    throw new Error(`git config --get ${key} failed (${e.code}): ${e.stderr || e.message}`);
+  }
+  const value = stdout.trim();
+  return value === "" ? null : value;
+}
+
+/**
+ * Absolute path of a git-dir-style `rev-parse` result: git may answer with a
+ * path relative to the cwd (`.git`, or `../.git/worktrees/<name>` from inside
+ * a linked worktree), and joining it naively against the wrong root — or
+ * assuming `.git` is a directory at all — breaks in worktrees, where `.git`
+ * is a file.
+ */
+async function resolveGitDirPath(repoRoot: string, what: "--git-dir" | "--git-common-dir"): Promise<string> {
+  const raw = (await git(repoRoot, ["rev-parse", what])).trim();
+  return isAbsolute(raw) ? raw : resolve(repoRoot, raw);
+}
+
+/**
+ * Deterministic digest of a directory tree: for every entry, in sorted order,
+ * its relative name, its permission bits and — for regular files — its content
+ * (symlinks are followed: the target's content and mode are what execute). A
+ * missing directory digests as a stable marker: absent hooks are a state, not a
+ * read failure. The mode is part of the state because a hook made executable
+ * (0644 → 0755) activates code without changing a single byte of content; an
+ * existing but unlistable directory or an unreadable file throws, so an
+ * unreadable state can never read as unchanged.
+ */
+function digestDir(dir: string): string {
+  // statSync (not existsSync) so that a directory we cannot traverse because a
+  // parent is inaccessible throws EACCES rather than reading as <missing>;
+  // only a genuinely absent directory is a state.
+  if (statSync(dir, { throwIfNoEntry: false }) === undefined) return "<missing>";
+  const hash = createHash("sha256");
+  const seen = new Set<string>([realpathSync(dir)]);
+  const walk = (current: string, prefix: string): void => {
+    for (const name of readdirSync(current).sort((a, b) => a.localeCompare(b))) {
+      const rel = prefix + name;
+      const full = join(current, name);
+      const st = statSync(full, { throwIfNoEntry: false });
+      if (st === undefined) {
+        // Dangling symlink, or an entry that vanished after the listing:
+        // an absent target is a readable state, not a failure.
+        hash.update(rel).update("\0<missing>\0");
+        continue;
+      }
+      const perms = (st.mode & 0o7777).toString(8);
+      if (st.isDirectory()) {
+        const real = realpathSync(full);
+        if (seen.has(real)) {
+          // A symlink loop or a shared subtree: already digested under its
+          // first path, so only the new name (and mode) is recorded.
+          hash.update(rel).update("\0dir-loop ").update(perms).update("\0");
+          continue;
+        }
+        seen.add(real);
+        hash.update(rel).update("\0dir ").update(perms).update("\0");
+        walk(full, `${rel}/`);
+      } else if (st.isFile()) {
+        hash.update(rel).update("\0file ").update(perms).update("\0");
+        hash.update(readFileSync(full)).update("\0");
+      } else {
+        // FIFOs, sockets and device nodes are never opened — reading a FIFO
+        // would block — so only their type and permissions are digested.
+        hash.update(rel).update("\0special ").update(st.mode.toString(8)).update("\0");
+      }
+    }
+  };
+  walk(dir, "");
+  return hash.digest("hex");
+}
+
+/**
+ * Digest of the repository-state invariant (U3, F1/F2): HEAD, every ref, the
+ * repository's git configuration and the git hooks. A commit, branch, tag,
+ * stash, fetch, config edit or any hook change between two reads changes the
+ * digest; ordinary working-tree edits do not — U3 freezes git metadata, not
+ * the developer's legitimate output.
+ *
+ * The git dir is resolved through git itself (`--git-dir`, plus
+ * `--git-common-dir` for config and hooks): in a linked worktree the
+ * per-worktree dir holds neither config nor hooks — those live in the main
+ * repository's common dir — and a per-worktree `config.worktree` is digested
+ * on its own. A configured `core.hooksPath` (any config scope) relocates hook
+ * execution, so that location is digested as well; changing the setting
+ * itself is already a config change.
+ *
+ * Any failure to read the state propagates: callers treat an unreadable state
+ * as changed, never as unchanged. "Could not read" and "read as absent" are
+ * kept strictly apart — a missing config or hook is a state, an unreadable one
+ * is a failure.
+ */
+export async function repoStateDigest(repoRoot: string): Promise<string> {
+  const hash = createHash("sha256");
+  const add = (label: string, value: Buffer | string): void => {
+    hash.update(label).update("\0").update(value).update("\0");
+  };
+
+  // HEAD as commit id AND as symbolic name: switching branch moves the symref
+  // without touching any ref object or creating a commit.
+  const head = await headSha(repoRoot);
+  const symbolic = await quietGit(repoRoot, ["symbolic-ref", "-q", "HEAD"]);
+  add("HEAD", `${head ?? "<none>"} ${symbolic ?? "<detached>"}`);
+
+  // Every ref: object id, object type, symref target and name, deterministic
+  // order. Refnames cannot contain spaces or control characters.
+  add(
+    "refs",
+    (await git(repoRoot, [
+      "for-each-ref",
+      "--sort=refname",
+      "--format=%(objectname) %(objecttype) %(symref) %(refname)%00",
+    ])).replace(/\0$/, ""),
+  );
+
+  const gitDir = await resolveGitDirPath(repoRoot, "--git-dir");
+  const commonDir = await resolveGitDirPath(repoRoot, "--git-common-dir");
+  add("config", stateFileForDigest(join(commonDir, "config")));
+  add("config.worktree", stateFileForDigest(join(gitDir, "config.worktree")));
+  add("hooks", digestDir(join(commonDir, "hooks")));
+
+  // A configured hooksPath relocates hook execution, so that location is part
+  // of the state too. Only an absent key is the normal case; digestDir runs
+  // outside any catch so a real read failure propagates instead of silently
+  // dropping the section and yielding an apparently valid baseline.
+  const configuredHooksPath = await configuredPath(repoRoot, "core.hooksPath");
+  if (configuredHooksPath !== null) {
+    add(
+      "core.hooksPath",
+      digestDir(isAbsolute(configuredHooksPath) ? configuredHooksPath : resolve(repoRoot, configuredHooksPath)),
+    );
+  }
+
+  return hash.digest("hex");
 }
 
 /**
@@ -230,6 +406,11 @@ export function submodulePath(line: string): string | null {
 }
 
 export class RealGitService implements GitService {
+  async repoStateDigest(cwd: string): Promise<string> {
+    const repoRoot = (await git(cwd, ["rev-parse", "--show-toplevel"])).trim();
+    return repoStateDigest(repoRoot);
+  }
+
   async baseline(cwd: string): Promise<GitBaseline> {
     const repoRoot = (await git(cwd, ["rev-parse", "--show-toplevel"])).trim();
     const branch = (await git(repoRoot, ["rev-parse", "--abbrev-ref", "HEAD"])).trim();

@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, renameSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, renameSync, chmodSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -330,4 +330,226 @@ test("skip-worktree inside a submodule cannot hide it either", async () => {
 
   const { dirtySubmodules } = await git.diffSince(baseline);
   assert.deepEqual(dirtySubmodules, ["vendor/child"]);
+});
+
+// -- repository-state digest (U3, F1/F2) --------------------------------------
+//
+// The digest backs the no-commit/no-ref/no-config/no-hook invariant: whatever
+// git metadata an agent could move behind the reviewer's diff must change it,
+// and ordinary working-tree edits (the developer's legitimate output) must not.
+
+test("an untouched repository keeps the same state digest", async () => {
+  const dir = initRepo();
+  const first = await git.repoStateDigest(dir);
+  assert.equal(await git.repoStateDigest(dir), first);
+});
+
+test("a new commit changes the state digest", async () => {
+  const dir = initRepo();
+  const before = await git.repoStateDigest(dir);
+  writeFileSync(join(dir, "another.txt"), "x\n");
+  execFileSync("git", ["add", "."], { cwd: dir });
+  execFileSync("git", ["commit", "-qm", "new"], { cwd: dir });
+  assert.notEqual(await git.repoStateDigest(dir), before);
+});
+
+test("a new branch changes the state digest", async () => {
+  const dir = initRepo();
+  const before = await git.repoStateDigest(dir);
+  execFileSync("git", ["branch", "side"], { cwd: dir });
+  assert.notEqual(await git.repoStateDigest(dir), before);
+});
+
+test("a new tag changes the state digest", async () => {
+  const dir = initRepo();
+  const before = await git.repoStateDigest(dir);
+  execFileSync("git", ["tag", "v1"], { cwd: dir });
+  assert.notEqual(await git.repoStateDigest(dir), before);
+});
+
+test("switching branch changes the state digest even without a new commit", async () => {
+  const dir = initRepo();
+  execFileSync("git", ["branch", "side"], { cwd: dir });
+  const before = await git.repoStateDigest(dir);
+  // refs/heads/main and refs/heads/side both exist and point at the same
+  // commit: only HEAD's symbolic target moves.
+  execFileSync("git", ["checkout", "-q", "side"], { cwd: dir });
+  assert.notEqual(await git.repoStateDigest(dir), before);
+});
+
+test("a git config change changes the state digest", async () => {
+  const dir = initRepo();
+  const before = await git.repoStateDigest(dir);
+  execFileSync("git", ["config", "user.email", "other@example.com"], { cwd: dir });
+  assert.notEqual(await git.repoStateDigest(dir), before);
+});
+
+test("hook creation, edition and removal each change the state digest", async () => {
+  const dir = initRepo();
+  const hook = join(dir, ".git", "hooks", "pre-commit");
+  const before = await git.repoStateDigest(dir);
+
+  writeFileSync(hook, "#!/bin/sh\nexit 0\n");
+  const created = await git.repoStateDigest(dir);
+  assert.notEqual(created, before, "a planted hook is a state change");
+
+  writeFileSync(hook, "#!/bin/sh\necho hijacked\n");
+  const edited = await git.repoStateDigest(dir);
+  assert.notEqual(edited, created, "editing the hook's content is a state change");
+
+  rmSync(hook);
+  assert.notEqual(await git.repoStateDigest(dir), edited);
+  assert.equal(await git.repoStateDigest(dir), before, "removal restores the baseline state");
+});
+
+test("a hook becoming executable changes the state digest even with identical content (P1 regression)", async () => {
+  const dir = initRepo();
+  const hook = join(dir, ".git", "hooks", "pre-commit");
+  writeFileSync(hook, "#!/bin/sh\nexit 0\n"); // planted but inert: not executable
+  const inert = await git.repoStateDigest(dir);
+  assert.equal(await git.repoStateDigest(dir), inert, "stable read while the mode is unchanged");
+
+  chmodSync(hook, 0o755); // same bytes, but git will now actually run it
+  const active = await git.repoStateDigest(dir);
+  assert.notEqual(active, inert, "activation must not be invisible to the digest");
+
+  chmodSync(hook, 0o644); // deactivation is a state change too
+  assert.notEqual(await git.repoStateDigest(dir), active);
+});
+
+test("an unreadable hook file fails closed instead of digesting a marker (P1 regression)", async () => {
+  const dir = initRepo();
+  const hook = join(dir, ".git", "hooks", "pre-commit");
+  writeFileSync(hook, "#!/bin/sh\nexit 0\n");
+  chmodSync(hook, 0o000);
+  await assert.rejects(() => git.repoStateDigest(dir));
+});
+
+test("an unreadable .git/config fails closed instead of digesting a marker (P1 regression)", async () => {
+  const dir = initRepo();
+  chmodSync(join(dir, ".git", "config"), 0o000);
+  await assert.rejects(() => git.repoStateDigest(dir));
+});
+
+test("a core.hooksPath that exists but cannot be listed fails closed (P1 regression)", async () => {
+  const dir = initRepo();
+  const hooksDir = join(dir, "locked-hooks");
+  mkdirSync(hooksDir);
+  execFileSync("git", ["config", "core.hooksPath", "locked-hooks"], { cwd: dir });
+  chmodSync(hooksDir, 0o000); // exists, but its contents cannot be enumerated
+  await assert.rejects(() => git.repoStateDigest(dir));
+});
+
+test("a core.hooksPath pointing at a file fails closed (P1 regression)", async () => {
+  const dir = initRepo();
+  writeFileSync(join(dir, "hooksfile"), "x\n");
+  execFileSync("git", ["config", "core.hooksPath", "hooksfile"], { cwd: dir });
+  await assert.rejects(() => git.repoStateDigest(dir));
+});
+
+test("a nonexistent core.hooksPath is a stable state, and populating it later is detected", async () => {
+  const dir = initRepo();
+  execFileSync("git", ["config", "core.hooksPath", "not-yet"], { cwd: dir });
+  const before = await git.repoStateDigest(dir);
+  assert.equal(await git.repoStateDigest(dir), before, "absent hooks location is a readable state");
+
+  mkdirSync(join(dir, "not-yet"));
+  writeFileSync(join(dir, "not-yet", "pre-commit"), "#!/bin/sh\nexit 0\n");
+  assert.notEqual(await git.repoStateDigest(dir), before, "creating the location with a hook is detected");
+});
+
+test("a core.hooksPath behind an inaccessible parent directory fails closed (P2 regression)", async () => {
+  const dir = initRepo();
+  const privateDir = join(dir, "private");
+  mkdirSync(join(privateDir, "hooks"), { recursive: true });
+  execFileSync("git", ["config", "core.hooksPath", "private/hooks"], { cwd: dir });
+  chmodSync(privateDir, 0o000); // the hooks may exist, but we cannot even traverse to them
+  await assert.rejects(() => git.repoStateDigest(dir));
+});
+
+test("a config.worktree behind an inaccessible parent directory fails closed (P2 regression)", async () => {
+  const dir = initRepo();
+  const privateDir = join(dir, "private");
+  mkdirSync(privateDir, { recursive: true });
+  const target = join(privateDir, "config.worktree");
+  writeFileSync(target, "[core]\n\tbare = false\n");
+  symlinkSync(target, join(dir, ".git", "config.worktree"));
+  chmodSync(privateDir, 0o000); // the file exists, but its parent cannot be traversed
+  await assert.rejects(() => git.repoStateDigest(dir));
+});
+
+test("ordinary working-tree edits do NOT change the state digest", async () => {
+  const dir = initRepo();
+  const before = await git.repoStateDigest(dir);
+  writeFileSync(join(dir, "existing.txt"), "one\nedited by the developer\n");
+  writeFileSync(join(dir, "brand-new-untracked.txt"), "untracked\n");
+  assert.equal(await git.repoStateDigest(dir), before);
+});
+
+test("hooks at a configured core.hooksPath are digested too", async () => {
+  const dir = initRepo();
+  const hooksDir = join(dir, "custom-hooks");
+  mkdirSync(hooksDir);
+  execFileSync("git", ["config", "core.hooksPath", "custom-hooks"], { cwd: dir });
+  const before = await git.repoStateDigest(dir);
+
+  writeFileSync(join(hooksDir, "pre-commit"), "#!/bin/sh\nexit 0\n");
+  assert.notEqual(await git.repoStateDigest(dir), before, "a hook outside .git/hooks must not be invisible");
+});
+
+test("the state digest reads shared state correctly from a linked worktree", async () => {
+  const dir = initRepo();
+  // In a linked worktree .git is a FILE: the digest must resolve the git dir
+  // and the common dir through git itself, never join(.git, ...).
+  const wt = mkdtempSync(join(tmpdir(), "pi-brain-wtw-"));
+  execFileSync("git", ["worktree", "add", wt, "-b", "wt-branch"], { cwd: dir });
+  const before = await git.repoStateDigest(wt);
+  assert.equal(await git.repoStateDigest(wt), before, "stable read inside the worktree");
+
+  // a commit in the MAIN repository moves a shared ref
+  writeFileSync(join(dir, "from-main.txt"), "x\n");
+  execFileSync("git", ["add", "."], { cwd: dir });
+  execFileSync("git", ["commit", "-qm", "main moved"], { cwd: dir });
+  assert.notEqual(await git.repoStateDigest(wt), before, "shared refs are seen from the worktree");
+
+  // config lives in the common dir
+  const afterMainCommit = await git.repoStateDigest(wt);
+  execFileSync("git", ["config", "user.email", "wt@example.com"], { cwd: dir });
+  assert.notEqual(await git.repoStateDigest(wt), afterMainCommit, "common config is seen from the worktree");
+
+  // hooks live in the common dir too
+  const afterConfig = await git.repoStateDigest(wt);
+  writeFileSync(join(dir, ".git", "hooks", "pre-commit"), "#!/bin/sh\nexit 0\n");
+  assert.notEqual(await git.repoStateDigest(wt), afterConfig, "common hooks are seen from the worktree");
+
+  // the worktree's own commit moves both its HEAD and a shared ref
+  const afterHooks = await git.repoStateDigest(wt);
+  writeFileSync(join(wt, "from-wt.txt"), "x\n");
+  execFileSync("git", ["add", "."], { cwd: wt });
+  execFileSync("git", ["commit", "-qm", "wt moved"], { cwd: wt });
+  assert.notEqual(await git.repoStateDigest(wt), afterHooks);
+
+  // a plain edit inside the worktree is still not git state
+  const afterWtCommit = await git.repoStateDigest(wt);
+  writeFileSync(join(wt, "from-wt.txt"), "edited\n");
+  assert.equal(await git.repoStateDigest(wt), afterWtCommit);
+});
+
+test("a repository with no commits digests, and its first commit changes the digest", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "pi-brain-empty-"));
+  execFileSync("git", ["init", "-q", "-b", "main"], { cwd: dir });
+  const before = await git.repoStateDigest(dir);
+  writeFileSync(join(dir, "a.txt"), "a\n");
+  execFileSync("git", ["add", "."], { cwd: dir });
+  execFileSync(
+    "git",
+    ["-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-qm", "first"],
+    { cwd: dir },
+  );
+  assert.notEqual(await git.repoStateDigest(dir), before);
+});
+
+test("an unreadable repository state fails closed instead of reading as stable", async () => {
+  const notARepo = mkdtempSync(join(tmpdir(), "pi-brain-norepo-"));
+  await assert.rejects(() => git.repoStateDigest(notARepo), /failed/);
 });

@@ -176,6 +176,39 @@ export async function runFeatureWorkflow(
     verifyFreeze = frozen.freeze;
   }
 
+  // U3 (F1/F2): repository-state invariant. The write guard refuses `.git/`
+  // and the developer has no shell, but detection backstops both: HEAD, every
+  // ref, the repository config and the hooks are digested here and re-checked
+  // after every developer pass and after verify — any difference ends the run
+  // needs_human BEFORE the reviewer is called. A resumed run compares against
+  // the ORIGINAL persisted digest, never a fresh baseline; logs that predate
+  // the digest resume without this check and are told so (compat only, no
+  // protection claimed).
+  let baselineRepoState: string | undefined;
+  if (resume) {
+    baselineRepoState = resume.baseline?.repoStateDigest;
+    if (baselineRepoState === undefined) {
+      human.notify(
+        "pi-brain: run log predates the repository-state digest — the git repository state is not checked for this run.",
+      );
+    }
+  } else {
+    try {
+      baselineRepoState = await git.repoStateDigest(baseline.repoRoot);
+    } catch (err) {
+      // Fail closed before anything starts: a run whose git state cannot be
+      // read cannot check the invariant, and must not run unprotected. No
+      // workflow.started was emitted, so the log holds no partial run.
+      return {
+        status: "needs_human",
+        reason:
+          `could not read the git repository state at baseline (${(err as Error).message}) — ` +
+          `the repository-state check cannot run. Check that the repository is healthy, then start a new run.`,
+        usage: {},
+      };
+    }
+  }
+
   // In resume mode, workflow.started was already emitted — skip it.
   if (!resume) {
     events.emit({
@@ -188,6 +221,7 @@ export async function runFeatureWorkflow(
       ...(baseline.ignoreRulesDigest !== undefined
         ? { ignoreRulesDigest: baseline.ignoreRulesDigest }
         : {}),
+      ...(baselineRepoState !== undefined ? { repoStateDigest: baselineRepoState } : {}),
       ...(verifyFreeze !== undefined ? { verify: verifyFreeze } : {}),
     });
   }
@@ -453,6 +487,41 @@ export async function runFeatureWorkflow(
     };
   };
 
+  /**
+   * U3 (F1/F2): compare the live repository state against the baseline
+   * digest. Returns undefined when the invariant holds (or the run predates
+   * the digest); otherwise a terminal needs_human outcome. An unreadable
+   * state is a violation: unreadable is never "unchanged".
+   */
+  const stopForRepoStateChange = async (): Promise<FeatureOutcome | undefined> => {
+    if (baselineRepoState === undefined) return undefined; // legacy log: guard off
+    let current: string;
+    try {
+      current = await git.repoStateDigest(baseline.repoRoot);
+    } catch (err) {
+      events.emit({ type: "workflow.completed", runId, status: "needs_human" });
+      return {
+        status: "needs_human",
+        reason:
+          `could not re-read the git repository state (${(err as Error).message}) — ` +
+          `treating it as changed. Check that the repository is healthy, then resume or start a new run.`,
+        review: lastReview,
+        usage,
+      };
+    }
+    if (current === baselineRepoState) return undefined;
+    events.emit({ type: "workflow.completed", runId, status: "needs_human" });
+    return {
+      status: "needs_human",
+      reason:
+        "the git repository changed during the run (HEAD, a ref, git config or a git hook — e.g. a commit, " +
+        "branch, tag or hook edit) — stopping before the reviewer runs. Inspect git reflog and git diff, then " +
+        "restore the repository state or start a new run.",
+      review: lastReview,
+      usage,
+    };
+  };
+
   for (;;) {
     if (deps.signal?.aborted) return { status: "cancelled", at: `round ${reviewRound}`, usage };
     const resumeEntry = entry;
@@ -516,6 +585,12 @@ export async function runFeatureWorkflow(
     // contract against which the reviewer judges the code.
     if (specWasModified()) return stopForSpecTamper();
 
+    // U3: a developer pass (and, on a resumed pass, the interruption window
+    // itself) must not have moved any git state. Checked before verify so no
+    // verification command runs on a mutated repository.
+    const repoStateAfterDeveloper = await stopForRepoStateChange();
+    if (repoStateAfterDeveloper !== undefined) return repoStateAfterDeveloper;
+
     // deterministic verification BEFORE spending reviewer tokens (§24)
     // On a resumed pass, skip the checks only when re-entering straight at
     // review: the interrupted review round never consumed fresh results, and
@@ -559,6 +634,13 @@ export async function runFeatureWorkflow(
       );
       events.emit({ type: "verification.completed", runId, passed: blockingFailures.length === 0 });
       if (blockingFailures.length === 0) resumedVerifyPending = false; // only the first observation is free
+
+      // U3: verify executed developer-influenced commands — the repository
+      // state must be identical to the baseline before anything (fix round or
+      // reviewer) proceeds on this tree. Checked before the retry accounting
+      // so a mutated repo never spends budget.
+      const repoStateAfterVerify = await stopForRepoStateChange();
+      if (repoStateAfterVerify !== undefined) return repoStateAfterVerify;
 
       if (blockingFailures.length > 0) {
         if (resumedVerifyPending) {

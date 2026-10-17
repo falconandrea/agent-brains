@@ -87,9 +87,19 @@ class FakeGit implements GitService {
   filesList = ["src/a.ts"];
   calls = 0;
   baselineCalls = 0;
+  /** What repoStateDigest returns; null makes the read fail closed. */
+  repoState: string | null = "state-digest-1";
+  repoStateCalls = 0;
   async baseline(cwd: string): Promise<GitBaseline> {
     this.baselineCalls += 1;
     return { repoRoot: cwd, branch: "main", headSha: "abc123", baseCommit: "snap-base" };
+  }
+  async repoStateDigest(): Promise<string> {
+    this.repoStateCalls += 1;
+    if (this.repoState === null) {
+      throw new Error("git for-each-ref failed (128): fatal: not a git repository");
+    }
+    return this.repoState;
   }
   dirtySubmodules: string[] = [];
   async diffSince(): Promise<{ patch: string; files: string[]; dirtySubmodules: string[] }> {
@@ -756,6 +766,218 @@ test("resume from a legacy log without the freeze re-resolves verify and shows a
   assert.deepEqual(verifier.received[0], ["make ci"], "legacy behavior: commands come from the current config");
   const notices = human.notices.filter((n) => n.includes("predates the verify freeze"));
   assert.equal(notices.length, 1, "exactly one warning line");
+});
+
+// -- repository-state invariant (U3, F1/F2) ------------------------------------
+
+test("workflow.started persists the repository-state digest of an unchanged repo", async () => {
+  const { deps, events } = harness(approvingResponder);
+
+  const outcome = await runFeatureWorkflow(deps, "add invitations", "run-repo-persist");
+
+  assert.equal(outcome.status, "completed");
+  const started = events.find((e) => e.type === "workflow.started");
+  assert.equal(
+    started?.type === "workflow.started" ? started.repoStateDigest : undefined,
+    "state-digest-1",
+    "the digest is persisted for resume comparison",
+  );
+});
+
+test("a repository-state change after develop ends needs_human before verify and the reviewer", async () => {
+  const verifier = new FakeVerifier([0]);
+  let reviewerCalls = 0;
+  const { deps, agents, events } = harness(
+    (req) => {
+      if (req.role === "planner") return plannerResult;
+      if (req.role === "developer") {
+        (deps.git as FakeGit).repoState = "changed-by-developer";
+        return devResult;
+      }
+      reviewerCalls += 1;
+      return reviewOf({ verdict: "approved", summary: "ok", issues: [] });
+    },
+    { verifier },
+  );
+
+  const outcome = await runFeatureWorkflow(deps, "add invitations", "run-repo-dev");
+
+  assert.equal(outcome.status, "needs_human");
+  assert.match(outcome.status === "needs_human" ? outcome.reason : "", /git repository changed during the run/);
+  assert.equal(verifier.calls, 0, "zero verification commands are executed");
+  assert.equal(reviewerCalls, 0, "the reviewer is never called");
+  assert.ok(
+    !events.some((e) => e.type === "phase.started" && e.phase === "verify"),
+    "the verify phase never starts",
+  );
+  assert.ok(events.some((e) => e.type === "workflow.completed" && e.status === "needs_human"));
+});
+
+test("a repository-state change during verify ends needs_human before the reviewer", async () => {
+  let verifyCalls = 0;
+  let reviewerCalls = 0;
+  const { deps } = harness(
+    (req) => {
+      if (req.role === "planner") return plannerResult;
+      if (req.role === "developer") return devResult;
+      reviewerCalls += 1;
+      return reviewOf({ verdict: "approved", summary: "ok", issues: [] });
+    },
+    {
+      verifier: {
+        async run(commands: VerifyCommand[]): Promise<CommandResult[]> {
+          verifyCalls += 1;
+          (deps.git as FakeGit).repoState = "changed-during-verify";
+          return commands.map((c) => ({ command: c.command, exitCode: 0, output: "ok" }));
+        },
+      },
+    },
+  );
+
+  const outcome = await runFeatureWorkflow(deps, "add invitations", "run-repo-verify");
+
+  assert.equal(outcome.status, "needs_human");
+  assert.match(outcome.status === "needs_human" ? outcome.reason : "", /git repository changed during the run/);
+  assert.equal(verifyCalls, 1, "verify ran and passed; the state change was caught right after it");
+  assert.equal(reviewerCalls, 0, "the reviewer is never called");
+});
+
+test("a repository-state change in a fix round is caught against the original digest", async () => {
+  const verifier = new FakeVerifier([0]);
+  let devRuns = 0;
+  let reviewerCalls = 0;
+  const { deps, agents } = harness(
+    (req) => {
+      if (req.role === "planner") return plannerResult;
+      if (req.role === "developer") {
+        devRuns += 1;
+        if (devRuns === 2) (deps.git as FakeGit).repoState = "changed-in-fix-round";
+        return devResult;
+      }
+      reviewerCalls += 1;
+      return reviewOf({
+        verdict: "changes_requested",
+        summary: "one bug",
+        issues: [{ id: "R1", severity: "blocking", category: "bug", problem: "off by one" }],
+      });
+    },
+    { verifier },
+  );
+
+  const outcome = await runFeatureWorkflow(deps, "add invitations", "run-repo-fix");
+
+  assert.equal(outcome.status, "needs_human");
+  assert.match(outcome.status === "needs_human" ? outcome.reason : "", /git repository changed during the run/);
+  assert.equal(devRuns, 2, "the fix round ran; its state change was caught right after it");
+  assert.equal(reviewerCalls, 1, "only the first review happened");
+  assert.equal(agents.calls.filter((c) => c.role === "reviewer").length, 1);
+});
+
+test("resume compares against the persisted original digest and blocks a change made during the interruption", async () => {
+  const verifier = new FakeVerifier([0]);
+  const { deps, cwd, events } = harness(approvingResponder, { verifier });
+  seedFeatureArtifacts(cwd, DESCRIPTION);
+  // Somebody committed while the run was down: the resumed run must compare
+  // against the ORIGINAL digest, never take a fresh baseline.
+  (deps.git as FakeGit).repoState = "state-after-outage";
+
+  const outcome = await runFeatureWorkflow(deps, DESCRIPTION, "run-repo-resume-blocked", resumeStateOf({
+    phase: "verify",
+    developerRuns: 1,
+    baseline: {
+      repoRoot: cwd,
+      branch: "main",
+      headSha: "x",
+      baseCommit: "persisted-base",
+      repoStateDigest: "original-digest",
+    },
+  }));
+
+  assert.equal(outcome.status, "needs_human");
+  assert.match(outcome.status === "needs_human" ? outcome.reason : "", /git repository changed during the run/);
+  assert.equal((deps.git as FakeGit).baselineCalls, 0, "no fresh baseline is ever taken");
+  assert.equal(verifier.calls, 0, "blocked before verify on the re-entry pass");
+  assert.ok(!events.some((e) => e.type === "workflow.started"), "resume never re-emits workflow.started");
+});
+
+test("resume with a matching persisted digest completes", async () => {
+  const verifier = new FakeVerifier([0]);
+  const { deps, cwd } = harness(approvingResponder, { verifier });
+  seedFeatureArtifacts(cwd, DESCRIPTION);
+
+  const outcome = await runFeatureWorkflow(deps, DESCRIPTION, "run-repo-resume-ok", resumeStateOf({
+    phase: "verify",
+    developerRuns: 1,
+    baseline: {
+      repoRoot: cwd,
+      branch: "main",
+      headSha: "x",
+      baseCommit: "persisted-base",
+      repoStateDigest: "state-digest-1",
+    },
+  }));
+
+  assert.equal(outcome.status, "completed");
+});
+
+test("resume from a legacy log without the digest runs unprotected and says so exactly once", async () => {
+  const verifier = new FakeVerifier([0]);
+  const { deps, cwd, human } = harness(approvingResponder, { verifier });
+  seedFeatureArtifacts(cwd, DESCRIPTION);
+  // The guard is inactive for logs that predate it — the run must NOT claim
+  // protection, and must not block either.
+  (deps.git as FakeGit).repoState = "whatever-the-state-is-now";
+
+  const outcome = await runFeatureWorkflow(deps, DESCRIPTION, "run-repo-legacy-resume", resumeStateOf({
+    phase: "verify",
+    developerRuns: 1,
+    baseline: { repoRoot: cwd, branch: "main", headSha: "x", baseCommit: "persisted-base" },
+  }));
+
+  assert.equal(outcome.status, "completed", "legacy logs are not blocked by a digest they never had");
+  const notices = human.notices.filter((n) => n.includes("predates the repository-state digest"));
+  assert.equal(notices.length, 1, "exactly one notice saying the check is inactive");
+});
+
+test("an unreadable repository state at re-check fails closed to needs_human", async () => {
+  const verifier = new FakeVerifier([0]);
+  let reviewerCalls = 0;
+  const { deps } = harness(
+    (req) => {
+      if (req.role === "planner") return plannerResult;
+      if (req.role === "developer") {
+        (deps.git as FakeGit).repoState = null; // the read now fails
+        return devResult;
+      }
+      reviewerCalls += 1;
+      return reviewOf({ verdict: "approved", summary: "ok", issues: [] });
+    },
+    { verifier },
+  );
+
+  const outcome = await runFeatureWorkflow(deps, "add invitations", "run-repo-unreadable");
+
+  assert.equal(outcome.status, "needs_human");
+  assert.match(
+    outcome.status === "needs_human" ? outcome.reason : "",
+    /could not re-read the git repository state/,
+  );
+  assert.equal(reviewerCalls, 0);
+});
+
+test("an unreadable repository state at baseline ends the run before anything starts", async () => {
+  const { deps, events, human } = harness(approvingResponder);
+  (deps.git as FakeGit).repoState = null;
+
+  const outcome = await runFeatureWorkflow(deps, "add invitations", "run-repo-baseline-unreadable");
+
+  assert.equal(outcome.status, "needs_human");
+  assert.match(
+    outcome.status === "needs_human" ? outcome.reason : "",
+    /could not read the git repository state at baseline/,
+  );
+  assert.equal(events.length, 0, "nothing is persisted: no partial run to resume");
+  assert.equal(human.gateOptionValues.length, 0, "the approval gate was never opened");
 });
 
 test("reviewer that never approves stops at maxReviewRounds", async () => {

@@ -37,13 +37,104 @@
 - 2026-10-12 `main-review-hardening` plan brought onto `main` from commit
   `6c16a01`, originally drafted 2026-10-02 against `e5f8e56`
   (`.ai/features/main-review-hardening/`). U5/F4 is already covered by
-  `07d74d7` (code-review-follow-ups T5–T6); U1/F2 is implemented (2026-10-14)
-  and U2/F1 is implemented (2026-10-15), both uncommitted on `main` — see
+  `07d74d7` (code-review-follow-ups T5–T6); U1/F2 is implemented (2026-10-14),
+  U2/F1 is implemented (2026-10-15) and U3/F1+F2 is implemented (2026-10-16),
+  all uncommitted on `main` — see
   Done. Remaining tasks are pending.
   This transfer authorizes documentation integration only; the F13
   `changes_requested` policy remains an open decision.
 
 ## Done
+
+- 2026-10-16 main-review-hardening U3 (F1, F2, baseline uncommitted on `main`):
+  repository-state invariant. New `repoStateDigest` in `src/shell.ts`
+  (git/fs only) digests HEAD as commit id AND symbolic name (a pure branch
+  switch moves the symref without touching a ref object), all refs via
+  `for-each-ref` (object id, type, symref target, name, deterministic order),
+  the git config file, a per-worktree `config.worktree`, the recursive
+  listing of `hooks/` — name, permission bits and content of every entry,
+  symlinks followed with a symlink-loop guard — and the `core.hooksPath`
+  location when configured (any scope). Git dirs are resolved through
+  `rev-parse --git-dir` / `--git-common-dir`, never by joining `.git` — in a
+  linked worktree `.git` is a file and config/hooks live in the main repo's
+  common dir, which the digest therefore watches from every worktree. Read
+  failures propagate: unreadable is never unchanged, and "read as absent" is
+  kept strictly apart from "could not read" — a missing config or hook is a
+  state (`<missing>`), every other error (unreadable file, wrong entry type, a
+  configured `core.hooksPath` that exists but cannot be enumerated, or any
+  path behind an inaccessible parent directory — `existsSync` would read that
+  as absent) throws; both `digestDir` and `stateFileForDigest` gate on
+  `statSync(…, {throwIfNoEntry: false})`, which swallows only ENOENT and lets
+  EACCES through. `git config --get` treats exit 1 (absent key) as the normal
+  case and any other failure as a real error.
+  The workflow owns the decision (`stopForRepoStateChange` in
+  `src/workflows/feature.ts`): the digest is taken once at baseline (failure
+  → `needs_human` before anything starts, nothing persisted — no partial run
+  to resume), persisted on `workflow.started.repoStateDigest`, and
+  re-checked after every developer pass (develop, every fix round, and the
+  resume re-entry, where it also covers the interruption window) and after
+  every verify — placed before the retry accounting so a mutated repo never
+  spends budget. Any difference or read failure ends the run `needs_human`
+  BEFORE the reviewer, with a reason naming `git reflog`/`git diff`.
+  Resume compares against the ORIGINAL persisted digest
+  (`extensions/pi-brain.ts` replays it into the resume baseline — the only
+  extension change); logs predating the digest resume with the check
+  inactive and exactly one notice saying so: compat, never claimed
+  protection. Ordinary working-tree edits never change the digest — U3
+  freezes git metadata, not the developer's output.
+  TDD: 29 new tests red-first — `tests/git.test.ts` 20 (unchanged repo
+  stable; new commit/branch/tag; branch switch without a new commit; config
+  change; hook create/edit/remove restoring the baseline; a hook made
+  executable with identical content is a change; working-tree edits NOT
+  flagged; custom `core.hooksPath`; a nonexistent configured `core.hooksPath`
+  is a stable state and populating it later is detected; linked worktree with
+  shared refs/config/hooks watched from the worktree plus its own commit, and
+  a plain worktree edit not flagged; unborn repo; non-repo fails closed;
+  fails closed on an unreadable hook file, an unreadable `.git/config`, a
+  configured `core.hooksPath` that exists but cannot be listed, and one
+  pointing at a file; fails closed on a `core.hooksPath` and a
+  `config.worktree` behind an inaccessible parent directory),
+  `tests/feature-workflow.test.ts` 9 (digest persisted; change after develop
+  → needs_human with zero verify commands, no verify phase, no reviewer;
+  change during verify → needs_human, reviewer not called; change in a fix
+  round caught against the original digest; resume blocked on a change made
+  during the interruption with no fresh baseline taken; matching-digest
+  resume completes; legacy log without the digest runs unprotected with
+  exactly one notice; unreadable at re-check and at baseline both fail
+  closed). Mutation checks: each disabled guard (post-develop,
+  post-verify, resume-original-digest) failed exactly its blocking tests;
+  each dropped digest section (refs, hooks, config, HEAD) failed exactly its
+  own tests — a new commit is caught by HEAD+refs together, which is why
+  only the branch/tag tests fail on the refs mutation; the service
+  swallowing read errors failed exactly the fail-closed test (first attempt
+  mutated the inner function and was NOT killed — the throw came from the
+  service's own `rev-parse`; the mutation was moved to the right layer).
+  Review round 2 (two P1s) — dropping the permission bits failed exactly the
+  chmod-activation regression; turning an unreadable hook file back into a
+  marker failed exactly the unreadable-hook regression; swallowing
+  `digestDir` errors for `core.hooksPath` failed exactly the two hooksPath
+  fail-closed regressions.
+  Review round 3 (P2) — restoring `existsSync` in `digestDir` failed exactly
+  the `core.hooksPath` behind-an-inaccessible-parent regression; restoring it
+  in `stateFileForDigest` failed exactly the `config.worktree` one.
+  `npm test` 359/359, `npm run typecheck` clean, `git diff --check` clean.
+  Residual limits: git metadata only — swapped working-tree files (a
+  test-runner binary, anything a script body executes outside the frozen
+  manifests) are invisible; pseudo-refs (`ORIG_HEAD`, `MERGE_HEAD`,
+  `FETCH_HEAD`) are not hashed (anything that matters moves HEAD or a real
+  ref); detection is after the fact (a push already happened by the time it
+  is caught); a legitimate human commit mid-run also stops the run
+  (intended — the diff baseline is stale from that moment); the digest
+  re-read is not atomic with the developer's exit (a change landing between
+  check and verify is caught by the post-verify check, and vice versa); a
+  non-regular entry in a hooks dir (FIFO, socket, device node) is digested by
+  type and mode only, never opened (a FIFO read would block); the
+  `.git/config` fail-closed test passes through git's own refusal of an
+  unreadable config rather than discriminating `stateFileForDigest`, which is
+  instead discriminated by the `config.worktree` behind-an-inaccessible-parent
+  regression.
+  Documented in `docs/pi-brain/README.md`. U1/U2 unaffected; U4–U16
+  untouched; F13 policy untouched.
 
 - 2026-10-15 main-review-hardening U2 (F1, baseline uncommitted on `main`):
   frozen verification inputs. `freezeVerifyInputs` (`src/verify.ts`) resolves

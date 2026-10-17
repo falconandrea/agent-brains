@@ -179,12 +179,71 @@ Known limits of the freeze perimeter:
   incompletely frozen perimeter cannot be verified safely.
 - **Script bodies are not resolved:** what a script **body** executes (other
   files, `node_modules/.bin`, `vendor/bin`) is neither resolved nor frozen — a
-  swapped test-runner binary is invisible to this check, and the planned
-  repository-state digest (U3) does **not** close that gap: it snapshots git
-  state (HEAD, refs, `.git/config`, hooks), not arbitrary working-tree files.
+  swapped test-runner binary is invisible to this check, and the
+  repository-state digest (U3) does **not** close that gap either: it
+  snapshots git state (HEAD, refs, `.git/config`, hooks), not arbitrary
+  working-tree files.
 
 The freeze lives in the run log under `.pi/`, which the developer's write
 guard already refuses to touch.
+
+### Repository-state invariant
+
+The no-commit/no-ref/no-config/no-hook invariant is backed by detection: at
+run start pi-brain digests **HEAD (commit and symbolic ref), every ref, the
+repository's git config and every git hook** and persists the digest on
+`workflow.started`. The digest is re-checked **after every developer pass**
+(develop and each fix round, plus the interruption window on a resumed pass)
+and **after every verify** — any difference ends the run `needs_human` before
+a single reviewer token is spent, with a reason naming what to inspect
+(`git reflog`, `git diff`). A hook planted in `.git/hooks/`, a commit, a
+branch, a tag, a stash or a config edit behind the reviewer's back all stop
+the run; ordinary working-tree edits — the developer's legitimate output —
+do not.
+
+How it reads the state:
+
+- The git dir is resolved through git itself (`rev-parse --git-dir` and
+  `--git-common-dir`), so **linked worktrees** work: there `.git` is a *file*,
+  and config plus hooks live in the main repository's common dir, which the
+  digest watches from every worktree. A per-worktree `config.worktree` is
+  digested on its own.
+- A configured `core.hooksPath` (any config scope) relocates hook execution;
+  that location is digested as well, and changing the setting itself is
+  already a config change. An **absent** hooks location — no setting, or a
+  path that does not exist yet — is a readable state (a hook cannot run from
+  there, and creating the path later is a detected change); a location that
+  exists but cannot be enumerated is a read failure, not a silent skip.
+- A hook's **permission bits** are part of the state: making a planted file
+  executable (`0644` → `0755`) activates it without changing a byte of its
+  content, and the digest must not miss that.
+- **Unreadable is never unchanged**: if the state cannot be read — at
+  baseline or at any re-check — the run ends `needs_human` instead of
+  comparing against a made-up value. "Read as absent" and "could not read"
+  are kept strictly apart: only a genuinely missing config or hook is a
+  state, every other read error propagates — including a path that exists
+  but sits behind an **inaccessible parent directory**, which must not read
+  as absent. At baseline nothing has started yet, so no partial run is
+  logged.
+
+`/flow resume` compares against the **original persisted digest**, never a
+fresh baseline: a commit made while the run was interrupted is caught at the
+first re-check. Logs written before this feature carry no digest; those runs
+resume **without** the repository-state check and say so in a one-line notice
+— compatibility, not protection. The practical cost: a legitimate human
+commit mid-run also stops the run with `needs_human`; that is intended — the
+reviewer's diff baseline is stale from that moment anyway.
+
+Known limits:
+
+- The digest covers git metadata only: HEAD, refs, config, hooks. Swapped
+  working-tree files (e.g. a test-runner binary) are **not** detected here —
+  the verify-input freeze covers manifests, and nothing yet covers arbitrary
+  files a script body executes.
+- Pseudo-refs such as `ORIG_HEAD`, `MERGE_HEAD` and `FETCH_HEAD` are not
+  hashed; anything that matters to them moves HEAD or a real ref as well.
+- Detection, not prevention: a push that already happened cannot be undone by
+  spotting it afterwards.
 
 Providers come from Pi (`/login`). pi-brain never reads or writes `auth.json`.
 JSON rather than YAML on purpose: keeps the package dependency-free.

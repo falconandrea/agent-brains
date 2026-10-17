@@ -432,7 +432,10 @@ export default function piBrain(pi: ExtensionAPI): void {
     }
 
     // diffSince consumes only repoRoot and baseCommit; branch/headSha are
-    // informational and the original values were never persisted.
+    // informational and the original values were never persisted. The
+    // repository-state digest (U3) is replayed verbatim: the resumed run must
+    // compare against the ORIGINAL digest, never take a fresh baseline. Logs
+    // without it resume without the repository-state check (with a notice).
     const baseline = {
       repoRoot: cwd,
       branch: "resumed",
@@ -440,6 +443,9 @@ export default function piBrain(pi: ExtensionAPI): void {
       baseCommit: started.baseline,
       ...(started.ignoreRulesDigest !== undefined
         ? { ignoreRulesDigest: started.ignoreRulesDigest }
+        : {}),
+      ...(started.repoStateDigest !== undefined
+        ? { repoStateDigest: started.repoStateDigest }
         : {}),
     };
 
