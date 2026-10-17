@@ -39,13 +39,77 @@
   (`.ai/features/main-review-hardening/`). U5/F4 is already covered by
   `07d74d7` (code-review-follow-ups T5–T6); U1/F2 is implemented (2026-10-14),
   U2/F1 is implemented (2026-10-15), U3/F1+F2 is implemented (2026-10-16) and
-  U4/F3 is implemented (2026-10-17),
-  all uncommitted on `main` — see
-  Done. Remaining tasks are pending.
+  U4/F3 is implemented (2026-10-17) — U1–U4 are committed on `main` — and
+  U6/F7 is implemented (2026-10-17, uncommitted on `main`) — see
+  Done. Remaining tasks (U7–U16) are pending.
   This transfer authorizes documentation integration only; the F13
   `changes_requested` policy remains an open decision.
 
 ## Done
+
+- 2026-10-17 main-review-hardening U6 (F7, baseline `fa5303f`, uncommitted on
+  `main`): `/feature` and `/flow resume` share one run launcher. New
+  `src/run-launcher.ts` — Pi-free, every Pi-facing effect injected (history
+  append, status line, notify, bell, lock) — owns the whole execution cycle:
+  the event sink (in-memory buffer for `/flow`, best-effort Pi-side history
+  where a throw is swallowed so the run log still receives every event,
+  run-log append, phase tracking), the `workflow.outcome` event (built in one
+  place, verbatim payload: conditional reason/summary/files/review spreads,
+  optional per-issue fields, usage mapped to input/output with `cost`
+  dropped), the run-state transitions, completion / UserDismissedError
+  cancellation / error handling, and the lock release exactly once in the
+  `finally`. The workflow call is an injected callback invoked INSIDE the run
+  body, so a synchronous throw from deps construction (agents/verifier/git)
+  is handled like a rejection — no leaked lock. Detached execution unchanged:
+  the extension does `void launchRun(...)` so `/flow status|log|stop` keep
+  answering, and the started/resumed notifies stay at the call sites. Resume
+  passes `{ resumedPhase }` so `workflow.resumed` is emitted synchronously —
+  before the workflow is invoked — as the first new event in every sink; the
+  reconstructed ORIGINAL baseline (incl. the U3 `repoStateDigest`) still
+  flows through the extension's callback into `{ ...state, baseline }`,
+  untouched. To keep the launcher free of `src/pi/`, `UserDismissedError`
+  moved from `src/pi/human-input.ts` to `src/ports.ts` (identical class and
+  message; the HumanInput port contract owns its error — the extension was
+  the only other importer). `renderOutcome`/`renderUsage`/`fmtTokens` moved
+  verbatim into the launcher; `/flow status` and `/flow log` import the last
+  two back. The extension shrank ~140 lines and keeps wiring only.
+  TDD: 9 tests in `tests/run-launcher.test.ts`, red-first — completed,
+  needs_human, cancelled outcome, UserDismissedError, thrown workflow error,
+  synchronous wiring throw, throwing Pi history (run log continues), full
+  outcome payload, resume ordering of `workflow.resumed`; every path asserts
+  events, final status, lock released exactly once, and lock still held
+  while the workflow is pending. Mutation checks, each killed by exactly its
+  covering tests: history guard removed → the history-throws test; run-log
+  append dropped → all nine; release removed → all nine; extra release on
+  success → exactly the six success-path tests; cancelled/failed
+  classification inverted → exactly the three error-path tests;
+  `workflow.resumed` emitted after the await → exactly the resume test; bell
+  dropped → exactly the two bell-asserting tests; phase tracking dropped →
+  exactly the two phase-asserting tests; optional issue fields dropped →
+  exactly the payload test. Review round: the `workflow.resumed` emission
+  moved inside the run body's try/finally — a sink callback throwing on
+  that first event (broken run-log dep) can no longer bypass the lock
+  release, and since the body runs synchronously up to the first await the
+  marker is still emitted before the workflow is invoked and before
+  `launchRun` returns (ordering re-pinned by the same resume test; the
+  placement mutation re-run on the final code still kills exactly that
+  test); the header's "never rejects" claim was corrected (until U8 a
+  throwing UI effect can still reject the promise — F6, as before); one new
+  test pins the throwing-log-callback path (lock released exactly once,
+  promise rejects loudly with the dep's error, buffer keeps both events for
+  /flow log's fallback). `npm test` 375/375, `npm run typecheck` clean,
+  `git diff --check` clean.
+  Limits: the extension file stays typecheck-only (no live Pi session was
+  driven, same as before); a throwing UI effect (notify/bell/status) in the
+  detached runner can still emit `workflow.failed` after `workflow.outcome`
+  and escape as an unhandled rejection — that is F6, deliberately left for
+  U8, which now has exactly one place to fix (as does U7's
+  lock-before-side-effects reordering at the `/feature` call site);
+  `renderUsage` still runs unconditionally inside `renderOutcome`, so an
+  outcome usage entry with an undefined value would crash rendering exactly
+  as before — behavior preserved, not fixed (production never produces one).
+  F13 untouched; U1–U5 code paths untouched; `extra/skills/ga4-analytics/`
+  untouched.
 
 - 2026-10-17 main-review-hardening U4 (F3, baseline uncommitted on `main`):
   pi-brain runtime files are excluded from reviewer snapshots.

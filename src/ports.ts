@@ -33,6 +33,20 @@ export interface HumanInput {
   notify(message: string): void;
 }
 
+/**
+ * Thrown by HumanInput implementations when the user dismisses a dialog
+ * (Pi's `select`/`input` return `undefined` instead of throwing). Part of
+ * the port contract so the run launcher can classify it — a dismissed
+ * dialog cancels the run, anything else fails it — without depending on any
+ * concrete implementation.
+ */
+export class UserDismissedError extends Error {
+  constructor(what: string) {
+    super(`the user dismissed the ${what} dialog`);
+    this.name = "UserDismissedError";
+  }
+}
+
 export interface CommandResult {
   command: string;
   exitCode: number;

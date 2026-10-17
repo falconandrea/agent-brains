@@ -22,13 +22,14 @@ import { detectStack } from "../src/stack.ts";
 import { listProfiles, resolveProfile } from "../src/profiles.ts";
 import { RealGitService, ShellVerifyRunner } from "../src/shell.ts";
 import { acquireRunLock, describeLock, type AcquireResult } from "../src/run-lock.ts";
-import { PiHumanInput, UserDismissedError } from "../src/pi/human-input.ts";
+import { PiHumanInput } from "../src/pi/human-input.ts";
 import { blocksFeatureStart, requestFlowStop, type FlowRunStatus } from "../src/pi/flow-stop.ts";
 import { PiAgentRunner } from "../src/pi/pi-agent-runner.ts";
-import { runFeatureWorkflow, type FeatureOutcome, type UsageByRole } from "../src/workflows/feature.ts";
+import { runFeatureWorkflow, type UsageByRole } from "../src/workflows/feature.ts";
 import { replayRunLog, validateResumePreconditions, hasPatchChanged, askResumeWithChangedDiff, type Refusal } from "../src/workflows/resume.ts";
 import type { WorkflowEvent } from "../src/ports.ts";
 import { RunLog, readRunLog, listRunIds } from "../src/run-log.ts";
+import { fmtTokens, launchRun, renderUsage } from "../src/run-launcher.ts";
 
 const PACKAGE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PROFILES_DIR = join(PACKAGE_ROOT, "profiles");
@@ -140,29 +141,24 @@ export default function piBrain(pi: ExtensionAPI): void {
         return;
       }
 
-      const events = {
-        emit(event: WorkflowEvent) {
-          run.events.push(event);
-          try {
-            pi.appendEntry("pi-brain.event", event); // pi-side history (unreliable — see run-log.ts)
-          } catch {
-            // Best-effort by contract: a replaced/stale Pi context must not
-            // stop OUR audit trail, nor make the failure handler below lose
-            // its workflow.failed event by throwing again.
-          }
-          runLog.append(event); // OUR audit trail: survives crashes and scrolling
-          if (event.type === "phase.started") {
-            run.phase = event.phase;
-            human.status(`${run.workflow}: ${event.phase}`);
-          }
-        },
-      };
-
       // Run detached: awaiting here would hold Pi's command loop hostage for
-      // the whole pipeline and /flow status|log|stop could never answer.
-      void (async () => {
-        try {
-          const outcome = await runFeatureWorkflow(
+      // the whole pipeline and /flow status|log|stop could never answer. The
+      // launcher owns the event sink, the outcome event, the status
+      // transitions and the lock release — /flow resume uses the same one.
+      void launchRun(
+        {
+          run,
+          runLog,
+          history: (event) => pi.appendEntry("pi-brain.event", event),
+          setStatus: (text) => human.status(text),
+          notify: (message, level) => ctx.ui.notify(message, level),
+          bell: () => {
+            if (config.notifications.bell) process.stdout.write("\x07"); // terminal bell
+          },
+          lock,
+        },
+        (events) =>
+          runFeatureWorkflow(
             {
               cwd,
               profilesDir: PROFILES_DIR,
@@ -177,53 +173,8 @@ export default function piBrain(pi: ExtensionAPI): void {
             },
             description,
             runId,
-          );
-          run.status = outcome.status;
-          // Persist the full outcome — review findings included — before any
-          // TUI rendering can lose it (IDEAS.md run-state escalation).
-          events.emit({
-            type: "workflow.outcome",
-            runId,
-            status: outcome.status,
-            ...("reason" in outcome && outcome.reason !== undefined ? { reason: outcome.reason } : {}),
-            ...("summary" in outcome && outcome.summary !== undefined ? { summary: outcome.summary } : {}),
-            ...("files" in outcome && outcome.files !== undefined ? { files: outcome.files } : {}),
-            ...("review" in outcome && outcome.review !== undefined
-              ? {
-                  review: {
-                    verdict: outcome.review.verdict,
-                    summary: outcome.review.summary,
-                    issues: outcome.review.issues.map((i) => ({
-                      id: i.id,
-                      severity: i.severity,
-                      category: i.category,
-                      problem: i.problem,
-                      ...(i.file !== undefined ? { file: i.file } : {}),
-                      ...(i.line !== undefined ? { line: i.line } : {}),
-                      ...(i.recommendation !== undefined ? { recommendation: i.recommendation } : {}),
-                    })),
-                  },
-                }
-              : {}),
-            usage: Object.fromEntries(
-              Object.entries(outcome.usage).map(([role, u]) => [
-                role,
-                { input: u?.input ?? 0, output: u?.output ?? 0 },
-              ]),
-            ),
-          });
-          ctx.ui.notify(renderOutcome(outcome), outcome.status === "completed" ? "info" : "warning");
-          if (config.notifications.bell) process.stdout.write("\x07"); // terminal bell
-        } catch (err) {
-          run.status = err instanceof UserDismissedError ? "cancelled" : "failed";
-          const message = (err as Error).message;
-          events.emit({ type: "workflow.failed", runId, error: message });
-          ctx.ui.notify(`pi-brain: ${message}`, "error");
-        } finally {
-          lock.release();
-          human.status(undefined);
-        }
-      })();
+          ),
+      );
       ctx.ui.notify(`pi-brain: ${runId} started — /flow status, /flow log, /flow stop.`);
     },
   });
@@ -522,29 +473,24 @@ export default function piBrain(pi: ExtensionAPI): void {
     };
     (active as ActiveRun) = run;
 
-    const eventsSink = {
-      emit(event: WorkflowEvent) {
-        run.events.push(event);
-        try {
-          pi.appendEntry("pi-brain.event", event);
-        } catch {
-          // Best-effort: the run log below is the source of truth.
-        }
-        runLog.append(event);
-        if (event.type === "phase.started") {
-          run.phase = event.phase;
-          human.status(`${run.workflow}: ${event.phase}`);
-        }
+    // Run detached, through the same launcher as /feature: the event sink,
+    // the outcome emission, the status transitions and the lock release
+    // exist once. `resumedPhase` makes workflow.resumed the first new event
+    // on disk — synchronously, before the workflow re-enters.
+    void launchRun(
+      {
+        run,
+        runLog,
+        history: (event) => pi.appendEntry("pi-brain.event", event),
+        setStatus: (text) => human.status(text),
+        notify: (message, level) => ctx.ui.notify(message, level),
+        bell: () => {
+          if (config.notifications.bell) process.stdout.write("\x07"); // terminal bell
+        },
+        lock,
       },
-    };
-
-    // Emit workflow.resumed event
-    eventsSink.emit({ type: "workflow.resumed", runId, phase: state.phase });
-
-    // Run detached
-    void (async () => {
-      try {
-        const outcome = await runFeatureWorkflow(
+      (events) =>
+        runFeatureWorkflow(
           {
             cwd,
             profilesDir: PROFILES_DIR,
@@ -554,7 +500,7 @@ export default function piBrain(pi: ExtensionAPI): void {
             human,
             verifier: new ShellVerifyRunner(cwd, { timeoutMs: config.verifyTimeoutMs }),
             git: new RealGitService(),
-            events: eventsSink,
+            events,
             signal: abort.signal,
           },
           description,
@@ -562,51 +508,9 @@ export default function piBrain(pi: ExtensionAPI): void {
           // The persisted baseline is part of the resume state: without it
           // the workflow would re-baseline and hide the interrupted work.
           { ...state, baseline },
-        );
-        run.status = outcome.status;
-        eventsSink.emit({
-          type: "workflow.outcome",
-          runId,
-          status: outcome.status,
-          ...("reason" in outcome && outcome.reason !== undefined ? { reason: outcome.reason } : {}),
-          ...("summary" in outcome && outcome.summary !== undefined ? { summary: outcome.summary } : {}),
-          ...("files" in outcome && outcome.files !== undefined ? { files: outcome.files } : {}),
-          ...("review" in outcome && outcome.review !== undefined
-            ? {
-                review: {
-                  verdict: outcome.review.verdict,
-                  summary: outcome.review.summary,
-                  issues: outcome.review.issues.map((i) => ({
-                    id: i.id,
-                    severity: i.severity,
-                    category: i.category,
-                    problem: i.problem,
-                    ...(i.file !== undefined ? { file: i.file } : {}),
-                    ...(i.line !== undefined ? { line: i.line } : {}),
-                    ...(i.recommendation !== undefined ? { recommendation: i.recommendation } : {}),
-                  })),
-                },
-              }
-            : {}),
-          usage: Object.fromEntries(
-            Object.entries(outcome.usage).map(([role, u]) => [
-              role,
-              { input: u?.input ?? 0, output: u?.output ?? 0 },
-            ]),
-          ),
-        });
-        ctx.ui.notify(renderOutcome(outcome), outcome.status === "completed" ? "info" : "warning");
-        if (config.notifications.bell) process.stdout.write("\x07");
-      } catch (err) {
-        run.status = err instanceof UserDismissedError ? "cancelled" : "failed";
-        const message = (err as Error).message;
-        eventsSink.emit({ type: "workflow.failed", runId, error: message });
-        ctx.ui.notify(`pi-brain: ${message}`, "error");
-      } finally {
-        lock.release();
-        human.status(undefined);
-      }
-    })();
+        ),
+      { resumedPhase: state.phase },
+    );
     ctx.ui.notify(`pi-brain: ${runId} resumed from ${state.phase} — /flow status, /flow log, /flow stop.`);
   }
 
@@ -731,48 +635,5 @@ function describe(event: WorkflowEvent): string {
     }
     default:
       return `  ${event.type}`;
-  }
-}
-
-/** 1234 → "1.2k", 250 → "250" — compact enough for a status line. */
-function fmtTokens(n: number): string {
-  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
-}
-
-/** "planner 1.2k/0.4k · developer 8.9k/2.1k · total 10.1k/2.5k" (in/out). */
-function renderUsage(usage: UsageByRole): string {
-  const roles = Object.entries(usage);
-  if (roles.length === 0) return "";
-  const parts = roles.map(([role, u]) => `${role} ${fmtTokens(u!.input)}/${fmtTokens(u!.output)}`);
-  const total = roles.reduce(
-    (acc, [, u]) => ({ input: acc.input + u!.input, output: acc.output + u!.output }),
-    { input: 0, output: 0 },
-  );
-  parts.push(`total ${fmtTokens(total.input)}/${fmtTokens(total.output)}`);
-  return `tokens in/out: ${parts.join(" · ")}`;
-}
-
-function renderOutcome(outcome: FeatureOutcome): string {
-  const usageLine = renderUsage(outcome.usage);
-  switch (outcome.status) {
-    case "completed":
-      return [
-        `✓ FEATURE COMPLETE (automated review) — ${outcome.files.length} files changed, no commit created. ` +
-        `Inspect git diff before committing: the human commit IS the final gate.`,
-        outcome.summary,
-        outcome.review.issues.length > 0
-          ? `${outcome.review.issues.length} non-blocking note(s) left by the reviewer.`
-          : "",
-        usageLine,
-        "Inspect with: git diff",
-      ]
-        .filter(Boolean)
-        .join("\n");
-    case "needs_human":
-      return ["⚠ NEEDS HUMAN — " + outcome.reason, usageLine, "Full findings: /flow log", "Past runs: /flow log-all"]
-        .filter(Boolean)
-        .join("\n");
-    default:
-      return `cancelled at ${outcome.at}`;
   }
 }

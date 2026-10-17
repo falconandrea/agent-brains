@@ -15,6 +15,7 @@
  */
 
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { UserDismissedError } from "../ports.ts";
 import type {
   ConfirmQuestion,
   HumanInput,
@@ -27,13 +28,6 @@ export interface DeferredQuestion {
   reason?: string;
   options?: string[];
   askedAt: string;
-}
-
-export class UserDismissedError extends Error {
-  constructor(what: string) {
-    super(`the user dismissed the ${what} dialog`);
-    this.name = "UserDismissedError";
-  }
 }
 
 const STATUS_KEY = "pi-brain";

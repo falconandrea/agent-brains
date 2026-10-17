@@ -113,8 +113,10 @@ Decision: **approach 1**.
       runtime.
 - [ ] UI failures (`notify`, bell, status) in the detached runner never change
       the persisted outcome and never produce an unhandled rejection.
-- [ ] `/feature` and `/flow resume` share one launcher; no duplicated outcome
+- [x] `/feature` and `/flow resume` share one launcher; no duplicated outcome
       emission.
+      Implemented 2026-10-17 (U6): `src/run-launcher.ts` — Pi-free, all
+      effects injected; see the U6 task entry.
 
 ### M2 — multi-tool setup parity
 - [ ] `solution-capture` has `.opencode/agents/solution-capture.md` and

@@ -6,7 +6,8 @@ Finding ids (F1–F14) refer to the PRD table. Each milestone is its own cycle.
 ## Integration status (2026-10-12)
 
 Imported from `6c16a01` onto `main` after `07d74d7`. U5 is already covered
-by code-review-follow-ups T5–T6; remaining tasks are pending. Use the
+by code-review-follow-ups T5–T6; U1–U4 and U6 are implemented (U6 on
+2026-10-17, uncommitted); remaining tasks are pending. Use the
 existing `verifyTimeoutMs` interface rather than introducing a seconds-based
 setting. Documentation integration does not authorize implementation.
 
@@ -299,15 +300,59 @@ setting. Documentation integration does not authorize implementation.
   a 1 s timeout it is reported as timed out, and the child PID no longer exists.
   An invalid config value produces a warning plus the default.
 
-- [ ] **U6 — Shared run launcher** (F7). `src/run-launcher.ts`,
+- [x] **U6 — Shared run launcher** (F7). `src/run-launcher.ts`,
   `extensions/pi-brain.ts`, `tests/run-launcher.test.ts`.
-  Satisfy: one Pi-free function owns the event sink (in-memory buffer, Pi
-  history best-effort, run log, phase tracking), the `workflow.outcome`
-  emission, the status transitions and the lock release. `/feature` and
-  `/flow resume` both call it; the outcome payload is built in one place.
-  Tests with fakes: completed, needs_human, cancelled (`UserDismissedError`),
-  thrown error. In every case the lock is released exactly once and the event
-  order matches today's.
+  Completed 2026-10-17 (baseline `fa5303f`, uncommitted on `main`), TDD: 9
+  tests red-first, nine mutation checks each killed by exactly its covering
+  tests.
+  `launchRun(deps, runWorkflow, options?)` in `src/run-launcher.ts` is
+  Pi-free (no Pi import; history/status/notify/bell/lock all injected) and
+  owns the event sink (in-memory buffer for `/flow`, best-effort Pi-side
+  history — a throw is swallowed so the run log still receives every event —
+  run-log append, phase tracking), the `workflow.outcome` event (built in
+  one place, verbatim payload: conditional reason/summary/files/review
+  spreads, optional per-issue fields, usage mapped to input/output with
+  `cost` dropped), the run-state transitions, completion /
+  UserDismissedError-cancellation / error handling, and the lock release
+  exactly once (finally). The workflow call is an injected callback invoked
+  INSIDE the run body, so a synchronous throw from deps construction
+  (agents/verifier/git) is handled like a rejection — no leaked lock.
+  `/feature` and `/flow resume` both call it; resume passes
+  `{ resumedPhase }` so `workflow.resumed` is emitted synchronously as the
+  first new event in every sink, and the reconstructed ORIGINAL baseline
+  (incl. the U3 `repoStateDigest`) still flows through the extension's
+  callback into `{ ...state, baseline }` — untouched. Detached execution
+  unchanged (`void launchRun(...)`); the started/resumed notifies stay at
+  the call sites; `/flow status|log|stop` untouched.
+  To keep the launcher free of `src/pi/`, `UserDismissedError` moved from
+  `src/pi/human-input.ts` to `src/ports.ts` (identical class and message;
+  the HumanInput port contract now owns its error — the extension was the
+  only other importer). `renderOutcome`/`renderUsage`/`fmtTokens` moved
+  verbatim into the launcher (single owner of the completion path including
+  its UI text); `/flow status` and `/flow log` import the last two back.
+  The extension keeps wiring only (−140 lines): lock acquisition order in
+  `/feature` deliberately untouched (F5/U7), and best-effort UI in the
+  detached runner deliberately untouched (F6/U8) — both now have exactly one
+  place to be fixed.
+  Tests (`tests/run-launcher.test.ts`, 10): completed, needs_human,
+  cancelled outcome, UserDismissedError, thrown workflow error, synchronous
+  wiring throw, throwing Pi history (run log continues), full outcome
+  payload, resume ordering of `workflow.resumed`, and — from the review
+  round — a run-log callback throwing on the resumed marker (the finally
+  still releases the lock exactly once). Every path asserts events, final
+  status and lock released exactly once, plus lock still held while the
+  workflow is pending.
+  Review round: the `workflow.resumed` emission moved inside the run body's
+  try/finally — a sink callback throwing on that first event (broken
+  run-log dep) can no longer bypass the lock release, and since the body
+  runs synchronously up to the first await the marker is still emitted
+  before the workflow is invoked and before `launchRun` returns (ordering
+  re-pinned by the same resume test; the placement mutation still kills
+  exactly that test on the final code). The header's "never rejects"
+  promise was corrected: until U8 a throwing UI effect (notify/bell/status)
+  can still reject the promise — F6, unchanged from the former inline
+  runners.
+  `npm test` 375/375, `npm run typecheck` clean, `git diff --check` clean.
 
 - [ ] **U7 — Lock before side effects in `/feature`** (F5). `extensions/pi-brain.ts`.
   Satisfy: the lock is acquired before `RunLog.open` and `PiAgentRunner.create`.
