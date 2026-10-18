@@ -29,7 +29,7 @@ import { runFeatureWorkflow, type UsageByRole } from "../src/workflows/feature.t
 import { replayRunLog, validateResumePreconditions, hasPatchChanged, askResumeWithChangedDiff, type Refusal } from "../src/workflows/resume.ts";
 import type { WorkflowEvent } from "../src/ports.ts";
 import { RunLog, readRunLog, listRunIds } from "../src/run-log.ts";
-import { fmtTokens, launchRun, renderUsage, startRun } from "../src/run-launcher.ts";
+import { fmtTokens, launchRun, renderUsage, startRun, agentStatus } from "../src/run-launcher.ts";
 
 const PACKAGE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PROFILES_DIR = join(PACKAGE_ROOT, "profiles");
@@ -121,7 +121,11 @@ export default function piBrain(pi: ExtensionAPI): void {
           PiAgentRunner.create({
             cwd,
             askUser: (q) => human.askFromChild(q),
-            onEvent: (e) => human.status(`${e.role}: ${e.type}${e.detail ? ` ${e.detail}` : ""}`),
+            // U8 (F6): the per-agent-event status is a UI effect fired from the
+            // runtime's listener during the run — outside the launcher's own
+            // guard. `agentStatus` makes it best-effort so a stale ctx cannot
+            // interrupt the agent.
+            onEvent: agentStatus((text) => human.status(text)),
           }),
         openRunLog: () => RunLog.open(cwd, runId),
         onFailure: (failure) => {
@@ -451,7 +455,8 @@ export default function piBrain(pi: ExtensionAPI): void {
       agents = await PiAgentRunner.create({
         cwd,
         askUser: (q) => new PiHumanInput(() => ctx, "live").askFromChild(q),
-        onEvent: (e) => new PiHumanInput(() => ctx, "live").status(`${e.role}: ${e.type}${e.detail ? ` ${e.detail}` : ""}`),
+        // U8 (F6): best-effort per-agent-event status, same guard as /feature.
+        onEvent: agentStatus((text) => new PiHumanInput(() => ctx, "live").status(text)),
       });
     } catch (err) {
       lock.release();

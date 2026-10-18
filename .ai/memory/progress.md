@@ -37,18 +37,88 @@
 - 2026-10-12 `main-review-hardening` plan brought onto `main` from commit
   `6c16a01`, originally drafted 2026-10-02 against `e5f8e56`
   (`.ai/features/main-review-hardening/`). U5/F4 is already covered by
-  `07d74d7` (code-review-follow-ups T5–T6); U1/F2 is implemented (2026-10-14),
-  U2/F1 is implemented (2026-10-15), U3/F1+F2 is implemented (2026-10-16),
-  U4/F3 is implemented (2026-10-17) — U1–U4 are committed on `main` — and
-  U6/F7 (2026-10-17) and U7/F5 (2026-10-17) are implemented, uncommitted on
-  `main` — see Done. Remaining tasks (U8–U16) are pending.
+  `07d74d7` (code-review-follow-ups T5–T6); U1/F2 (2026-10-14), U2/F1
+  (2026-10-15), U3/F1+F2 (2026-10-16), U4/F3 (2026-10-17), U6/F7 and U7/F5
+  (2026-10-17) are implemented and committed on `main` (U6 `0815222`, U7
+  `8d45508`), and U8/F6 (2026-10-18) is implemented on top of `8d45508`
+  (uncommitted) — see Done. Remaining tasks (U9–U16) are pending.
   This transfer authorizes documentation integration only; the F13
   `changes_requested` policy remains an open decision.
 
 ## Done
 
-- 2026-10-17 main-review-hardening U7 (F5, baseline `0815222`, uncommitted on
-  `main`): `/feature` acquires the run lock BEFORE its side effects. The run
+- 2026-10-18 main-review-hardening U8 (F6, on top of `8d45508`, uncommitted on
+  `main`): the detached runner's UI calls (`notify`, terminal `bell`,
+  `setStatus`) are now best-effort. New `safeUi(effect, fn)` (Pi-free
+  `src/ui-safe.ts`) runs the launcher's three effects in a try/catch that
+  reports the failure exactly once on stderr
+  (`pi-brain: <effect> failed: <message>`) and swallows it. A UI throw no
+  longer reaches the run body's `catch`, so it can no longer persist a
+  contradictory `workflow.failed` after `workflow.outcome`, flip a completed
+  run to `failed`, reject the promise the extension discards with
+  `void launchRun(...)`, or skip `deps.lock.release()`. Guarding the
+  per-phase `setStatus` inside the event sink additionally stops a UI hiccup on
+  `phase.started` from aborting the workflow's own `events.emit` call (which
+  would have turned it into a workflow failure).
+  The launcher alone did NOT cover every UI path — two review rounds closed
+  the rest. (1) `/feature` and `/flow resume` build their
+  `PiAgentRunner.create({ onEvent })` callbacks calling `human.status(...)`
+  DIRECTLY, and the runtime fires them from its session listener DURING the
+  run — outside the launcher's body. The exported `agentStatus(setStatus)`
+  builds the per-agent-event status line and routes it through the same
+  `safeUi` guard; both `onEvent` callbacks in `extensions/pi-brain.ts` go
+  through it (the "no extension change" reading of the first cut was wrong).
+  (2) `runFeatureWorkflow` calls `human.notify(...)` in ~9 places (the first
+  is the stack line) and `PiHumanInput.notify` calls `ctx.ui.notify()`
+  unguarded, so a UI throw reached the launcher's `catch` and became a
+  `workflow.failed`. `runFeatureWorkflow` now wraps `deps.human` once with the
+  exported `withBestEffortNotify(human)`, which guards ONLY the informational
+  `notify` channel and delegates confirm/select/input/editor untouched — their
+  errors are control flow (`UserDismissedError`, aborts) and must propagate.
+  `safeUi` moved into `src/ui-safe.ts` so the launcher, the extension's
+  `agentStatus` and the workflow decorator share one implementation.
+  The scope is deliberately narrow: ONLY the UI effects go through
+  `safeUi`/`agentStatus`/`withBestEffortNotify`. Real workflow failures still
+  reach the `catch` (classified `cancelled`/`failed`, `workflow.failed`
+  persisted, the error `notify` then guarded so it cannot rethrow), and
+  persistence failures (`RunLog.append`) are not absorbed — a throwing audit
+  trail still rejects loudly and still releases the lock, exactly as before.
+  TDD/mutation: 10 new tests, red-first. `tests/run-launcher.test.ts` (8 new,
+  18 total) — a throwing outcome `notify` (log ends with `workflow.outcome`
+  only, promise resolves, lock released once, one stderr line, the bell still
+  rings); a throwing `bell`; a throwing status clear; a throwing status on
+  `phase.started` (phase still advances, run stays `completed`, log keeps
+  `workflow.started`, `phase.started`, `workflow.outcome`); a workflow
+  rejection combined with a throwing error `notify` (still `failed` +
+  `workflow.failed`, reported once, not rethrown); a throwing run log (still
+  rejects loudly, lock released once); a throwing status during an agent event
+  through `agentStatus` (the runtime's `onEvent` path — text still built for
+  every event, each throw reported once, never thrown); and `agentStatus`
+  passing a working status through unchanged. `tests/feature-workflow.test.ts`
+  (2 new, workflow level) — a throwing `human.notify` still completes the run
+  (its `workflow.completed` is the last event, no `workflow.failed`, each
+  failed notify reported on stderr exactly once) and a throwing `select` still
+  REJECTS (response interactions stay propagable). Mutation checks, each
+  killed by exactly its covering tests: dropping the sink `setStatus` guard →
+  the `phase.started` test; dropping the `finally` guard → the status-clear
+  and `phase.started` tests; dropping the catch-path `notify` guard → the
+  workflow-error test; making `safeUi` swallow without reporting → the four
+  reported-once tests; dropping the guard inside `agentStatus` → the
+  agent-event test; dropping the guard inside `withBestEffortNotify` → the
+  `human.notify` workflow regression.
+  `npm test` 390/390, `npm run typecheck` clean, `git diff --check` clean.
+  Limits: the report is one line per failing UI call, not one per run — a UI
+  surface that throws on every `phase.started` still prints one line per event
+  (a stale/broken Pi UI is already anomalous; a once-per-run latch would hide
+  distinct failures); the extension wiring stays typecheck-only (no live Pi
+  session was driven, same as before), but the shared
+  `safeUi`/`agentStatus`/`withBestEffortNotify` guards it and the workflow
+  call — including the runtime `onEvent` path and the workflow's internal
+  notifications — are unit-tested; U1–U7 code paths untouched; F13 and U9–U16
+  untouched; `extra/skills/ga4-analytics/` untouched.
+
+- 2026-10-17 main-review-hardening U7 (F5, baseline `0815222`, now committed on
+  `main` in `8d45508`): `/feature` acquires the run lock BEFORE its side effects. The run
   log (`RunLog.open`) and the agent runtime (`PiAgentRunner.create`) are only
   reached once the lock is held, so a refused `/feature` leaves no
   `.pi/pi-brain/runs/<runId>.jsonl` for `/flow log-all` to list as
@@ -86,8 +156,8 @@
   that produces it. U5/U6 code paths untouched;
   `extra/skills/ga4-analytics/` untouched.
 
-- 2026-10-17 main-review-hardening U6 (F7, baseline `fa5303f`, uncommitted on
-  `main`): `/feature` and `/flow resume` share one run launcher. New
+- 2026-10-17 main-review-hardening U6 (F7, baseline `fa5303f`, now committed on
+  `main` in `0815222`): `/feature` and `/flow resume` share one run launcher. New
   `src/run-launcher.ts` — Pi-free, every Pi-facing effect injected (history
   append, status line, notify, bell, lock) — owns the whole execution cycle:
   the event sink (in-memory buffer for `/flow`, best-effort Pi-side history

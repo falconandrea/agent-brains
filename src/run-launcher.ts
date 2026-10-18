@@ -23,7 +23,9 @@
  *  - the run-state transitions (`running` -> `completed` | `needs_human` |
  *    `cancelled` | `failed`) that `/flow stop` and `/feature` admission
  *    read;
- *  - completion, cancellation (UserDismissedError) and error handling;
+ *  - completion, cancellation (UserDismissedError) and error handling, with
+ *    best-effort UI effects (U8): a broken notify/bell/status is reported
+ *    once on stderr and cannot corrupt the run or leak the lock;
  *  - the run lock, released exactly once, when the run settles.
  *
  * `startRun` is the ordered prologue `launchRun` cannot cover on its own:
@@ -35,9 +37,15 @@
  * promise of the run body and the extension ignores it
  * (`void launchRun(...)`) so `/flow status|log|stop` keep answering while
  * the workflow runs. Workflow failures settle as events, never as a
- * rejection — but until U8 a throwing UI effect (notify/bell/status) can
- * still reject that promise, exactly as the former inline runners could
- * (F6).
+ * rejection; the UI effects (notify/bell/status) are best-effort (U8, F6):
+ * a throw is reported once on stderr (`safeUi`, in the Pi-free
+ * `src/ui-safe.ts`) and swallowed, so it cannot change the persisted outcome,
+ * emit a `workflow.failed` after `workflow.outcome`, reject that promise, or
+ * skip the lock release. The per-agent-event status line the runtime fires
+ * during a run is covered by `agentStatus` (same guard) and the workflow's
+ * internal `human.notify` calls by `withBestEffortNotify`, so every
+ * informational UI path is best-effort. Workflow and persistence failures
+ * stay loud.
  */
 
 import { UserDismissedError } from "./ports.ts";
@@ -45,6 +53,7 @@ import type { WorkflowEvent, WorkflowEventSink } from "./ports.ts";
 import type { AcquireResult } from "./run-lock.ts";
 import type { FlowRunStatus } from "./pi/flow-stop.ts";
 import type { FeatureOutcome, UsageByRole } from "./workflows/feature.ts";
+import { safeUi } from "./ui-safe.ts";
 
 /**
  * The mutable run record the /flow commands read while the run lives. The
@@ -118,18 +127,53 @@ export function launchRun(
       // Persist the full outcome — review findings included — before any
       // TUI rendering can lose it (IDEAS.md run-state escalation).
       events.emit(outcomeEvent(deps.run.runId, outcome));
-      deps.notify(renderOutcome(outcome), outcome.status === "completed" ? "info" : "warning");
-      deps.bell();
+      // U8 (F6): the UI effects are best-effort. A stale/removed Pi context
+      // throwing here must not reach the catch below — it would persist a
+      // contradictory `workflow.failed` after `workflow.outcome` — nor reject
+      // the detached promise the extension ignores with `void launchRun(...)`.
+      safeUi("notify", () =>
+        deps.notify(renderOutcome(outcome), outcome.status === "completed" ? "info" : "warning"),
+      );
+      safeUi("bell", () => deps.bell());
     } catch (err) {
+      // Reached by workflow failures and persistence failures only: the UI
+      // effects above and below go through `safeUi`, so they never land here.
       deps.run.status = err instanceof UserDismissedError ? "cancelled" : "failed";
       const message = (err as Error).message;
       events.emit({ type: "workflow.failed", runId: deps.run.runId, error: message });
-      deps.notify(`pi-brain: ${message}`, "error");
+      safeUi("notify", () => deps.notify(`pi-brain: ${message}`, "error"));
     } finally {
       deps.lock.release();
-      deps.setStatus(undefined);
+      safeUi("status", () => deps.setStatus(undefined));
     }
   })();
+}
+
+/** The agent-event shape the runtime passes to `onEvent`. */
+export interface AgentStatusEvent {
+  role: string;
+  type: string;
+  detail?: string;
+}
+
+/**
+ * Build the extension's per-agent-event status line, best-effort (U8, F6).
+ * The runtime invokes `onEvent` from its session listener DURING a run —
+ * outside the launcher's own body, so the launcher's `safeUi` does not cover
+ * it. Without this wrapper a stale `ctx.ui.setStatus` throwing on a
+ * tool/agent_end event escapes the listener and can interfere with the
+ * workflow. Same contract as `safeUi`: built status is set for every event,
+ * a throw is reported once on stderr and swallowed. Both `/feature` and
+ * `/flow resume` build their `onEvent` through here, so the guard lives in
+ * one place.
+ */
+export function agentStatus(
+  setStatus: (text: string | undefined) => void,
+): (event: AgentStatusEvent) => void {
+  return (event) =>
+    safeUi("status", () =>
+      setStatus(`${event.role}: ${event.type}${event.detail ? ` ${event.detail}` : ""}`),
+    );
 }
 
 /**
@@ -235,7 +279,10 @@ function createEventSink(deps: LaunchRunDeps): WorkflowEventSink {
       deps.runLog.append(event); // OUR audit trail: survives crashes and scrolling
       if (event.type === "phase.started") {
         deps.run.phase = event.phase;
-        deps.setStatus(`${deps.run.workflow}: ${event.phase}`);
+        // UI effect (U8/F6): a throwing status line must not abort the
+        // workflow's emit call, which would turn a UI hiccup into a workflow
+        // failure and a contradictory workflow.failed.
+        safeUi("status", () => deps.setStatus(`${deps.run.workflow}: ${event.phase}`));
       }
     },
   };

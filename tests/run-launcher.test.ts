@@ -9,7 +9,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { launchRun, type LaunchRunDeps, type LauncherRunState } from "../src/run-launcher.ts";
+import { agentStatus, launchRun, type LaunchRunDeps, type LauncherRunState } from "../src/run-launcher.ts";
 import { UserDismissedError } from "../src/ports.ts";
 import type { WorkflowEvent, WorkflowEventSink } from "../src/ports.ts";
 import type { FeatureOutcome } from "../src/workflows/feature.ts";
@@ -20,9 +20,25 @@ function makeRun(): LauncherRunState {
 }
 
 /** Every injected effect, recorded. `historyThrows` simulates a stale Pi
- * ctx; `runLogThrows` simulates a broken audit-trail dep. */
-function makeDeps(options: { historyThrows?: boolean; runLogThrows?: boolean } = {}) {
-  const { historyThrows = false, runLogThrows = false } = options;
+ * ctx; `runLogThrows` simulates a broken audit-trail dep. `notifyThrows`,
+ * `bellThrows` and `statusThrows` simulate the stale/removed Pi UI context
+ * F6/U8 hardens against. */
+function makeDeps(
+  options: {
+    historyThrows?: boolean;
+    runLogThrows?: boolean;
+    notifyThrows?: boolean;
+    bellThrows?: boolean;
+    statusThrows?: boolean;
+  } = {},
+) {
+  const {
+    historyThrows = false,
+    runLogThrows = false,
+    notifyThrows = false,
+    bellThrows = false,
+    statusThrows = false,
+  } = options;
   const state = {
     runLog: [] as WorkflowEvent[],
     history: [] as WorkflowEvent[],
@@ -43,16 +59,41 @@ function makeDeps(options: { historyThrows?: boolean; runLogThrows?: boolean } =
       state.history.push(event);
       if (historyThrows) throw new Error("stale pi context");
     },
-    setStatus: (text) => void state.statusCalls.push(text),
-    notify: (message, level) => void state.notifications.push({ message, level }),
+    setStatus: (text) => {
+      state.statusCalls.push(text);
+      if (statusThrows) throw new Error("stale pi status");
+    },
+    notify: (message, level) => {
+      state.notifications.push({ message, level });
+      if (notifyThrows) throw new Error("stale pi notify");
+    },
     bell: () => {
       state.bells += 1;
+      if (bellThrows) throw new Error("stale pi bell");
     },
     lock: { release: () => {
       state.releases += 1;
     } },
   };
   return { deps, state };
+}
+
+/**
+ * Capture whatever the launcher writes to stderr (the U8 report) while `run`
+ * executes. Always restores the real stream, even if `run` rejects.
+ */
+async function captureStderr<T>(run: () => T): Promise<{ result: T; stderr: string }> {
+  const original = process.stderr.write;
+  let stderr = "";
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    stderr += chunk.toString();
+    return true;
+  }) as typeof process.stderr.write;
+  try {
+    return { result: await run(), stderr };
+  } finally {
+    process.stderr.write = original;
+  }
 }
 
 /**
@@ -367,8 +408,9 @@ test("resume: workflow.resumed is the first new event, before the workflow re-en
 test("a throwing run-log callback on the resumed marker still releases the lock", async () => {
   // The resumed emission lives inside the run body's try/finally: a broken
   // audit-trail dep throwing on that first event must not leak the lock.
-  // Until U8 the promise still rejects loudly (a broken dep is not silently
-  // swallowed) — the finally runs either way.
+  // U8 guards the UI effects, not the audit trail: a broken persistence dep
+  // still rejects loudly (it is neither a workflow error nor a UI effect) —
+  // the finally runs either way.
   const { deps, state } = makeDeps({ runLogThrows: true });
   const launched = launchRun(deps, async () => completedOutcome, { resumedPhase: "develop" });
 
@@ -382,4 +424,142 @@ test("a throwing run-log callback on the resumed marker still releases the lock"
     deps.run.events.map((e) => e.type),
     ["workflow.resumed", "workflow.failed"],
   );
+});
+
+/** Count non-overlapping occurrences of `needle` in `haystack`. */
+function occurrences(haystack: string, needle: string): number {
+  return haystack.split(needle).length - 1;
+}
+
+// -- U8 (F6): best-effort UI in the detached runner --------------------------
+//
+// A stale/removed Pi UI context can make notify, the terminal bell or the
+// status line throw. Before U8 a throw after workflow.outcome fell into the
+// failure handler, emitted a contradictory workflow.failed, and a second
+// throw there became an unhandled rejection (the extension calls
+// `void launchRun(...)`). UI effects are now best-effort: reported once on
+// stderr, never changing the persisted outcome, never rejecting, never
+// skipping the lock release. Workflow and persistence errors stay loud.
+
+test("U8: a throwing outcome notify is best-effort — outcome persisted, no workflow.failed, resolves, lock released once, reported once", async () => {
+  const { deps, state } = makeDeps({ notifyThrows: true });
+  const wf = pendingWorkflow();
+  const launched = launchRun(deps, wf.workflow);
+
+  wf.resolve(completedOutcome);
+  const { stderr } = await captureStderr(() => launched);
+
+  assert.equal(deps.run.status, "completed", "the UI failure does not change the persisted outcome");
+  assert.deepEqual(
+    state.runLog.map((e) => e.type),
+    ["workflow.outcome"],
+    "the log ends with workflow.outcome only — no contradictory workflow.failed after it",
+  );
+  assert.equal(state.releases, 1, "lock released exactly once");
+  assert.equal(state.bells, 1, "a failed notify does not stop the bell");
+  assert.equal(occurrences(stderr, " failed: "), 1, "the UI failure is reported to stderr exactly once");
+});
+
+test("U8: a throwing bell is best-effort — outcome persisted, resolves, lock released once, reported once", async () => {
+  const { deps, state } = makeDeps({ bellThrows: true });
+  const wf = pendingWorkflow();
+  const launched = launchRun(deps, wf.workflow);
+
+  wf.resolve(completedOutcome);
+  const { stderr } = await captureStderr(() => launched);
+
+  assert.equal(deps.run.status, "completed");
+  assert.deepEqual(state.runLog.map((e) => e.type), ["workflow.outcome"]);
+  assert.equal(state.releases, 1);
+  assert.equal(occurrences(stderr, " failed: "), 1);
+});
+
+test("U8: a throwing status clear is best-effort — outcome persisted, resolves, lock released once, reported once", async () => {
+  // No phase.started, so setStatus is only invoked to clear the line at the
+  // end: the report count is deterministic.
+  const { deps, state } = makeDeps({ statusThrows: true });
+  const wf = pendingWorkflow();
+  const launched = launchRun(deps, wf.workflow);
+
+  wf.resolve(completedOutcome);
+  const { stderr } = await captureStderr(() => launched);
+
+  assert.equal(deps.run.status, "completed");
+  assert.deepEqual(state.runLog.map((e) => e.type), ["workflow.outcome"]);
+  assert.equal(state.releases, 1);
+  assert.equal(occurrences(stderr, " failed: "), 1);
+});
+
+test("U8: a throwing status on phase.started does not derail the workflow or the persisted outcome", async () => {
+  const { deps, state } = makeDeps({ statusThrows: true });
+  const wf = pendingWorkflow((sink) => {
+    sink.emit({ type: "workflow.started", runId: deps.run.runId, workflow: "feature" });
+    sink.emit({ type: "phase.started", runId: deps.run.runId, phase: "develop" });
+  });
+
+  // The phase event fires synchronously at launch, so capture from there.
+  await captureStderr(async () => {
+    const launched = launchRun(deps, wf.workflow);
+    assert.equal(deps.run.phase, "develop", "the phase still advances when the status UI throws");
+    wf.resolve(completedOutcome);
+    await launched;
+  });
+
+  assert.equal(deps.run.status, "completed");
+  assert.deepEqual(
+    state.runLog.map((e) => e.type),
+    ["workflow.started", "phase.started", "workflow.outcome"],
+  );
+});
+
+test("U8: a real workflow error stays loud — workflow.failed persisted, the error notify itself guarded", async () => {
+  const { deps, state } = makeDeps({ notifyThrows: true });
+  const wf = pendingWorkflow();
+  const launched = launchRun(deps, wf.workflow);
+
+  wf.reject(new Error("agent runner exploded"));
+  const { stderr } = await captureStderr(() => launched);
+
+  assert.equal(deps.run.status, "failed", "a workflow error is still classified as failed");
+  assert.deepEqual(state.runLog.at(-1), {
+    type: "workflow.failed",
+    runId: "run-test",
+    error: "agent runner exploded",
+  });
+  assert.equal(state.releases, 1);
+  assert.equal(occurrences(stderr, " failed: "), 1, "the error notify failure is reported once, not rethrown");
+});
+
+test("U8: a persistence failure is not absorbed — a throwing run log rejects loudly and still releases the lock", async () => {
+  const { deps, state } = makeDeps({ runLogThrows: true });
+  const launched = launchRun(deps, async () => completedOutcome);
+
+  await assert.rejects(launched, /run log broken/);
+  assert.equal(state.releases, 1, "the lock is released even when the audit trail is broken");
+});
+
+test("U8: a throwing status during an agent event is best-effort (the runtime's onEvent path)", async () => {
+  // /feature and /flow resume build their `onEvent` through `agentStatus`; the
+  // runtime invokes it from its session listener DURING a run — outside the
+  // launcher's own body, so the launcher's `safeUi` does not reach it.
+  const attempted: Array<string | undefined> = [];
+  const onEvent = agentStatus((text) => {
+    attempted.push(text);
+    throw new Error("stale pi status");
+  });
+
+  const { stderr } = await captureStderr(async () => {
+    onEvent({ role: "developer", type: "tool", detail: "Read" });
+    onEvent({ role: "reviewer", type: "agent_end" });
+  });
+
+  assert.deepEqual(attempted, ["developer: tool Read", "reviewer: agent_end"], "the status text is built for every event");
+  assert.equal(occurrences(stderr, " failed: "), 2, "each broken status is reported once and never thrown");
+});
+
+test("U8: agentStatus passes a working status through unchanged", () => {
+  const seen: Array<string | undefined> = [];
+  const onEvent = agentStatus((text) => void seen.push(text));
+  onEvent({ role: "planner", type: "agent_end" });
+  assert.deepEqual(seen, ["planner: agent_end"]);
 });

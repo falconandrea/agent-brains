@@ -32,6 +32,7 @@ import {
 } from "../verify.ts";
 import { selectSkills } from "../skill-router.ts";
 import { routeContext } from "../context-router.ts";
+import { withBestEffortNotify } from "../ui-safe.ts";
 import {
   decideNextRound,
   validateReviewResult,
@@ -141,7 +142,13 @@ export async function runFeatureWorkflow(
   runId: string,
   resume?: ResumeState,
 ): Promise<FeatureOutcome> {
-  const { human, events, config, git } = deps;
+  const { events, config, git } = deps;
+  // U8 (F6): the workflow's informational notifications are best-effort — a
+  // stale ctx throwing in `human.notify` must never reach the launcher's
+  // catch and turn a UI fault into a workflow.failed. The response-requiring
+  // interactions (select/input/confirm/editor) stay unwrapped: their errors
+  // are control flow (UserDismissedError, aborts) and must propagate.
+  const human = withBestEffortNotify(deps.human);
 
   // --- Phase A: discovery (must happen before workflow.started for resume mode) --
   const stack = await resolveStack(deps);

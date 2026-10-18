@@ -1907,3 +1907,60 @@ test("ignore rules changed during the run are surfaced to the reviewer prompt", 
     `the user is notified too: ${human.notices.join(" | ")}`,
   );
 });
+
+/**
+ * Capture what the workflow writes to stderr (the U8 best-effort report) while
+ * `run` executes; always restores the real stream.
+ */
+async function withCapturedStderr<T>(run: () => Promise<T>): Promise<{ result: T; stderr: string }> {
+  const original = process.stderr.write;
+  let stderr = "";
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    stderr += chunk.toString();
+    return true;
+  }) as typeof process.stderr.write;
+  try {
+    return { result: await run(), stderr };
+  } finally {
+    process.stderr.write = original;
+  }
+}
+
+test("U8: a throwing human.notify is best-effort — the run still completes, reported once per call", async () => {
+  // Regression at the workflow level: the workflow's informational
+  // notifications (the first is the stack line) must not be able to reach
+  // the launcher's catch and turn a UI fault into workflow.failed.
+  const { deps, human, events } = harness(approvingResponder);
+  let notifyCalls = 0;
+  human.notify = () => {
+    notifyCalls += 1;
+    throw new Error("stale pi notify");
+  };
+
+  const { result: outcome, stderr } = await withCapturedStderr(() =>
+    runFeatureWorkflow(deps, "add invitations", "run-notify"),
+  );
+
+  assert.equal(outcome.status, "completed", "a UI notification failure must not change the outcome");
+  assert.ok(notifyCalls > 0, "the workflow still attempted its notifications");
+  assert.equal(
+    stderr.split(" failed: ").length - 1,
+    notifyCalls,
+    "each failed notification is reported on stderr exactly once and never thrown",
+  );
+  assert.equal(events.at(-1)?.type, "workflow.completed", "the workflow runs to its normal end");
+  assert.ok(!events.some((e) => e.type === "workflow.failed"), "no workflow.failed is produced");
+  assert.equal(human.notices.length, 0, "the throwing notify recorded nothing (the wrapper is what runs)");
+});
+
+test("U8: a throwing response interaction (select) still propagates — it is not swallowed", async () => {
+  // Only `notify` is best-effort. confirm/select/input/editor carry control
+  // flow (UserDismissedError, aborts) and their errors must reach the caller.
+  const { deps, human } = harness(approvingResponder);
+  human.select = () => Promise.reject(new Error("select UI exploded"));
+
+  await assert.rejects(
+    runFeatureWorkflow(deps, "add invitations", "run-select"),
+    /select UI exploded/,
+  );
+});

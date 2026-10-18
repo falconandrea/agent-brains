@@ -6,8 +6,10 @@ Finding ids (F1–F14) refer to the PRD table. Each milestone is its own cycle.
 ## Integration status (2026-10-12)
 
 Imported from `6c16a01` onto `main` after `07d74d7`. U5 is already covered
-by code-review-follow-ups T5–T6; U1–U4 and U6 are implemented (U6 on
-2026-10-17, uncommitted); remaining tasks are pending. Use the
+by code-review-follow-ups T5–T6. U1–U8 are implemented: U1–U7 are committed
+on `main` (U1 `b074318`, U2 `71706cf`, U3 `95806aa`, U4 `fa5303f`, U6
+`0815222`, U7 `8d45508`; U5 in `07d74d7`) and U8 is implemented on top of
+`8d45508` (uncommitted). U9–U16 remain pending. Use the
 existing `verifyTimeoutMs` interface rather than introducing a seconds-based
 setting. Documentation integration does not authorize implementation.
 
@@ -25,6 +27,7 @@ setting. Documentation integration does not authorize implementation.
 | `src/config.ts` | Existing `verifyTimeoutMs`, validated (U5 complete) |
 | `src/review.ts` | F13 policy (after the decision) |
 | `src/run-launcher.ts` (new) | Event sink, outcome emission and detached runner shared by `/feature` and resume |
+| `src/ui-safe.ts` (new) | Best-effort UI effects: `safeUi`, `agentStatus`, `withBestEffortNotify` (U8, F6) |
 | `extensions/pi-brain.ts` | Wiring only: lock first, launcher, safe UI calls |
 | `.opencode/agents/solution-capture.md` (new), `.agents/workflows/solution-capture.md` (new symlink) | Workflow parity |
 | `setup.sh`, `scaffold.sh` | Pi runtime ignore entries, opencode-only warning, Claude Code links |
@@ -393,14 +396,81 @@ setting. Documentation integration does not authorize implementation.
   `PiAgentRunner.create`; the extension keeps wiring only.
   `npm test` 380/380, `npm run typecheck` clean, `git diff --check` clean.
 
-- [ ] **U8 — Best-effort UI in the detached runner** (F6). `src/run-launcher.ts`,
-  `extensions/pi-brain.ts`, `tests/run-launcher.test.ts`.
-  Satisfy: `notify`, the bell and `status` called from the detached runner are
-  best-effort. A throw is reported to stderr once and never changes the
-  persisted outcome, never emits `workflow.failed` after `workflow.outcome`, and
-  never escapes as an unhandled rejection.
-  Tests: a fake UI that throws on the outcome notify. The log ends with
-  `workflow.outcome` only, the promise resolves, and the lock is released.
+- [x] **U8 — Best-effort UI in the detached runner** (F6). `src/run-launcher.ts`,
+  `src/workflows/feature.ts`, `src/ui-safe.ts` (new), `extensions/pi-brain.ts`,
+  `tests/run-launcher.test.ts`, `tests/feature-workflow.test.ts`.
+  Completed on top of `8d45508` (uncommitted on `main`), TDD: 10 tests
+  red-first (8 launcher + 2 workflow), six mutation checks each killed by
+  exactly its covering tests.
+  A `safeUi(effect, fn)` helper (Pi-free `src/ui-safe.ts`) runs the launcher's
+  three UI effects — the outcome/error `notify`, the terminal `bell`, and the
+  `setStatus` line (both the per-phase set in the event sink and the clearing
+  set in the `finally`) — in a try/catch that reports the failure exactly once
+  on stderr (`pi-brain: <effect> failed: <message>`) and swallows it. Because
+  a UI throw no longer reaches the body's `catch`, it can no longer persist a
+  contradictory `workflow.failed` after `workflow.outcome`, flip a completed
+  run to `failed`, reject the promise the extension discards with
+  `void launchRun(...)`, or skip `deps.lock.release()`. Guarding `setStatus`
+  inside the sink also stops a UI hiccup on `phase.started` from aborting the
+  workflow's own `events.emit` call (which would have turned it into a
+  workflow failure).
+  The launcher alone did NOT cover every UI path (two gaps closed under
+  review). (1) `/feature` and `/flow resume` build their
+  `PiAgentRunner.create({ onEvent })` callbacks calling `human.status(...)`
+  DIRECTLY, and the runtime fires them from its session listener DURING the
+  run — outside the launcher's body. The exported `agentStatus(setStatus)`
+  builds the per-agent-event status line and routes it through the same
+  `safeUi` guard; both `onEvent` callbacks in `extensions/pi-brain.ts` go
+  through it. (2) `runFeatureWorkflow` calls `human.notify(...)` in ~9 places
+  (the first is the stack line); `PiHumanInput.notify` calls
+  `ctx.ui.notify()` unguarded, so a UI throw reached the launcher's `catch`
+  and became a `workflow.failed`. `runFeatureWorkflow` now wraps `deps.human`
+  once with the exported `withBestEffortNotify(human)` (same `ui-safe.ts`),
+  which guards ONLY the informational `notify` channel and delegates
+  confirm/select/input/editor untouched — their errors are control flow
+  (`UserDismissedError`, aborts) and must propagate. `safeUi` moved into the
+  Pi-free `src/ui-safe.ts` so run-launcher, the extension's `agentStatus` and
+  the workflow decorator share one implementation.
+  Scope is deliberately narrow: only the UI effects go through
+  `safeUi`/`agentStatus`/`withBestEffortNotify`. Real workflow failures still
+  reach the `catch` (classified `cancelled`/`failed`, `workflow.failed`
+  persisted, the error `notify` then guarded so it cannot rethrow), and
+  persistence failures (`RunLog.append`) are not absorbed — a throwing audit
+  trail still rejects loudly and still releases the lock, exactly as before.
+  Tests (`tests/run-launcher.test.ts`, 18 total, 8 new): a throwing outcome
+  `notify` (log ends with `workflow.outcome` only, promise resolves, lock
+  released once, one stderr line, the bell still rings); a throwing `bell`; a
+  throwing status clear (deterministic, one call); a throwing status on
+  `phase.started` (the phase still advances, the run stays `completed`, the
+  log keeps `workflow.started`, `phase.started`, `workflow.outcome`); a
+  workflow rejection combined with a throwing error `notify` (still
+  `failed` + `workflow.failed`, reported once, not rethrown); a throwing
+  run log (still rejects loudly, lock released once); a throwing status
+  during an agent event through `agentStatus` (the runtime's `onEvent` path —
+  the status text is still built for every event, each throw reported once,
+  never thrown); and `agentStatus` passing a working status through
+  unchanged. `tests/feature-workflow.test.ts` (2 new, workflow level): a
+  throwing `human.notify` still completes the run (its `workflow.completed`
+  is the last event, no `workflow.failed`, each failed notify reported on
+  stderr exactly once) and a throwing `select` still REJECTS — response
+  interactions stay propagable. Mutation checks:
+  removing the sink `setStatus` guard → exactly the `phase.started` test;
+  removing the `finally` guard → the status-clear and the `phase.started`
+  tests; removing the catch-path `notify` guard → exactly the workflow-error
+  test; making `safeUi` swallow without reporting → exactly the four
+  reported-once tests; removing the guard inside `agentStatus` → exactly the
+  agent-event test; dropping the guard inside `withBestEffortNotify` →
+  exactly the `human.notify` workflow regression.
+  `npm test` 390/390, `npm run typecheck` clean, `git diff --check` clean.
+  Limits: the report is one line per failing UI call, not one per run — a
+  UI surface that throws on every `phase.started` still prints one line per
+  event (a broken/stale Pi UI is already anomalous; the alternative, a
+  once-per-run latch, would hide distinct failures). The extension wiring is
+  typecheck-only (no live Pi session was driven, same as before): the manual
+  check (a stale ctx UI no longer kills the run) is not automated, but the
+  shared `safeUi`/`agentStatus`/`withBestEffortNotify` guards the wiring calls
+  ARE unit-tested — including the runtime's `onEvent` path and the workflow's
+  internal notifications.
 
 ## M2 — multi-tool setup parity
 
