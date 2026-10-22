@@ -72,7 +72,7 @@ For each: what you gain, what you lose. Consider complexity, performance, mainta
 
 ### 3b. PRD (concise)
 
-Write `.ai/features/[name]/prd-[name].md` from `.ai/features/_TEMPLATE.md`. Cover: goal/context, architecture/components, data flow, error handling, testing strategy. For simple features this can be a few sentences.
+Write `.ai/features/[name]/prd-[name].md` from `.ai/features/_TEMPLATE.md`. Cover: goal/context, architecture/components, data flow, error handling, testing strategy. For risky behavior, name initial state/input, event and observable result; add rejection or preservation invariants where material. Reuse established test boundaries and adequate coverage. For simple features this can be a few sentences.
 
 ### 3c. Tasks (granular, stable U-IDs)
 
@@ -81,7 +81,7 @@ Write `.ai/features/[name]/tasks-[name].md`:
 - **File Map** — every file created/modified + its responsibility.
 - **Stable U-IDs** — `U1`, `U2`, `U3`… Never renumber; if `U2` is deleted leave the gap; if inserted use `U4` or a sub-id like `U2.1` (sparingly).
 - **WHAT over HOW** — define what to satisfy, files affected, test scenarios. No pseudocode, no exact method signatures, no implementation choreography. Let the executing agent decide how on the live workspace.
-- **TDD where applicable** — write failing test → run (FAIL) → implement → run (PASS).
+- **TDD where applicable** — use [tdd](../tdd/SKILL.md) for applicability and execution ownership. Observe failure before implementation when command access permits; a no-shell Pi developer hands execution to the orchestrator and reports tests as unexecuted.
 - **No placeholders** — never write "TBD/TODO", "add appropriate error handling", "similar to Task N". Tasks must be self-contained.
 
 ---
@@ -117,6 +117,11 @@ After approval, propose handoff to a vertical agent (`/laravel`, `/nextjs`, `/as
 
 - Run `/simplify` (or manual cleanup): format, remove dead code/unused imports, prune WHAT-comments (keep WHY), run tests to confirm cleanup didn't break anything. Don't weaken assertions.
 - Review for: bugs/regressions, convention violations (`AGENTS.md`), missing error handling, performance (N+1, missing indexes), security.
+- For material test changes, identify the protected contract, independent source
+  of the expected result and plausible defect the assertion catches. Reuse
+  adequate existing protection; non-behavioral edits normally need no new tests.
+  When changing a quality gate, verify representative valid/invalid cases through
+  its real entrypoint and confirm failures propagate, when execution is available.
 
 ---
 

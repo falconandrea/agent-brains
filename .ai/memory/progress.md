@@ -7,7 +7,7 @@
   C1 completion policy/reconciliation → C2 TDD and test-quality consolidation →
   C3 feasible Cloudflare ideas in existing security-reviewer → C4 context/cost
   baseline then optimization → C5 skill usefulness review. No OS sandbox or
-  full Cloudflare installation is planned. Analytics is excluded. C1 is complete (U15 implemented); next: C2. R1 plugin trials follow this sequence.
+  full Cloudflare installation is planned. Analytics is excluded. C1/C2 are complete; next: C3. R1 plugin trials follow this sequence.
 
 - New `agent-readiness` and `html-report` skills are registered in common/full;
   existing curated consumers need their next profile refresh to discover them.
@@ -36,7 +36,8 @@
   false positives, bounded overhead in both. The recurrence condition for
   reconsidering conditional workflow integration is met. C2 now selects
   consolidation of useful checks into the existing review; no additional
-  mandatory reviewer is planned and implementation remains pending. Two
+  mandatory reviewer was added. Useful contract/expectation/regression questions
+  are integrated in the existing reviewer prompt (C2 complete). Two
   missing unlink preservation cases were verified in a temporary fixture only;
   the shipping tests have not been changed.
 - W1/W4 are complete. New consolidation work follows C1–C5 above; W2 and W3
@@ -56,6 +57,30 @@
   `changes_requested` policy option B is implemented (U15).
 
 ## Done
+
+- 2026-10-22 C2: aligned TDD, test-master's reference, completion verification
+  and feature guidance with actual tools. Shell-capable sessions retain observed
+  test-first work; no-shell Pi developers author tests and hand execution to the
+  orchestrator. Existing approved boundaries need no repeated gate. Planner
+  acceptance scenarios are risk-based; the existing reviewer checks contract,
+  independently grounded expectations and plausible regressions, plus real
+  entrypoint enforcement when a gate changes. Empty results no longer imply
+  “none configured” in the prompt; runtime result/retry/replay schemas unchanged.
+  `tdd` and `verification-before-completion` are locally adopted with exact
+  origins and MIT notices, removed from skills-lock and installer replacement.
+  test-master was already unlocked; its original installed revision remains
+  unknown and is explicitly documented, with checked license notices retained.
+  Added a bootstrap/local-ownership invariant test. Three independent bounded
+  evaluator calls covered baseline/candidate review and tool ownership; both
+  review arms found the regression and accepted the healthy case, with the
+  updated arm additionally explaining the circular assertion. No measured
+  recall/cost improvement claimed. Evidence and separate verification-result
+  contract design: [C2 evaluation](../../docs/evals/tdd-review/C2-2026-10-22.md).
+  `npm test` 397/397, typecheck, shell syntax, four skill validators and diff
+  checks pass. No additional mandatory reviewer; test-review and analytics
+  untouched. Next: C3. Consumer projects with independent skill copies were not
+  refreshed; symlink consumers receive these instructions through the store.
+
 
 - 2026-10-22 U15/F13: `changes_requested` with no blocking issues now ends
   `needs_human` with an explicit reason, without another developer pass.

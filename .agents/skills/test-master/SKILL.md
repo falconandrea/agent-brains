@@ -3,6 +3,15 @@ name: test-master
 description: Generates test files, creates mocking strategies, analyzes code coverage, designs test architectures, and produces test plans and defect reports across functional, performance, and security testing disciplines. Use when writing unit tests, integration tests, or E2E tests; creating test strategies or automation frameworks; analyzing coverage gaps; performance testing with k6 or Artillery; security testing with OWASP methods; debugging flaky tests; or working on QA, regression, test automation, quality gates, shift-left testing, or test maintenance.
 license: MIT
 metadata:
+  management: local
+  provenance: adopted
+  adaptation: >
+    Existing Jeffallan v1.1.1 guidance retained; TDD reference replaced with
+    local execution ownership and proportionate evidence requirements on
+    2026-10-22. Original installed source commit is not established. License
+    notice checked at Jeffallan/claude-skills commit
+    958e60fb998e008507c978b7943211f337def6a6; this is a license reference,
+    not a claim that the installed skill matches that revision.
   author: https://github.com/Jeffallan
   version: '1.1.1'
   domain: quality
@@ -25,8 +34,10 @@ Comprehensive testing specialist ensuring software quality through functional, p
 4. **Execute** — Run tests and collect results
    - If tests fail: classify the failure (assertion error vs. environment/flakiness), fix root cause, re-run
    - If tests are flaky: isolate ordering dependencies, check async handling, add retry or stabilization logic
+   - In a role without execution tools, author the tests and hand verification
+     to the orchestrator; report them as unexecuted until evidence arrives.
 5. **Report** — Document findings with severity ratings and actionable fix recommendations
-   - Verify coverage targets are met before closing; flag gaps explicitly
+   - Check any agreed coverage targets; report material gaps and unavailable execution explicitly
 
 ## Quick-Start Example
 
@@ -66,14 +77,14 @@ Load detailed guidance based on context:
 | Reports               | `references/test-reports.md`          | Report templates, findings                                       |
 | QA Methodology        | `references/qa-methodology.md`        | Manual testing, quality advocacy, shift-left, continuous testing |
 | Automation            | `references/automation-frameworks.md` | Framework patterns, scaling, maintenance, team enablement        |
-| TDD Iron Laws         | `references/tdd-iron-laws.md`         | TDD methodology, test-first development, red-green-refactor      |
+| TDD Execution         | `references/tdd-iron-laws.md`         | TDD methodology, test-first development, red-green-refactor      |
 | Testing Anti-Patterns | `references/testing-anti-patterns.md` | Test review, mock issues, test quality problems                  |
 
 ## Constraints
 
 **MUST DO**
 
-- Test happy paths AND error/edge cases (e.g., empty input, null, boundary values)
+- Cover material happy/error paths at stable boundaries; reuse adequate existing tests.
 - Mock external dependencies — never call real APIs or databases in unit tests
 - Use meaningful `it('…')` descriptions that read as plain-English specifications
 - Assert specific outcomes (`expect(result).toBe(90)`), not just truthiness

@@ -1,6 +1,19 @@
 ---
 name: verification-before-completion
 description: Use when about to claim work is complete, fixed, or passing, before committing or creating PRs - requires running verification commands and confirming output before making any success claims; evidence before assertions always
+license: MIT
+metadata:
+  management: local
+  provenance: adopted
+  origins:
+    - repository: https://github.com/obra/superpowers
+      path: skills/verification-before-completion/SKILL.md
+      commit: 48410c7f1973bd66569a627ef27ef6619e0ba923
+      license: MIT — full text in LICENSE in this folder
+  adopted_at: 2026-10-22
+  adaptation: >
+    Aligns verification ownership with available tools, preserves observable
+    test-first work and uses existing approved contracts without repeated gates.
 ---
 
 # Verification Before Completion
@@ -13,13 +26,28 @@ Claiming work is complete without verification is dishonesty, not efficiency.
 
 **Violating the letter of this rule is violating the spirit of this rule.**
 
+## Execution ownership
+
+Ground claims in command output or a current authoritative orchestrator result
+that identifies what ran, against which revision, and with what outcome. A
+role without execution tools reports its edits and pending checks; it does not
+run commands through another tool or claim tests passed from inspection.
+The orchestrator owns execution, and the reviewer judges the supplied evidence.
+
+A green run establishes only the checks actually performed. Distinguish an
+observed red/green regression from a test written without an observed failure.
+When no results are supplied, say verification is unavailable; an empty result
+list does not establish success or why checks are absent. Record whether a
+result is current, reused or unavailable rather than inventing execution.
+
 ## The Iron Law
 
 ```
 NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE
 ```
 
-If you haven't run the verification command in this message, you cannot claim it passes.
+Without fresh command output or an authoritative current verification result,
+you cannot claim a check passes.
 
 ## The Gate Function
 
@@ -27,12 +55,12 @@ If you haven't run the verification command in this message, you cannot claim it
 BEFORE claiming any status or expressing satisfaction:
 
 1. IDENTIFY: What command proves this claim?
-2. RUN: Execute the FULL command (fresh, complete)
+2. RUN: Execute the relevant command, or inspect the orchestrator result if execution belongs to it
 3. READ: Full output, check exit code, count failures
 4. VERIFY: Does output confirm the claim?
    - If NO: State actual status with evidence
    - If YES: State claim WITH evidence
-5. ONLY THEN: Make the claim
+5. ONLY THEN: Make a claim bounded to those results; state unavailable checks
 
 Skip any step = lying, not verifying
 ```
@@ -58,7 +86,7 @@ Skip any step = lying, not verifying
 - Relying on partial verification
 - Thinking "just this once"
 - Tired and wanting work over
-- **ANY wording implying success without having run verification**
+- **ANY wording implying success without current verification evidence**
 
 ## Rationalization Prevention
 
@@ -134,6 +162,7 @@ From 24 failure memories:
 
 **No shortcuts for verification.**
 
-Run the command. Read the output. THEN claim the result.
+Run the command or inspect the authoritative orchestrator output. Read the
+evidence, then state only the result it supports.
 
 This is non-negotiable.

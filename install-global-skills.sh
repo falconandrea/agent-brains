@@ -46,9 +46,6 @@ install_skill() {
 }
 
 # 1. Base AI Skills
-install_skill "obra/superpowers" \
-  "--skill verification-before-completion"
-
 install_skill "anthropics/skills" \
   "--skill webapp-testing --skill frontend-design"
 

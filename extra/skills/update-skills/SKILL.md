@@ -5,7 +5,7 @@ description: Update the skill store with npx skills update, then repair what the
 
 # Update Skills
 
-One command updates every skill still listed in `skills-lock.json` to its upstream latest, and silently reverts the local patches this repo depends on. Skills that are absent from the lockfile — adopted/derived skills whose `SKILL.md` declares `metadata.management: local` (currently `grill-with-docs` and `research`) — are locally authoritative and are never updated through this flow. This skill runs the update, undoes the damage, and surfaces everything that needs a human decision.
+One command updates every skill still listed in `skills-lock.json` to its upstream latest, and silently reverts the local patches this repo depends on. Skills that are absent from the lockfile — adopted/derived skills whose `SKILL.md` declares `metadata.management: local` (including `grill-with-docs`, `research`, `tdd` and `verification-before-completion`) — are locally authoritative and are never updated through this flow. This skill runs the update, undoes the damage, and surfaces everything that needs a human decision.
 
 ## What the update breaks (and this skill repairs)
 

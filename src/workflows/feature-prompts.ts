@@ -57,6 +57,10 @@ Concise: problem, user stories (as a <role>, I want <action> so that
 one line each — the reviewer checks the diff against these), alternatives
 considered (2-3 lines each, why the chosen one wins), assumptions,
 architecture/components, data flow, error handling, testing strategy.
+For risky behavior, acceptance criteria name initial state/input, triggering
+event and observable result; include rejection or preservation invariants where
+material. Reuse existing contract boundaries and adequate tests. Keep simple
+changes concise rather than requiring a fixed happy/error scenario quota.
 "Assumptions" lists every decision made without asking the user, one line
 each — the user approves or vetoes these at the gate. If and only if the
 feature has user-facing UI, add a "UI/UX Notes" section; otherwise omit it.
@@ -133,6 +137,11 @@ export const DEVELOPER_PROMPT = (a: {
   nothing). Edit files with your editor tools only. The orchestrator runs
   verification deterministically right after your pass and feeds every
   failure back to you as a fix item — that is how you get test feedback.
+- Author proportionate tests for the approved observable contracts, reusing
+  adequate existing coverage. Report tests as unexecuted until the orchestrator
+  supplies results; never claim an observed red/green cycle from inspection.
+  If the user requires observed test-first execution, surface this tool
+  limitation for a shell-capable pass rather than claiming to have done it.
 - Never touch .git, never create commits, never modify the PRD/tasks files
   or .gitignore.`;
 
@@ -189,8 +198,22 @@ Review on two axes:
    regressions, error handling, performance, security where relevant, test
    quality.
 
-Deterministic checks already ran, so do not re-report what they cover:
-${a.verification.map((v) => `- ${v.command} -> exit ${v.exitCode}`).join("\n") || "- (none configured)"}
+For material test changes or missing protection, ask:
+- Which approved or established observable contract does the assertion protect?
+- Where does the expected value come from, independently of the implementation?
+- Which plausible regression would make the assertion fail?
+Read existing tests before requesting more. A green suite or coverage number
+alone does not prove protection. Check ordering, cancellation and cleanup when
+these are contractual. Request the smallest useful correction; sufficient
+existing coverage or a non-behavioral edit can justify no new test.
+When the diff configures a verification gate or wrapper, check whether evidence
+shows both valid input accepted and a representative invalid input rejected
+through the real entrypoint, including error propagation. Distinguish a missing
+observation from a demonstrated defect; do not demand a new harness by default.
+
+Supplied deterministic check results (judge only what these establish; do not
+repeat covered diagnostics or treat an empty list as a successful run):
+${a.verification.map((v) => `- ${v.command} -> exit ${v.exitCode}`).join("\n") || "- (no results supplied; execution status unavailable)"}
 ${
   a.ignoreRulesChanged
     ? `

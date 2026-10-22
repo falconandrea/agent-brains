@@ -32,7 +32,8 @@ Analytics (`extra/skills/ga4-analytics/`) is excluded pending the user's decisio
    spend a fix round on the contradiction. Implemented 2026-10-22: unit regressions and a fake-runtime workflow test
    cover the inconsistency and preserve approved-with-warnings completion. Preserve other open tasks (T7/T9/T10,
    U12–U14) in their source plans.
-2. **C2 — Align TDD and consolidate test-quality review.** Adapt `tdd`,
+2. **C2 — Align TDD and consolidate test-quality review.** Completed 2026-10-22
+   (instruction changes and bounded independent evaluation). Adapt `tdd`,
    `test-master`'s TDD reference, `verification-before-completion` and relevant
    feature instructions together: Pi developers author tests, deterministic
    verification executes them, and reviewers assess their protection. Preserve
@@ -49,6 +50,12 @@ Analytics (`extra/skills/ga4-analytics/`) is excluded pending the user's decisio
    requests and overhead. Separately design verification-result distinctions
    (executed, unconfigured, skipped/reused/unavailable, non-blocking failures)
    without breaking retry accounting or historical resume logs.
+   Evidence and the separate result-contract design:
+   [C2 evaluation](../evals/tdd-review/C2-2026-10-22.md). Three evaluator calls
+   covered baseline/candidate review of a regression and a healthy edit, plus
+   tool ownership. No real-task recall or monetary savings claim. Runtime
+   implementation of result metadata is a separate follow-up, not part of C2;
+   retry/replay semantics and the existing boolean are unchanged.
 3. **C3 — Selectively improve existing security guidance.** Import feasible
    boundary/result evidence, confirmed versus unresolved findings, impact-based
    severity and separate hardening notes into `security-reviewer`. Keep source
@@ -74,8 +81,8 @@ Analytics (`extra/skills/ga4-analytics/`) is excluded pending the user's decisio
    remain conditional material for this review or a real project need, not
    separate immediate projects. Analytics remains excluded.
 
-**Current next action:** C2 — align TDD and consolidate test-quality review.
-C1 reconciliation and U15 are complete (2026-10-22); C2–C5 remain pending. R1.1–R1.3 follow this sequence and still require an explicit trial request.
+**Current next action:** C3 — improve existing security guidance selectively.
+C1 and C2 are complete (2026-10-22); C3–C5 remain pending. R1.1–R1.3 follow this sequence and still require an explicit trial request.
 W2/W3 and R2 retain their evidence-based deferral; C2 does not activate them.
 
 Supporting evidence: [TDD assessment](../research/tdd-agent-loop-assessment.md),
@@ -484,5 +491,5 @@ A future session should:
 4. Change exactly one item to `IN PROGRESS`.
 5. Record evidence and the promote/reject decision here when the item ends.
 
-**Next action:** C2 — align TDD and consolidate test-quality review. R1.1 (`pi-vcc`)
+**Next action:** C3 — improve existing security guidance selectively. R1.1 (`pi-vcc`)
 is postponed behind C1–C5 and still requires an explicit trial request.

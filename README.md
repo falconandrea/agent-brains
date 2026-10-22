@@ -153,7 +153,8 @@ How you update depends on the tool:
 - **`npx skills`** (mattpocock, anthropics, vercel, …) runs **here**, in this repo —
   it downloads from GitHub and needs no project context. It may only update
   skills still listed in `skills-lock.json`. A skill whose `SKILL.md` declares
-  `metadata.management: local` (currently `grill-with-docs` and `research`) is
+  `metadata.management: local` (including `grill-with-docs`, `research`, `tdd` and
+  `verification-before-completion`) is
   locally authoritative — never update it through `npx skills`. Reviewed
   workflow, one skill at a time:
   ```bash
