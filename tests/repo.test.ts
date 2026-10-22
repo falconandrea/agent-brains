@@ -5,7 +5,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -73,6 +73,58 @@ test("a skill declaring metadata.management local is never in skills-lock.json",
     [],
     `locally managed skills must not appear in skills-lock.json:\n${conflicts.join("\n")}`,
   );
+});
+
+const README = readFileSync(join(ROOT, "README.md"), "utf8");
+
+interface WorkflowRow {
+  skill: string;
+  pointer: string;
+  link: string;
+}
+
+/** Workflow rows from the README table (skill | OpenCode pointer | workflow link). */
+const readmeWorkflows = (): WorkflowRow[] => {
+  const section = README.match(/## Workflow agents[\s\S]*?(?=\n## )/)?.[0] ?? "";
+  return [...section.matchAll(/^\| `([^`]+)` \| `([^`]+)` \| `([^`]+)` \|$/gm)].map((m) => ({
+    skill: m[1]!,
+    pointer: m[2]!,
+    link: m[3]!,
+  }));
+};
+
+test("every workflow in the README table has an OpenCode pointer and a resolved workflow link", () => {
+  const workflows = readmeWorkflows();
+  assert.ok(workflows.length > 0, "README workflow table not found");
+
+  const problems: string[] = [];
+  for (const { skill, pointer, link } of workflows) {
+    if (pointer !== `.opencode/agents/${skill}.md`) {
+      problems.push(`${skill}: pointer must be .opencode/agents/${skill}.md (found ${pointer})`);
+    }
+    if (link !== `.agents/workflows/${skill}.md`) {
+      problems.push(`${skill}: link must be .agents/workflows/${skill}.md (found ${link})`);
+    }
+
+    const pointerPath = join(ROOT, pointer);
+    if (!existsSync(pointerPath)) {
+      problems.push(`${skill}: missing OpenCode pointer ${pointer}`);
+    } else if (!readFileSync(pointerPath, "utf8").includes(link)) {
+      problems.push(`${skill}: ${pointer} does not reference ${link}`);
+    }
+
+    const linkPath = join(ROOT, link);
+    const target = join(SKILLS_DIR, skill, "SKILL.md");
+    try {
+      if (realpathSync(linkPath) !== realpathSync(target)) {
+        problems.push(`${skill}: ${link} does not resolve to ${target}`);
+      }
+    } catch {
+      problems.push(`${skill}: broken or missing workflow link ${link}`);
+    }
+  }
+
+  assert.deepEqual(problems, [], problems.join("\n"));
 });
 
 test("the adopted skills grill-with-docs and research carry provenance and stay out of the lock", () => {

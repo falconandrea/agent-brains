@@ -435,6 +435,12 @@ add_to_gitignore() {
     local gitignore="$TARGET_DIR/.gitignore"
     [ -f "$gitignore" ] || return 0
     if ! grep -qxF "$entry" "$gitignore" 2>/dev/null; then
+        # Never concatenate onto a last line that has no final newline: that
+        # would corrupt the existing entry and silently fail to ignore the
+        # new one (e.g. ".agents" + ".pi/pi-brain.lock").
+        if [ -s "$gitignore" ] && [ -n "$(tail -c 1 "$gitignore")" ]; then
+            echo "" >> "$gitignore"
+        fi
         echo "$entry" >> "$gitignore"
         echo "   ✅ Added '$entry' to .gitignore"
     fi
@@ -512,6 +518,11 @@ if [ "$PROFILE" = "opencode" ]; then
     echo ""
     link_opencode
     echo ""
+    echo "   ⚠️  The OpenCode agent pointers in .opencode/agents/*.md read"
+    echo "       .agents/workflows/*.md, which is NOT linked in this mode."
+    echo "       To link .agents too, run: \"$SCRIPT_DIR/setup.sh\" \"$TARGET_DIR\" full"
+    echo "       (or a curated profile such as laravel, nextjs, astro or nodejs)"
+    echo ""
     echo "🎉 Done! (.agents not linked)"
     echo ""
     exit 0
@@ -544,6 +555,8 @@ if [ -f "$TARGET_DIR/.gitignore" ]; then
     fi
     add_to_gitignore ".opencode"
     add_to_gitignore ".agents"
+    add_to_gitignore ".pi/pi-brain.lock"
+    add_to_gitignore ".pi/pi-brain/"
 else
     echo ""
     echo "   ℹ️  No .gitignore found — skipping gitignore update"

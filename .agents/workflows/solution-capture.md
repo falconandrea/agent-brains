@@ -1,0 +1,1 @@
+../skills/solution-capture/SKILL.md

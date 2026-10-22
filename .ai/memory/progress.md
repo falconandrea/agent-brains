@@ -40,15 +40,52 @@
   `07d74d7` (code-review-follow-ups T5–T6); U1/F2 (2026-10-14), U2/F1
   (2026-10-15), U3/F1+F2 (2026-10-16), U4/F3 (2026-10-17), U6/F7 and U7/F5
   (2026-10-17) are implemented and committed on `main` (U6 `0815222`, U7
-  `8d45508`), and U8/F6 (2026-10-18) is implemented on top of `8d45508`
-  (uncommitted) — see Done. Remaining tasks (U9–U16) are pending.
+  `8d45508`), and U8/F6 (2026-10-18) is committed on `main` in `f065e5a`.
+  U9/U10/U11 (2026-10-22) are implemented and verified (uncommitted) — see
+  Done. Remaining tasks (U12–U16) are pending.
   This transfer authorizes documentation integration only; the F13
   `changes_requested` policy remains an open decision.
 
 ## Done
 
-- 2026-10-18 main-review-hardening U8 (F6, on top of `8d45508`, uncommitted on
-  `main`): the detached runner's UI calls (`notify`, terminal `bell`,
+- 2026-10-22 main-review-hardening U9/U10/U11 (F8, F9, F3 defence in depth;
+  uncommitted on `main`): multi-tool setup parity.
+  U9: added `.opencode/agents/solution-capture.md` in the same pointer format as
+  the other six and the `.agents/workflows/solution-capture.md` symlink to
+  `.agents/skills/solution-capture/SKILL.md`. The README workflow section now
+  carries a `Workflow skill | OpenCode pointer | Workflow link` table for all
+  seven workflows; `tests/repo.test.ts` parses that table and asserts every row
+  has an existing pointer that references its `.agents/workflows/<name>.md`
+  link, and that the link resolves to the matching `SKILL.md`.
+  U10: `setup.sh <proj> opencode` now warns that the OpenCode agent pointers
+  read `.agents/workflows/*.md`, which is not linked in that mode, and prints
+  the exact follow-up command (`"<repo>/setup.sh" "<project>" full`, or a
+  curated profile). The README documents the same dependency and command. A
+  smoke test in the temporary setup fixture asserts the warning, the exact
+  command, that `.agents` stays unlinked, and that curated runs are unchanged;
+  the curated-run guard matches the warning body itself, not only the
+  "opencode-only" label.
+  U11: setup keeps `.pi/pi-brain.lock` and `.pi/pi-brain/` in an existing
+  target `.gitignore` through the existing idempotent helper. That helper now
+  inserts the missing separating newline before appending when the file does
+  not end with one, so a new entry can never be concatenated onto the previous
+  last line (reproduced defect: `.agents` + `.pi/pi-brain.lock` became
+  `.agents.pi/pi-brain.lock`). Fixture tests run the same profile twice and
+  assert both entries appear exactly once, pre-existing entries survive, and a
+  file ending in `.agents` without a final newline keeps `.agents` and the new
+  entries on their own lines. Symlink ownership, local-content preservation
+  and the other profiles are untouched.
+  Verification: targeted `node --test tests/repo.test.ts
+  tests/setup-unlink.test.ts` 32/32, `bash -n setup.sh`, `npm test` 394/394,
+  `npm run typecheck` clean, `git diff --check` clean. Limits: U11 covers only
+  destinations that already have a `.gitignore` (setup still never creates
+  one) and does not touch the opencode-only early-exit path; U9's test
+  deliberately trusts the README table as the workflow list, so adding a
+  workflow requires adding its row. U12–U16 and F13 untouched; no consumer
+  project was modified.
+
+- 2026-10-18 main-review-hardening U8 (F6, baseline `8d45508`, committed on
+  `main` in `f065e5a`): the detached runner's UI calls (`notify`, terminal `bell`,
   `setStatus`) are now best-effort. New `safeUi(effect, fn)` (Pi-free
   `src/ui-safe.ts`) runs the launcher's three effects in a try/catch that
   reports the failure exactly once on stderr

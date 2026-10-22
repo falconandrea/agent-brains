@@ -9,9 +9,10 @@ Imported from `6c16a01` onto `main` after `07d74d7`. The findings below
 are the historical review, not a claim that every gap still exists. U5/F4
 is already covered by `07d74d7` (code-review-follow-ups T5–T6), with
 `verifyTimeoutMs` defaulting to 600000 (10 min), validated between 1000 and
-3600000 ms. U1–U8 are implemented (U1–U7 committed on `main`, U8 on top of
-`8d45508`); U9–U16 remain pending; F13 still needs a policy decision.
-Documentation integration does not authorize the remaining implementation.
+3600000 ms. U1–U11 are implemented: U1–U8 are committed on `main` (U8 in
+`f065e5a`), U9–U11 are implemented on top of `f065e5a` (uncommitted).
+U12–U16 remain pending; F13 still needs a policy decision. Documentation
+integration does not authorize the remaining implementation.
 
 ## Overview
 
@@ -118,7 +119,7 @@ Decision: **approach 1**.
       `tests/run-start.test.ts`). `/flow resume` already had this order.
 - [x] UI failures (`notify`, bell, status) in the detached runner never change
       the persisted outcome and never produce an unhandled rejection.
-      Implemented on top of `8d45508` (U8): the `safeUi` guard (Pi-free
+      Implemented in `f065e5a` on top of `8d45508` (U8): the `safeUi` guard (Pi-free
       `src/ui-safe.ts`) reports each UI failure once on stderr and swallows
       it; the per-agent-event status (the runtime's `onEvent`) is covered by
       the exported `agentStatus`, and the workflow's internal `human.notify`
@@ -131,13 +132,17 @@ Decision: **approach 1**.
       effects injected; see the U6 task entry.
 
 ### M2 — multi-tool setup parity
-- [ ] `solution-capture` has `.opencode/agents/solution-capture.md` and
+- [x] `solution-capture` has `.opencode/agents/solution-capture.md` and
       `.agents/workflows/solution-capture.md`; a repo test asserts that every
-      workflow skill in `common.list` and the stack lists has both.
-- [ ] `setup.sh <proj> opencode` either links what the pointers need or prints
+      workflow skill in the README workflow table has both, with the link
+      resolving to its `SKILL.md`. Implemented 2026-10-22 (U9).
+- [x] `setup.sh <proj> opencode` either links what the pointers need or prints
       an explicit warning naming the missing `.agents/` dependency.
-- [ ] `setup.sh` adds `.pi/pi-brain.lock` and `.pi/pi-brain/` to an existing
+      Implemented 2026-10-22 (U10): warning plus the exact follow-up command,
+      documented in the README.
+- [x] `setup.sh` adds `.pi/pi-brain.lock` and `.pi/pi-brain/` to an existing
       `.gitignore` (defence in depth; the snapshot exclusion is the primary fix).
+      Implemented 2026-10-22 (U11), idempotent across repeated runs.
 - [ ] What Claude Code reads natively (AGENTS.md vs CLAUDE.md, `.claude/skills`
       vs `.agents/skills`) is verified against current docs and recorded in the
       README. `setup.sh` / `scaffold.sh` create only what is missing.

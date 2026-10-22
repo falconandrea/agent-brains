@@ -524,3 +524,69 @@ test("switching full → curated removes the managed whole-dir link and installs
   assert.equal(linkDest(join(project, ".agents", "skills", "alpha")), real(join(store, "alpha")));
   assert.equal(linkDest(join(project, ".agents", "skills", "beta")), real(join(store, "beta")));
 });
+
+test("opencode-only setup warns about the .agents dependency and names the exact command", () => {
+  const project = newProject("opencode-warning");
+  const res = setup(project, "opencode");
+
+  assert.equal(res.status, 0, res.stderr);
+  assert.ok(isSymlink(join(project, ".opencode")), ".opencode must still be linked");
+  assert.ok(!existsSync(join(project, ".agents")), "opencode-only must not link .agents");
+  assert.match(res.stdout, /\.agents\/workflows/);
+  assert.match(res.stdout, /setup\.sh.*" full/);
+  assert.match(res.stdout, new RegExp(`"${real(project).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}" full`));
+
+  // Other profiles keep their existing behaviour (no opencode-only warning
+  // body, even when the run itself is not labelled "opencode-only").
+  const curated = setup(newProject("profile-no-warning"), "p-one");
+  assert.equal(curated.status, 0, curated.stderr);
+  assert.doesNotMatch(
+    curated.stdout,
+    /The OpenCode agent pointers|NOT linked in this mode|To link \.agents too/,
+  );
+});
+
+test("setup adds Pi runtime ignore entries exactly once across repeated runs", () => {
+  const project = newProject("gitignore-pi-runtime");
+  writeFileSync(join(project, ".gitignore"), "node_modules\n");
+
+  for (let i = 0; i < 2; i++) {
+    const res = setup(project, "p-one");
+    assert.equal(res.status, 0, res.stderr);
+  }
+
+  const lines = readFileSync(join(project, ".gitignore"), "utf8").split(/\r?\n/);
+  assert.ok(lines.includes("node_modules"), "existing entries must be preserved");
+  for (const entry of [".pi/pi-brain.lock", ".pi/pi-brain/"]) {
+    assert.equal(
+      lines.filter((line) => line === entry).length,
+      1,
+      `${entry} must appear exactly once`,
+    );
+  }
+});
+
+test("setup separates new .gitignore entries when the file lacks a trailing newline", () => {
+  const project = newProject("gitignore-no-final-newline");
+  writeFileSync(join(project, ".gitignore"), ".opencode\n.agents");
+
+  for (let i = 0; i < 2; i++) {
+    const res = setup(project, "p-one");
+    assert.equal(res.status, 0, res.stderr);
+  }
+
+  const lines = readFileSync(join(project, ".gitignore"), "utf8").split(/\r?\n/);
+  assert.ok(lines.includes(".opencode"), ".opencode must remain an exact entry");
+  assert.ok(lines.includes(".agents"), ".agents must remain an exact entry");
+  assert.ok(
+    !lines.some((line) => line.startsWith(".agents.pi/")),
+    "a new entry must not be concatenated to the previous last line",
+  );
+  for (const entry of [".pi/pi-brain.lock", ".pi/pi-brain/"]) {
+    assert.equal(
+      lines.filter((line) => line === entry).length,
+      1,
+      `${entry} must appear exactly once`,
+    );
+  }
+});

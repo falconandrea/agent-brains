@@ -8,8 +8,8 @@ Finding ids (F1–F14) refer to the PRD table. Each milestone is its own cycle.
 Imported from `6c16a01` onto `main` after `07d74d7`. U5 is already covered
 by code-review-follow-ups T5–T6. U1–U8 are implemented: U1–U7 are committed
 on `main` (U1 `b074318`, U2 `71706cf`, U3 `95806aa`, U4 `fa5303f`, U6
-`0815222`, U7 `8d45508`; U5 in `07d74d7`) and U8 is implemented on top of
-`8d45508` (uncommitted). U9–U16 remain pending. Use the
+`0815222`, U7 `8d45508`, U8 `f065e5a`; U5 in `07d74d7`). U9–U11 are
+implemented on top of `f065e5a` (uncommitted). U12–U16 remain pending. Use the
 existing `verifyTimeoutMs` interface rather than introducing a seconds-based
 setting. Documentation integration does not authorize implementation.
 
@@ -399,7 +399,7 @@ setting. Documentation integration does not authorize implementation.
 - [x] **U8 — Best-effort UI in the detached runner** (F6). `src/run-launcher.ts`,
   `src/workflows/feature.ts`, `src/ui-safe.ts` (new), `extensions/pi-brain.ts`,
   `tests/run-launcher.test.ts`, `tests/feature-workflow.test.ts`.
-  Completed on top of `8d45508` (uncommitted on `main`), TDD: 10 tests
+  Completed on top of `8d45508`, committed on `main` in `f065e5a`; TDD: 10 tests
   red-first (8 launcher + 2 workflow), six mutation checks each killed by
   exactly its covering tests.
   A `safeUi(effect, fn)` helper (Pi-free `src/ui-safe.ts`) runs the launcher's
@@ -474,24 +474,43 @@ setting. Documentation integration does not authorize implementation.
 
 ## M2 — multi-tool setup parity
 
-- [ ] **U9 — `solution-capture` workflow pointers** (F8).
+- [x] **U9 — `solution-capture` workflow pointers** (F8).
   `.opencode/agents/solution-capture.md`, `.agents/workflows/solution-capture.md`,
-  `tests/repo.test.ts`.
-  Satisfy: same pointer format as the existing six. A repo test asserts that every
-  workflow skill named in the README table has an OpenCode pointer and a
-  `.agents/workflows/` link resolving to its `SKILL.md`.
+  `README.md`, `tests/repo.test.ts`.
+  Completed 2026-10-22 (uncommitted on `main`). Added the OpenCode pointer in the
+  same format as the existing six and the workflow symlink to
+  `.agents/skills/solution-capture/SKILL.md`. The README workflow section now
+  has a `Workflow skill | OpenCode pointer | Workflow link` table for all seven
+  workflows; the repo test parses that table and asserts, for every row, that
+  the pointer exists and references the declared workflow link, and that the
+  link resolves to the matching `SKILL.md`.
+  Verification: targeted repo test, `npm test` 393/393, typecheck clean.
 
-- [ ] **U10 — Coherent opencode-only mode** (F9). `setup.sh`, `README.md`.
-  Satisfy: `setup.sh <proj> opencode` warns that the agent pointers need
-  `.agents/` and names the command that links it. The README states the same.
-  Tests: a smoke run in a temporary dir prints the warning; existing profiles are
-  unchanged.
+- [x] **U10 — Coherent opencode-only mode** (F9). `setup.sh`, `README.md`,
+  `tests/setup-unlink.test.ts`.
+  Completed 2026-10-22 (uncommitted on `main`). `setup.sh <proj> opencode` now
+  warns that the OpenCode pointers read `.agents/workflows/*.md`, which is not
+  linked in that mode, and prints the exact command to link it:
+  `"<repo>/setup.sh" "<project>" full` (a curated profile also works). The
+  README documents the same warning and command. A fixture smoke test asserts
+  the warning, the exact command, that `.agents` remains unlinked, and that a
+  curated run does not print the warning body (matched directly, not via the
+  "opencode-only" label, which the body does not contain).
+  Verification: targeted setup test, `bash -n setup.sh`, `npm test` 394/394.
 
-- [ ] **U11 — Pi runtime ignore entries** (F3, defence in depth). `setup.sh`.
-  Satisfy: when `.gitignore` exists, `.pi/pi-brain.lock` and `.pi/pi-brain/` are
-  added once (idempotent, same helper as `.agents`/`.opencode`).
-  Tests: run `setup.sh` twice in a temporary repo; each entry appears exactly
-  once.
+- [x] **U11 — Pi runtime ignore entries** (F3, defence in depth). `setup.sh`,
+  `tests/setup-unlink.test.ts`.
+  Completed 2026-10-22 (uncommitted on `main`). When the target already has a
+  `.gitignore`, setup adds `.pi/pi-brain.lock` and `.pi/pi-brain/` through the
+  existing idempotent helper (same as `.agents`/`.opencode`). The helper inserts
+  a separating newline when the file does not end with one, so the append can
+  never corrupt the previous last entry (reproduced:
+  `.agents` + `.pi/pi-brain.lock` became `.agents.pi/pi-brain.lock`). It still
+  never creates a `.gitignore` and leaves the opencode-only early-exit path
+  unchanged. Fixture tests run the same profile twice and assert each entry
+  appears exactly once while pre-existing entries survive, including a
+  `.gitignore` whose last line has no final newline.
+  Verification: targeted setup test, `bash -n setup.sh`, `npm test` 394/394.
 
 - [ ] **U12 — Claude Code support** (F10). `setup.sh`, `scaffold.sh`, `README.md`.
   Satisfy: first verify in current Claude Code docs whether it reads `AGENTS.md`
