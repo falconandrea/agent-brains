@@ -11,7 +11,7 @@ is already covered by `07d74d7` (code-review-follow-ups T5–T6), with
 `verifyTimeoutMs` defaulting to 600000 (10 min), validated between 1000 and
 3600000 ms. U1–U11 are implemented: U1–U8 are committed on `main` (U8 in
 `f065e5a`), U9–U11 are implemented on top of `f065e5a` (uncommitted).
-U12–U16 remain pending; F13 still needs a policy decision. Documentation
+U12–U16 remain pending; F13 option B is selected; implementation remains pending. Documentation
 integration does not authorize the remaining implementation.
 
 ## Overview
@@ -150,14 +150,18 @@ Decision: **approach 1**.
 ### M3 — cleanup and decisions
 - [ ] Stale statements in F11 are corrected.
 - [ ] An empty slug falls back to `feature-<runId>`.
-- [ ] The F13 policy is decided and pinned by a test (see Open decision).
+- [ ] The F13 policy is decided and pinned by a test (see Completion policy decision).
 - [ ] F14 is measured (count and size of the skill descriptions the parent
       session receives) and the result is recorded in the roadmap. No behaviour
       change in this feature.
 
-## Open decision (can defer to M3)
+## Completion policy decision (selected 2026-10-22; implementation pending)
 
-**F13 — `changes_requested` with zero blocking issues.**
+**F13 — `changes_requested` with zero blocking issues.** Option B is selected
+in the agreed roadmap consolidation. Escalate the inconsistent verdict without
+inventing blocking issues or spending a fix round. Approved reviews with only
+warnings continue to complete. The alternatives below retain decision context;
+they are not competing pending tasks.
 - (A) Keep it: warnings never block, and the completion message already counts
   the non-blocking notes.
 - (B, recommended) Escalate as `needs_human` with the reason "reviewer requested

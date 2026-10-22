@@ -17,7 +17,12 @@ Status: in progress. T1–T4 are implemented and verified (T1–T3 on 2026-10-08
 ## Later maintainability improvements
 
 - [ ] **T7 — Extract planner parsing/validation if it yields a clearer boundary (F6).** Review existing helpers in `src/workflows/feature.ts`, move the coherent parsing/validation responsibility into a focused module, and update imports/tests. Preserve accepted output formats and rejection behavior; record the rationale if extraction is not useful.
-- [ ] **T8 — Simplify extension run-lifecycle handling (F6).** Inspect feature/resume wiring in `extensions/pi-brain.ts` for actual duplication. Extract shared lifecycle handling where justified, preserving lock release, active-run tracking, cancellation, event ordering, and outcome rendering. Keep this change separate from behavioral fixes.
+- [x] **T8 — Simplify extension run-lifecycle handling (F6).** Covered by
+  main-review-hardening U6 (`0815222`, shared `src/run-launcher.ts`) and U8
+  (`f065e5a`, best-effort UI effects). Reconciled 2026-10-22; no second extraction
+  is queued. Reopen only for a specific remaining duplication. Historical
+  validation and limitations are recorded in the U6/U8 task entries.
+
 - [ ] **T9 — Record and declare verified compatibility (F7).** Inspect locked SDK/typebox versions and current runtime requirements. Validate suitable peer ranges and Node support through local checks and a Pi SDK smoke run. Update `package.json` and documentation; update the lockfile if required. Record evidence and any runtime validation still pending.
 
 ## Completion

@@ -2,6 +2,14 @@
 
 ## Open items
 
+- 2026-10-22 agreed consolidation order is owned by
+  [the roadmap](../../docs/plans/pi-plugin-adoption-roadmap.md#agreed-consolidation-sequence-2026-10-22):
+  C1 completion policy/reconciliation → C2 TDD and test-quality consolidation →
+  C3 feasible Cloudflare ideas in existing security-reviewer → C4 context/cost
+  baseline then optimization → C5 skill usefulness review. No OS sandbox or
+  full Cloudflare installation is planned. Analytics is excluded. Next: U15
+  option B (selected, not implemented). R1 plugin trials follow this sequence.
+
 - New `agent-readiness` and `html-report` skills are registered in common/full;
   existing curated consumers need their next profile refresh to discover them.
   `extra/skills/humanizer` now includes compose/scan references and a lexical
@@ -10,13 +18,14 @@
   the upstream README PR recipe are in
   [the adaptation note](../../docs/research/alfonso-skills-adaptation.md).
 - Spotify-inspired context/read-cost workstream is planned, not started:
-  S1 deduplicate discovered/injected context → S2 complete cost/cache/latency
-  accounting and baseline → S3 trial an explicit optional read-only bulk-reader.
+  U16 parent-load measurement + S2 cost/cache/latency instrumentation and
+  baseline → S1 deduplicate discovered/injected context and compare → S3
+  consider an explicit optional read-only bulk-reader.
   Status and acceptance criteria live in
   [the adoption roadmap](../../docs/plans/pi-plugin-adoption-roadmap.md#s--local-context-and-read-cost-optimization);
   evidence lives in
   [the assessment](../../docs/research/spotify-shunt-assessment.md).
-  When resuming this workstream, start with S1. Automatic hooks, code-writing
+  When resuming this workstream, follow C4 and measure before S1. Automatic hooks, code-writing
   workers and Jev remain deferred; no Portal installation is planned.
 - `test-review` remains an explicit experimental extra. Initial pilot and isolated
   mutation evidence are in `docs/evals/test-review/README.md`. Three samples
@@ -26,13 +35,14 @@
   must-fix in either, E one convergent minor overlap, F two accepted minor
   incomplete-coverage findings (one new, one sharpening a Spec-axis catch), no
   false positives, bounded overhead in both. The recurrence condition for
-  reconsidering conditional workflow integration is met; the decision is the
-  user's. Two
+  reconsidering conditional workflow integration is met. C2 now selects
+  consolidation of useful checks into the existing review; no additional
+  mandatory reviewer is planned and implementation remains pending. Two
   missing unlink preservation cases were verified in a temporary fixture only;
   the shipping tests have not been changed.
-- No queued agent-workflow follow-up. W2 and W3 remain evidence-triggered and
-  deferred.
-- code-review-follow-ups T7–T10 pending (see
+- W1/W4 are complete. New consolidation work follows C1–C5 above; W2 and W3
+  remain evidence-triggered and deferred.
+- code-review-follow-ups T7/T9/T10 pending; T8 covered by U6/U8 (see
   `.ai/features/code-review-follow-ups/tasks-…md`); T1–T6 done.
 - 2026-10-12 `main-review-hardening` plan brought onto `main` from commit
   `6c16a01`, originally drafted 2026-10-02 against `e5f8e56`
@@ -41,15 +51,15 @@
   (2026-10-15), U3/F1+F2 (2026-10-16), U4/F3 (2026-10-17), U6/F7 and U7/F5
   (2026-10-17) are implemented and committed on `main` (U6 `0815222`, U7
   `8d45508`), and U8/F6 (2026-10-18) is committed on `main` in `f065e5a`.
-  U9/U10/U11 (2026-10-22) are implemented and verified (uncommitted) — see
+  U9/U10/U11 (2026-10-22) are committed in `af37cf6` — see
   Done. Remaining tasks (U12–U16) are pending.
   This transfer authorizes documentation integration only; the F13
-  `changes_requested` policy remains an open decision.
+  `changes_requested` policy is now selected (option B); implementation remains pending.
 
 ## Done
 
 - 2026-10-22 main-review-hardening U9/U10/U11 (F8, F9, F3 defence in depth;
-  uncommitted on `main`): multi-tool setup parity.
+  committed on `main` in `af37cf6`): multi-tool setup parity.
   U9: added `.opencode/agents/solution-capture.md` in the same pointer format as
   the other six and the `.agents/workflows/solution-capture.md` symlink to
   `.agents/skills/solution-capture/SKILL.md`. The README workflow section now

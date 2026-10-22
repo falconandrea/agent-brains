@@ -9,7 +9,7 @@ Imported from `6c16a01` onto `main` after `07d74d7`. U5 is already covered
 by code-review-follow-ups T5–T6. U1–U8 are implemented: U1–U7 are committed
 on `main` (U1 `b074318`, U2 `71706cf`, U3 `95806aa`, U4 `fa5303f`, U6
 `0815222`, U7 `8d45508`, U8 `f065e5a`; U5 in `07d74d7`). U9–U11 are
-implemented on top of `f065e5a` (uncommitted). U12–U16 remain pending. Use the
+committed in `af37cf6`. U12–U16 remain pending. Use the
 existing `verifyTimeoutMs` interface rather than introducing a seconds-based
 setting. Documentation integration does not authorize implementation.
 
@@ -25,7 +25,7 @@ setting. Documentation integration does not authorize implementation.
 | `src/ports.ts` | Optional `verify` / `scriptsDigest` / `repoStateDigest` fields; `GitService.repoState()` |
 | `src/shell.ts` | Snapshot pathspec exclusion, repo-state digest, process-group timeout |
 | `src/config.ts` | Existing `verifyTimeoutMs`, validated (U5 complete) |
-| `src/review.ts` | F13 policy (after the decision) |
+| `src/review.ts` | F13 option B (selected; implementation pending) |
 | `src/run-launcher.ts` (new) | Event sink, outcome emission and detached runner shared by `/feature` and resume |
 | `src/ui-safe.ts` (new) | Best-effort UI effects: `safeUi`, `agentStatus`, `withBestEffortNotify` (U8, F6) |
 | `extensions/pi-brain.ts` | Wiring only: lock first, launcher, safe UI calls |
@@ -536,13 +536,17 @@ setting. Documentation integration does not authorize implementation.
   collision rules of `featureSlug` still apply.
   Tests: an emoji-only title and a CJK-only title.
 
-- [ ] **U15 — `changes_requested` policy** (F13; blocked on the PRD open
-  decision). `src/review.ts`, `tests/unit.test.ts`.
-  Satisfy: the chosen option is implemented, and one test pins it in each
+- [ ] **U15 — `changes_requested` policy** (F13; option B selected
+  2026-10-22, implementation pending). `src/review.ts`, `tests/unit.test.ts`.
+  Satisfy: escalate `changes_requested` with zero blocking issues as
+  `needs_human` without a fix round; approved reviews with only warnings still
+  complete. The selected option is implemented, and one test pins it in each
   direction (approved + warnings, changes_requested + warnings).
 
 - [ ] **U16 — Measure parent-session skill load** (F14).
   `docs/plans/pi-plugin-adoption-roadmap.md`.
+  Coordinate with roadmap C4: measure before S1 deduplication and alongside
+  S2 instrumentation. Keep parent discovery distinct from child injection.
   Satisfy: record the number of skills and the total description size that a
   parent Pi session receives after `pi install .`, plus whether profile
   filtering would matter. Investigation only; no code change.

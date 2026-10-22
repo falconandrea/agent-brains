@@ -2,7 +2,7 @@
 
 **Created:** 2026-09-08
 
-**Status:** R0 complete — next action is R1.1 (starts only on explicit request)
+**Status:** R0 complete. The agreed consolidation sequence below takes priority over R1 extension trials (updated 2026-10-22).
 
 **Source of truth for execution status:** this document
 
@@ -13,6 +13,74 @@
 after the [Spotify shunt assessment](../research/spotify-shunt-assessment.md).
 These items are independent of R1 external extension trials; recording them
 does not start implementation or change the R1 sequence.
+
+## Agreed consolidation sequence (2026-10-22)
+
+This section owns ordering for the following cross-plan work. Existing feature
+plans retain their task IDs and acceptance criteria. The three research reports
+are supporting evidence, not additional implementation queues. This update
+records decisions and pending work; it does not implement skills or runtime changes.
+Analytics (`extra/skills/ga4-analytics/`) is excluded pending the user's decision.
+
+1. **C1 — Reconcile existing work and completion policy.** U9–U11 are complete
+   in `af37cf6`; do not repeat them. Code-review follow-up T8's shared lifecycle
+   extraction is covered by U6 (`0815222`) and U8 (`f065e5a`); close that task
+   with this mapping, reopening only for a concrete remaining duplication.
+   Implement U15/F13 option B: `changes_requested` without blocking issues
+   yields `needs_human` with an explicit inconsistency reason; approved reviews
+   with only warnings still complete. Do not manufacture a blocking finding or
+   spend a fix round on the contradiction. Policy is selected; implementation
+   and regression checks remain pending. Preserve other open tasks (T7/T9/T10,
+   U12–U14) in their source plans.
+2. **C2 — Align TDD and consolidate test-quality review.** Adapt `tdd`,
+   `test-master`'s TDD reference, `verification-before-completion` and relevant
+   feature instructions together: Pi developers author tests, deterministic
+   verification executes them, and reviewers assess their protection. Preserve
+   observable test-first work in shell-capable sessions and explicit user TDD
+   requests; never claim unobserved red/green. Reuse the existing PRD gate for
+   risk-based observable scenarios. Integrate the contract / expected-value
+   source / plausible regression questions from `test-review` into the existing
+   review, plus selective QA quality-gate enforcement checks when relevant.
+   No extra mandatory reviewer, blanket E2E preference, coverage quota or new
+   QA suite. `test-review` remains an explicit extra while overlap is evaluated;
+   do not delete it before confirming its unique value has been preserved.
+   Resolve local ownership/provenance before editing upstream-managed skills.
+   Evaluate on a known regression and a healthy case, including unnecessary-test
+   requests and overhead. Separately design verification-result distinctions
+   (executed, unconfigured, skipped/reused/unavailable, non-blocking failures)
+   without breaking retry accounting or historical resume logs.
+3. **C3 — Selectively improve existing security guidance.** Import feasible
+   boundary/result evidence, confirmed versus unresolved findings, impact-based
+   severity and separate hardening notes into `security-reviewer`. Keep source
+   claims distinct from reproduced results. Use independent verification only
+   for explicitly requested deeper work. Retain required provenance and license
+   notices. No Cloudflare installation, separate extra, full six-phase audit,
+   OS sandbox, coverage ledger, validator bundle or automatic security phase.
+   Drop any portion that requires new infrastructure; full adoption is not a
+   queued follow-up. Evidence: [Cloudflare assessment](../research/cloudflare-security-audit-assessment.md).
+4. **C4 — Measure context before optimization.** Combine U16's parent skill
+   count/description-size measurement with S2 usage instrumentation and a
+   pre-change context baseline. Parent skill discovery and child context-file
+   duplication are separate measurements. Then implement S1 deduplication and
+   compare against the baseline. Only then consider S3, using total quality,
+   latency and available cost, never parent-token reduction alone.
+5. **C5 — Review the usefulness of the skill collection.** Run a bounded manual
+   audit of triggers, permissions, overlap, distribution and actual incremental
+   value with current models. Compare representative cases with and without
+   skill guidance; use findings to keep, simplify, merge or propose removal.
+   Preserve useful specialist coverage and license/provenance. Model advances
+   motivate evaluation, not automatic deletion. This is not an upstream-update
+   bot or authorization to delete skills. The QA portfolio/documentation pilots
+   remain conditional material for this review or a real project need, not
+   separate immediate projects. Analytics remains excluded.
+
+**Current next action:** C1 — implement the selected U15 policy, then C2.
+C1 reconciliation is documentation-complete; all behavioral changes above are
+pending. R1.1–R1.3 follow this sequence and still require an explicit trial request.
+W2/W3 and R2 retain their evidence-based deferral; C2 does not activate them.
+
+Supporting evidence: [TDD assessment](../research/tdd-agent-loop-assessment.md),
+[QA suite assessment](../research/claude-code-skills-assessment.md).
 
 ## Goal
 
@@ -337,8 +405,8 @@ or replacing `/feature` with the package's own orchestration workflow.
 
 ## S — Local context and read-cost optimization
 
-**Status:** planned, implementation not started. Execute S1 → S2 → S3 when
-this workstream is selected. This roadmap owns task status; the research report
+**Status:** planned, implementation not started. Under C4, measure U16 and
+complete S2 instrumentation/baseline before S1; compare after S1, then consider S3. This roadmap owns task status; the research report
 owns supporting evidence and rationale.
 
 ### S1 Deduplicate discovered and injected context
@@ -417,5 +485,5 @@ A future session should:
 4. Change exactly one item to `IN PROGRESS`.
 5. Record evidence and the promote/reject decision here when the item ends.
 
-**Next action:** R1.1 — trial `pi-vcc`; start only after an explicit user
-request. Do not install `pi-vcc` as part of R0.4 or before that request.
+**Next action:** C1 — implement U15 option B, then C2. R1.1 (`pi-vcc`)
+is postponed behind C1–C5 and still requires an explicit trial request.
