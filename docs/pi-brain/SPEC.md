@@ -1086,7 +1086,9 @@ Rules:
 - track issue IDs between rounds;
 - detect repeated identical findings / no meaningful diff;
 - if no progress, escalate rather than loop;
-- warnings/suggestions do not necessarily block completion;
+- approved reviews with only warnings/suggestions complete;
+- `changes_requested` without blocking issues escalates as `needs_human`
+  with an explicit inconsistency reason, without another developer round;
 - do not let developer modify the spec merely to satisfy the reviewer.
 
 ---

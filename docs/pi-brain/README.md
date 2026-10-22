@@ -65,6 +65,14 @@ already completed, and pre-resume logs without a persisted baseline are refused
 with a reason. If the working diff changed since an interrupted review, it asks
 restart-vs-resume first.
 
+### Inconsistent review verdicts
+
+An approved review with only warnings or suggestions completes normally. A
+`changes_requested` review without blocking issues stops as `needs_human`,
+with the reason "reviewer requested changes but marked none blocking". It does
+not trigger another developer pass. Reviews with blocking issues retain the
+existing bounded fix-loop policy, including when the verdict says `approved`.
+
 ## Configure roles → models
 
 `~/.pi/agent/pi-brain/config.json` (global) or `.pi/pi-brain.json` (per project,

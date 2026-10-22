@@ -147,6 +147,25 @@ const approvingResponder = (req: AgentRunRequest): AgentRunResult => {
   return reviewOf({ verdict: "approved", summary: "ok", issues: [] });
 };
 
+test("inconsistent changes_requested review ends needs_human without another developer pass", async () => {
+  const inconsistent: ReviewResult = {
+    verdict: "changes_requested",
+    summary: "Optional cleanup only",
+    issues: [{ id: "W1", severity: "warning", category: "standards", problem: "Optional cleanup" }],
+  };
+  const { deps, agents, events } = harness((req) =>
+    req.role === "reviewer" ? reviewOf(inconsistent) : approvingResponder(req),
+  );
+  const outcome = await runFeatureWorkflow(deps, "Add invitations", "run-inconsistent-review");
+  assert.equal(outcome.status, "needs_human");
+  if (outcome.status !== "needs_human") assert.fail("expected human decision");
+  assert.equal(outcome.reason, "reviewer requested changes but marked none blocking");
+  assert.deepEqual(outcome.review, inconsistent);
+  assert.deepEqual(agents.calls.map((req) => req.role), ["planner", "developer", "reviewer"]);
+  assert.ok(events.some((e) => e.type === "workflow.completed" && e.status === "needs_human"));
+  assert.ok(!events.some((e) => e.type === "workflow.completed" && e.status === "completed"));
+});
+
 const writeLaravelRepo = (cwd: string): void => {
   writeFileSync(
     join(cwd, "composer.json"),

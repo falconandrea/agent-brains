@@ -106,10 +106,14 @@ export function decideNextRound(
     return { action: "escalate", reason: "reviewer asked for a human decision" };
 
   // The issue list wins over the verdict: a model that says "approved" while
-  // listing blocking issues must not end the run. Warnings and suggestions do
-  // not block (spec §11 phase G).
+  // listing blocking issues must not end the run. Non-blocking issues alone
+  // permit completion only when the verdict agrees (spec §11 phase G).
   const blocking = blockingIssues(review);
-  if (blocking.length === 0) return { action: "complete", reason: `approved on round ${round}` };
+  if (blocking.length === 0) {
+    if (review.verdict === "changes_requested")
+      return { action: "escalate", reason: "reviewer requested changes but marked none blocking" };
+    return { action: "complete", reason: `approved on round ${round}` };
+  }
 
   if (round >= maxRounds)
     return { action: "escalate", reason: `max review rounds (${maxRounds}) reached` };

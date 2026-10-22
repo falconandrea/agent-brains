@@ -29,8 +29,8 @@ Analytics (`extra/skills/ga4-analytics/`) is excluded pending the user's decisio
    Implement U15/F13 option B: `changes_requested` without blocking issues
    yields `needs_human` with an explicit inconsistency reason; approved reviews
    with only warnings still complete. Do not manufacture a blocking finding or
-   spend a fix round on the contradiction. Policy is selected; implementation
-   and regression checks remain pending. Preserve other open tasks (T7/T9/T10,
+   spend a fix round on the contradiction. Implemented 2026-10-22: unit regressions and a fake-runtime workflow test
+   cover the inconsistency and preserve approved-with-warnings completion. Preserve other open tasks (T7/T9/T10,
    U12–U14) in their source plans.
 2. **C2 — Align TDD and consolidate test-quality review.** Adapt `tdd`,
    `test-master`'s TDD reference, `verification-before-completion` and relevant
@@ -74,9 +74,8 @@ Analytics (`extra/skills/ga4-analytics/`) is excluded pending the user's decisio
    remain conditional material for this review or a real project need, not
    separate immediate projects. Analytics remains excluded.
 
-**Current next action:** C1 — implement the selected U15 policy, then C2.
-C1 reconciliation is documentation-complete; all behavioral changes above are
-pending. R1.1–R1.3 follow this sequence and still require an explicit trial request.
+**Current next action:** C2 — align TDD and consolidate test-quality review.
+C1 reconciliation and U15 are complete (2026-10-22); C2–C5 remain pending. R1.1–R1.3 follow this sequence and still require an explicit trial request.
 W2/W3 and R2 retain their evidence-based deferral; C2 does not activate them.
 
 Supporting evidence: [TDD assessment](../research/tdd-agent-loop-assessment.md),
@@ -485,5 +484,5 @@ A future session should:
 4. Change exactly one item to `IN PROGRESS`.
 5. Record evidence and the promote/reject decision here when the item ends.
 
-**Next action:** C1 — implement U15 option B, then C2. R1.1 (`pi-vcc`)
+**Next action:** C2 — align TDD and consolidate test-quality review. R1.1 (`pi-vcc`)
 is postponed behind C1–C5 and still requires an explicit trial request.

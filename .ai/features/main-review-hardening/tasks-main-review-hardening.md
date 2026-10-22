@@ -9,7 +9,7 @@ Imported from `6c16a01` onto `main` after `07d74d7`. U5 is already covered
 by code-review-follow-ups T5–T6. U1–U8 are implemented: U1–U7 are committed
 on `main` (U1 `b074318`, U2 `71706cf`, U3 `95806aa`, U4 `fa5303f`, U6
 `0815222`, U7 `8d45508`, U8 `f065e5a`; U5 in `07d74d7`). U9–U11 are
-committed in `af37cf6`. U12–U16 remain pending. Use the
+committed in `af37cf6`. U12–U14 and U16 remain pending; U15 is implemented (2026-10-22). Use the
 existing `verifyTimeoutMs` interface rather than introducing a seconds-based
 setting. Documentation integration does not authorize implementation.
 
@@ -536,12 +536,16 @@ setting. Documentation integration does not authorize implementation.
   collision rules of `featureSlug` still apply.
   Tests: an emoji-only title and a CJK-only title.
 
-- [ ] **U15 — `changes_requested` policy** (F13; option B selected
-  2026-10-22, implementation pending). `src/review.ts`, `tests/unit.test.ts`.
+- [x] **U15 — `changes_requested` policy** (F13; completed 2026-10-22).
+  `src/review.ts`, `tests/unit.test.ts`, `tests/feature-workflow.test.ts`.
   Satisfy: escalate `changes_requested` with zero blocking issues as
   `needs_human` without a fix round; approved reviews with only warnings still
   complete. The selected option is implemented, and one test pins it in each
   direction (approved + warnings, changes_requested + warnings).
+  The regression failed before the fix (completed instead of escalated).
+  Unit cases cover empty, warning-only and suggestion-only issues at the first
+  and last round; the workflow test checks `needs_human`, preserved review and
+  exactly one developer/reviewer pass. No runtime schema or resume change.
 
 - [ ] **U16 — Measure parent-session skill load** (F14).
   `docs/plans/pi-plugin-adoption-roadmap.md`.

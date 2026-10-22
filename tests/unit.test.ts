@@ -670,12 +670,27 @@ test("approved review completes the loop", () => {
   assert.equal(d.action, "complete");
 });
 
-test("warnings alone do not block completion", () => {
+test("approved review with warnings completes the loop", () => {
   const r = review({
-    verdict: "changes_requested",
+    verdict: "approved",
     issues: [{ id: "W1", severity: "warning", category: "standards", problem: "meh" }],
   });
   assert.equal(decideNextRound(r, 1, 2, new Set(), true).action, "complete");
+});
+
+test("changes_requested without blocking issues escalates without a fix round", () => {
+  for (const issues of [
+    [],
+    [{ id: "W1", severity: "warning", category: "standards", problem: "style concern" }],
+    [{ id: "S1", severity: "suggestion", category: "tests", problem: "optional improvement" }],
+  ] as ReviewResult["issues"][]) {
+    for (const round of [1, 2]) {
+      assert.deepEqual(
+        decideNextRound(review({ issues }), round, 2, new Set(), true),
+        { action: "escalate", reason: "reviewer requested changes but marked none blocking" },
+      );
+    }
+  }
 });
 
 test("max rounds escalates instead of looping", () => {

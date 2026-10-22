@@ -7,8 +7,7 @@
   C1 completion policy/reconciliation → C2 TDD and test-quality consolidation →
   C3 feasible Cloudflare ideas in existing security-reviewer → C4 context/cost
   baseline then optimization → C5 skill usefulness review. No OS sandbox or
-  full Cloudflare installation is planned. Analytics is excluded. Next: U15
-  option B (selected, not implemented). R1 plugin trials follow this sequence.
+  full Cloudflare installation is planned. Analytics is excluded. C1 is complete (U15 implemented); next: C2. R1 plugin trials follow this sequence.
 
 - New `agent-readiness` and `html-report` skills are registered in common/full;
   existing curated consumers need their next profile refresh to discover them.
@@ -52,11 +51,21 @@
   (2026-10-17) are implemented and committed on `main` (U6 `0815222`, U7
   `8d45508`), and U8/F6 (2026-10-18) is committed on `main` in `f065e5a`.
   U9/U10/U11 (2026-10-22) are committed in `af37cf6` — see
-  Done. Remaining tasks (U12–U16) are pending.
+  Done. Remaining tasks U12–U14/U16 are pending; U15 is implemented (2026-10-22).
   This transfer authorizes documentation integration only; the F13
-  `changes_requested` policy is now selected (option B); implementation remains pending.
+  `changes_requested` policy option B is implemented (U15).
 
 ## Done
+
+- 2026-10-22 U15/F13: `changes_requested` with no blocking issues now ends
+  `needs_human` with an explicit reason, without another developer pass.
+  Approved reviews with only warnings still complete; blocking-issue handling
+  is unchanged. Regression observed failing before the fix; unit coverage
+  includes empty/warning/suggestion issues and first/last rounds. A fake-runtime
+  workflow check preserves the review and asserts exactly one developer pass.
+  No new model, reviewer, schema, retry or resume behavior introduced.
+  Verification: `npm test` 396/396, `npm run typecheck` and `git diff --check` clean.
+
 
 - 2026-10-22 main-review-hardening U9/U10/U11 (F8, F9, F3 defence in depth;
   committed on `main` in `af37cf6`): multi-tool setup parity.
