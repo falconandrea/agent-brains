@@ -2,12 +2,26 @@
 
 ## Open items
 
+- C3 instruction changes are complete; behavioral validation C3-V remains
+  pending on the next explicitly requested real security review. Criteria and
+  evidence ownership live in the [roadmap](../../docs/plans/pi-plugin-adoption-roadmap.md#agreed-consolidation-sequence-2026-10-22).
+  This does not block C4; no efficacy gain has been measured.
+
+- 2026-10-22 cross-harness migration plan moved into
+  [docs/plans/cross-harness-workflow-migration.md](../../docs/plans/cross-harness-workflow-migration.md)
+  and registered as M1–M4 in the
+  [roadmap](../../docs/plans/pi-plugin-adoption-roadmap.md#cross-harness-workflow-migration-m).
+  Includes per-project `.ai` alignment and the C1/C2 preservation constraints.
+  Documentation only: global installation, skill rename and consumer migration
+  have not started; next action is C4. Detailed completion status belongs
+  to the migration plan, priority and coordination to the roadmap.
+
 - 2026-10-22 agreed consolidation order is owned by
   [the roadmap](../../docs/plans/pi-plugin-adoption-roadmap.md#agreed-consolidation-sequence-2026-10-22):
   C1 completion policy/reconciliation → C2 TDD and test-quality consolidation →
   C3 feasible Cloudflare ideas in existing security-reviewer → C4 context/cost
   baseline then optimization → C5 skill usefulness review. No OS sandbox or
-  full Cloudflare installation is planned. Analytics is excluded. C1/C2 are complete; next: C3. R1 plugin trials follow this sequence.
+  full Cloudflare installation is planned. Analytics is excluded. C1/C2/C3 are complete; next: C4. R1 plugin trials follow this sequence.
 
 - New `agent-readiness` and `html-report` skills are registered in common/full;
   existing curated consumers need their next profile refresh to discover them.
@@ -57,6 +71,49 @@
   `changes_requested` policy option B is implemented (U15).
 
 ## Done
+
+- 2026-10-23 C3: selectively improved the existing `security-reviewer` skill
+  with the feasible Cloudflare `security-audit` method (assessed in
+  [the Cloudflare research](../../docs/research/cloudflare-security-audit-assessment.md)).
+  `SKILL.md` gained an Evidence Rules section — every finding records the trust
+  boundary crossed, the expected control, the observed behavior and the
+  verification performed; assertions are labeled source claim / inference /
+  reproduced — plus three statuses: Confirmed (only these get severity, rated
+  from the impact the evidence supports, not the pattern's worst case), Needs
+  validation (no severity; names its missing evidence, e.g. an unknown
+  deployment fact) and Hardening (separate from findings and severity counts).
+  Independent re-verification is reserved for explicitly requested deep audits;
+  the workflow steps, constraints and both example entries carry the same
+  contract. `references/report-template.md` gained matching status/evidence
+  fields, a needs-validation example and a separate Hardening Notes section.
+  Ownership resolved before editing: the skill was never in `skills-lock.json`
+  nor selected by `install-global-skills.sh`; it is now declared
+  `management: local` / `provenance: adopted` (test-master precedent), with the
+  Jeffallan author attribution, MIT license and docs link retained and the
+  Cloudflare method origin recorded with upstream commit
+  `c1c8a8c1471069fb0e188eeaff69b8e8db6564a8`. Not imported, per the agreed
+  constraints: Cloudflare installation, separate extra, six-phase audit, OS
+  sandbox, coverage ledger, validator bundle, JSON schema, automatic security
+  phase; no runtime code, router or profile changed. Verification: `npm test`
+  397/397, `npm run typecheck` clean, `git diff --check` clean, plus a
+  frontmatter/structure check (delimiters, metadata keys, repo-test-compatible
+  `management: local` anchor, balanced fences). Review rounds (user-reported):
+  round 1 — the Confirmed criterion states when static proof suffices, every
+  template/skill example carries explicit Observed and Verification fields,
+  and example impacts are limited to what the stated evidence demonstrates
+  (SEC-001 downgraded 9.8 → 7.5 with write/RCE consequences qualified as
+  untested). Round 2 — the password example still equated a missing control
+  with a demonstrated vulnerability; it was replaced by a statically decidable
+  IDOR (CWE-639, 6.5 Medium, consequence fully entailed by the code path with
+  a separate scale qualifier), the Confirmed criterion now requires the code
+  path to entail the harmful result and explicitly sends control absences
+  whose harm depends on uninspected defenses to Needs validation, and the
+  template's short-term recommendation was updated accordingly.
+  Limits: no audit was executed
+  with the updated skill, so no efficacy improvement is claimed; consumer
+  projects with independent copies of the skill were not refreshed (symlink
+  consumers receive it through the store); the installed base's own upstream
+  commit (Jeffallan) remains unknown, as documented in the frontmatter.
 
 - 2026-10-22 C2: aligned TDD, test-master's reference, completion verification
   and feature guidance with actual tools. Shell-capable sessions retain observed

@@ -56,7 +56,8 @@ Analytics (`extra/skills/ga4-analytics/`) is excluded pending the user's decisio
    tool ownership. No real-task recall or monetary savings claim. Runtime
    implementation of result metadata is a separate follow-up, not part of C2;
    retry/replay semantics and the existing boolean are unchanged.
-3. **C3 — Selectively improve existing security guidance.** Import feasible
+3. **C3 — Selectively improve existing security guidance.** Completed 2026-10-23
+   (instruction changes inside `security-reviewer` only). Import feasible
    boundary/result evidence, confirmed versus unresolved findings, impact-based
    severity and separate hardening notes into `security-reviewer`. Keep source
    claims distinct from reproduced results. Use independent verification only
@@ -65,6 +66,32 @@ Analytics (`extra/skills/ga4-analytics/`) is excluded pending the user's decisio
    OS sandbox, coverage ledger, validator bundle or automatic security phase.
    Drop any portion that requires new infrastructure; full adoption is not a
    queued follow-up. Evidence: [Cloudflare assessment](../research/cloudflare-security-audit-assessment.md).
+   Implemented: `SKILL.md` gained an Evidence Rules section (trust boundary,
+   expected control, observed behavior, verification performed; source-claim /
+   inference / reproduced labels), Confirmed / Needs validation (no severity) /
+   Hardening statuses, impact-supported severity, independent re-verification
+   reserved for explicitly requested deep audits; the report template gained
+   the matching status/evidence fields, a needs-validation example and a
+   separate Hardening Notes section. The skill is now declared
+   `management: local`, `provenance: adopted` (Jeffallan base attribution and
+   MIT notice retained; Cloudflare method origin recorded with upstream commit;
+   the installed base's own upstream commit remains unknown). Not imported:
+   everything requiring new infrastructure, the JSON schema and any automatic
+   security phase; no runtime code changed. Verification: `npm test` 397/397,
+   `npm run typecheck`, `git diff --check` clean, plus a frontmatter/structure
+   check of the edited skill. No efficacy improvement is claimed — no audit
+   was executed with the updated skill.
+   **Pending behavioral validation (C3-V):** on the next explicitly requested
+   real security review, record whether findings include all four evidence
+   facts, distinguish source claims/inference/reproduction, reserve severity
+   for confirmed vulnerabilities and keep hardening separate. Check for
+   unsupported impact claims, false positives, missed known issues and human
+   corrections; record elapsed time and available usage data. If feasible,
+   compare the same fixed scope with the pre-C3 guidance in separate contexts;
+   without a comparison, report usability observations rather than efficacy
+   gains. Persist scope/revision, outcomes and limitations in `docs/evals/`
+   and link the evidence here. This follow-up does not block C4 or authorize
+   an audit, active testing or an additional automatic reviewer.
 4. **C4 — Measure context before optimization.** Combine U16's parent skill
    count/description-size measurement with S2 usage instrumentation and a
    pre-change context baseline. Parent skill discovery and child context-file
@@ -81,12 +108,50 @@ Analytics (`extra/skills/ga4-analytics/`) is excluded pending the user's decisio
    remain conditional material for this review or a real project need, not
    separate immediate projects. Analytics remains excluded.
 
-**Current next action:** C3 — improve existing security guidance selectively.
-C1 and C2 are complete (2026-10-22); C3–C5 remain pending. R1.1–R1.3 follow this sequence and still require an explicit trial request.
+**Current next action:** C4 — measure context before optimization.
+C1 and C2 are complete (2026-10-22); C3 is complete (2026-10-23); C4–C5 remain
+pending. R1.1–R1.3 follow this sequence and still require an explicit trial request.
 W2/W3 and R2 retain their evidence-based deferral; C2 does not activate them.
 
 Supporting evidence: [TDD assessment](../research/tdd-agent-loop-assessment.md),
 [QA suite assessment](../research/claude-code-skills-assessment.md).
+
+## Cross-harness workflow migration (M)
+
+**Status:** planned, implementation not started (recorded 2026-10-22).
+At recording time the next action was C3; C3 completed 2026-10-23 and the next
+action is now C4. Recording M does not start a migration,
+reorder C1–C5 or activate extension trials. This roadmap owns coordination and
+priority; the [migration plan](cross-harness-workflow-migration.md) owns detailed
+checklists, acceptance criteria and consumer-project status. It was moved from
+the parent `dev` directory so the agreed work is versioned with agent-brains.
+
+The goal is to keep agent-brains as the canonical store across Pi, Codex and
+OpenCode, expose skills globally once per machine, and retain project-owned
+`.ai/` context without per-project skill symlink maintenance.
+
+- **M1 — Portable skills and role boundaries:** replace project-local skill
+  path assumptions; turn the instruction skill `feature` into planning-only
+  `spec-and-tasks`; define spec/task handoff to implementation and independent
+  review. Keep Pi `/feature` as the existing runtime workflow and preserve
+  historical artifacts and resume compatibility.
+- **M2 — Global distribution:** prepare a conservative installer, conflict
+  inventory, diagnostics and rollback; preserve personal skills and local
+  ownership/provenance. Replace the current OpenCode pointers, README contract
+  and structural tests together. Keep applicable setup/gitignore fixes.
+- **M3 — Machine setup and pilot:** configure the shared global catalog and
+  verify discovery/invocation in all three installed harnesses without local
+  skill links. Pi's existing global local-package registration is retained.
+- **M4 — Consumer rollout:** migrate boilerplates and individual repositories
+  using the plan's inventory; align `.ai` where useful, preserve project-specific
+  knowledge and remove only confirmed managed links after successful checks.
+
+M preserves completed C1/C2 behavior: observable acceptance criteria,
+proportionate tests, truthful execution ownership and inconsistent-verdict
+escalation. Do not repeat those tasks. Coordinate pre/post global-discovery
+measurements with C4 before M3; C5 owns usefulness/overlap decisions, so M does
+not authorize automatic skill deletion. Other runtime follow-ups and external
+trials retain their existing status and approval requirements.
 
 ## Goal
 
@@ -491,5 +556,6 @@ A future session should:
 4. Change exactly one item to `IN PROGRESS`.
 5. Record evidence and the promote/reject decision here when the item ends.
 
-**Next action:** C3 — improve existing security guidance selectively. R1.1 (`pi-vcc`)
+**Next action:** C4 — measure context before optimization (under C4, U16 and
+S2 measurement precede S1 deduplication). R1.1 (`pi-vcc`)
 is postponed behind C1–C5 and still requires an explicit trial request.

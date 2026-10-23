@@ -7,6 +7,11 @@ Centralized repository for AI agent configurations, skills, and project template
 > `/feature` workflow, reusing the same `.agents/skills/` and `profiles/*.list`.
 > The harness is part of `main`; see [docs/pi-brain/README.md](docs/pi-brain/README.md).
 
+Planned cross-harness centralization and project-context alignment are tracked
+in the [adoption roadmap](docs/plans/pi-plugin-adoption-roadmap.md#cross-harness-workflow-migration-m)
+and its [detailed migration plan](docs/plans/cross-harness-workflow-migration.md).
+The migration is not implemented; the setup instructions below describe the current system.
+
 ## Repository structure
 
 ```
