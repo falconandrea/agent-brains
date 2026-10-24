@@ -9,7 +9,8 @@ Imported from `6c16a01` onto `main` after `07d74d7`. U5 is already covered
 by code-review-follow-ups T5–T6. U1–U8 are implemented: U1–U7 are committed
 on `main` (U1 `b074318`, U2 `71706cf`, U3 `95806aa`, U4 `fa5303f`, U6
 `0815222`, U7 `8d45508`, U8 `f065e5a`; U5 in `07d74d7`). U9–U11 are
-committed in `af37cf6`. U12–U14 and U16 remain pending; U15 is implemented (2026-10-22). Use the
+committed in `af37cf6`. U12–U14 remain pending; U15 is implemented (2026-10-22)
+and U16 is complete (2026-10-24). Use the
 existing `verifyTimeoutMs` interface rather than introducing a seconds-based
 setting. Documentation integration does not authorize implementation.
 
@@ -547,10 +548,23 @@ setting. Documentation integration does not authorize implementation.
   and last round; the workflow test checks `needs_human`, preserved review and
   exactly one developer/reviewer pass. No runtime schema or resume change.
 
-- [ ] **U16 — Measure parent-session skill load** (F14).
+- [x] **U16 — Measure parent-session skill load** (F14).
   `docs/plans/pi-plugin-adoption-roadmap.md`.
   Coordinate with roadmap C4: measure before S1 deduplication and alongside
   S2 instrumentation. Keep parent discovery distinct from child injection.
   Satisfy: record the number of skills and the total description size that a
   parent Pi session receives after `pi install .`, plus whether profile
   filtering would matter. Investigation only; no code change.
+  Completed 2026-10-24 against Pi 0.84.2 in an isolated home, agent dir and
+  neutral project. Runtime observation: 64 skills discovered from the installed
+  package, 59 rendered in the parent prompt (five `disable-model-invocation`
+  exclusions), 17,706 bytes of visible descriptions, a 29,525-byte skills block
+  and a 32,236-byte base parent prompt; all 64 came from `pi.skills` with no
+  collisions or identical descriptions. Profile projection: `nodejs` would cut
+  the block by 62.6%, `full` by only 4.6%, but filtering removes capabilities
+  and has no measured quality or cost benefit, so it is not recommended here.
+  Child injection remains separate (e.g. `nodejs` planner: 12 rendered skills /
+  5,070-byte block) and context-file duplication remains unmeasured. Evidence,
+  commands, controlled symlink/copy duplicate checks and limits:
+  [U16 report](../../../docs/evals/pi-skill-load/U16-2026-10-24.md).
+  C4 remains open for the S2 baseline; no runtime, profile or skill changed.

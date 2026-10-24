@@ -98,6 +98,16 @@ Analytics (`extra/skills/ga4-analytics/`) is excluded pending the user's decisio
    duplication are separate measurements. Then implement S1 deduplication and
    compare against the baseline. Only then consider S3, using total quality,
    latency and available cost, never parent-token reduction alone.
+   **U16 complete (2026-10-24):** in an isolated Pi 0.84.2 install, a parent
+   session discovered 64 skills and rendered 59 (five
+   `disable-model-invocation` exclusions), with 17,706 bytes of visible
+   descriptions and a 29,525-byte skills block. All came from the installed
+   package; no name collisions or identical descriptions. Profile filtering
+   would cut the block by 62.6% for `nodejs` but only 4.6% for `full`, and it
+   removes capabilities without measured quality or cost benefit. Child skill
+   injection was measured separately and child context-file duplication remains
+   unmeasured. Evidence:
+   [U16 report](../evals/pi-skill-load/U16-2026-10-24.md).
 5. **C5 — Review the usefulness of the skill collection.** Run a bounded manual
    audit of triggers, permissions, overlap, distribution and actual incremental
    value with current models. Compare representative cases with and without
@@ -108,10 +118,12 @@ Analytics (`extra/skills/ga4-analytics/`) is excluded pending the user's decisio
    remain conditional material for this review or a real project need, not
    separate immediate projects. Analytics remains excluded.
 
-**Current next action:** C4 — measure context before optimization.
-C1 and C2 are complete (2026-10-22); C3 is complete (2026-10-23); C4–C5 remain
-pending. R1.1–R1.3 follow this sequence and still require an explicit trial request.
-W2/W3 and R2 retain their evidence-based deferral; C2 does not activate them.
+**Current next action:** C4 in progress — U16 measured the parent skill load
+(2026-10-24); next is S2 usage instrumentation and the pre-change baseline,
+then S1 deduplication. C1 and C2 are complete (2026-10-22); C3 is complete
+(2026-10-23); C5 remains pending. R1.1–R1.3 follow this sequence and still require
+an explicit trial request. W2/W3 and R2 retain their evidence-based deferral;
+C2 does not activate them.
 
 Supporting evidence: [TDD assessment](../research/tdd-agent-loop-assessment.md),
 [QA suite assessment](../research/claude-code-skills-assessment.md).
@@ -119,8 +131,8 @@ Supporting evidence: [TDD assessment](../research/tdd-agent-loop-assessment.md),
 ## Cross-harness workflow migration (M)
 
 **Status:** planned, implementation not started (recorded 2026-10-22).
-At recording time the next action was C3; C3 completed 2026-10-23 and the next
-action is now C4. Recording M does not start a migration,
+At recording time the next action was C3; C3 completed 2026-10-23, U16 completed
+2026-10-24 and C4 is in progress with S2 next. Recording M does not start a migration,
 reorder C1–C5 or activate extension trials. This roadmap owns coordination and
 priority; the [migration plan](cross-harness-workflow-migration.md) owns detailed
 checklists, acceptance criteria and consumer-project status. It was moved from
@@ -476,9 +488,11 @@ or replacing `/feature` with the package's own orchestration workflow.
 
 ## S — Local context and read-cost optimization
 
-**Status:** planned, implementation not started. Under C4, measure U16 and
-complete S2 instrumentation/baseline before S1; compare after S1, then consider S3. This roadmap owns task status; the research report
-owns supporting evidence and rationale.
+**Status:** planned, implementation not started. Under C4, U16 parent-load
+measurement is complete (2026-10-24); complete S2 instrumentation/baseline
+before S1, compare after S1, then consider S3. Evidence:
+[U16 report](../evals/pi-skill-load/U16-2026-10-24.md). This roadmap owns task
+status; the research report owns supporting evidence and rationale.
 
 ### S1 Deduplicate discovered and injected context
 
@@ -556,6 +570,6 @@ A future session should:
 4. Change exactly one item to `IN PROGRESS`.
 5. Record evidence and the promote/reject decision here when the item ends.
 
-**Next action:** C4 — measure context before optimization (under C4, U16 and
-S2 measurement precede S1 deduplication). R1.1 (`pi-vcc`)
-is postponed behind C1–C5 and still requires an explicit trial request.
+**Next action:** C4 — S2 usage instrumentation and pre-change baseline (U16 is
+complete, 2026-10-24). Under C4, S2 measurement precedes S1 deduplication. R1.1
+(`pi-vcc`) is postponed behind C1–C5 and still requires an explicit trial request.

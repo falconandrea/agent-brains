@@ -11,8 +11,9 @@ is already covered by `07d74d7` (code-review-follow-ups T5–T6), with
 `verifyTimeoutMs` defaulting to 600000 (10 min), validated between 1000 and
 3600000 ms. U1–U11 are implemented: U1–U8 are committed on `main` (U8 in
 `f065e5a`), U9–U11 are implemented on top of `f065e5a` (uncommitted).
-U12–U14/U16 remain pending; F13 option B is implemented (2026-10-22). Documentation
-integration does not authorize the remaining implementation.
+U12–U14 remain pending; U15 is implemented (2026-10-22) and U16 is complete
+(2026-10-24, investigation only). F13 option B is implemented (2026-10-22).
+Documentation integration does not authorize the remaining implementation.
 
 ## Overview
 

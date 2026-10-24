@@ -13,7 +13,8 @@
   [roadmap](../../docs/plans/pi-plugin-adoption-roadmap.md#cross-harness-workflow-migration-m).
   Includes per-project `.ai` alignment and the C1/C2 preservation constraints.
   Documentation only: global installation, skill rename and consumer migration
-  have not started; next action is C4. Detailed completion status belongs
+  have not started; next action is C4 (U16 measured 2026-10-24, S2 next).
+  Detailed completion status belongs
   to the migration plan, priority and coordination to the roadmap.
 
 - 2026-10-22 agreed consolidation order is owned by
@@ -21,7 +22,9 @@
   C1 completion policy/reconciliation → C2 TDD and test-quality consolidation →
   C3 feasible Cloudflare ideas in existing security-reviewer → C4 context/cost
   baseline then optimization → C5 skill usefulness review. No OS sandbox or
-  full Cloudflare installation is planned. Analytics is excluded. C1/C2/C3 are complete; next: C4. R1 plugin trials follow this sequence.
+  full Cloudflare installation is planned. Analytics is excluded. C1/C2/C3 are
+  complete; C4 is in progress (U16 measured, S2 next) and C5 is pending. R1
+  plugin trials follow this sequence.
 
 - New `agent-readiness` and `html-report` skills are registered in common/full;
   existing curated consumers need their next profile refresh to discover them.
@@ -30,16 +33,19 @@
   Consumer copies have not been updated in this task. Provenance, decisions and
   the upstream README PR recipe are in
   [the adaptation note](../../docs/research/alfonso-skills-adaptation.md).
-- Spotify-inspired context/read-cost workstream is planned, not started:
-  U16 parent-load measurement + S2 cost/cache/latency instrumentation and
-  baseline → S1 deduplicate discovered/injected context and compare → S3
-  consider an explicit optional read-only bulk-reader.
+- Spotify-inspired context/read-cost workstream is in progress under C4:
+  U16 parent-load measurement is complete (2026-10-24); next is S2
+  cost/cache/latency instrumentation and baseline, then S1 deduplicate
+  discovered/injected context and compare, then S3 consider an explicit
+  optional read-only bulk-reader.
   Status and acceptance criteria live in
   [the adoption roadmap](../../docs/plans/pi-plugin-adoption-roadmap.md#s--local-context-and-read-cost-optimization);
-  evidence lives in
-  [the assessment](../../docs/research/spotify-shunt-assessment.md).
-  When resuming this workstream, follow C4 and measure before S1. Automatic hooks, code-writing
-  workers and Jev remain deferred; no Portal installation is planned.
+  U16 evidence is in
+  [the U16 report](../../docs/evals/pi-skill-load/U16-2026-10-24.md), supporting
+  rationale in [the assessment](../../docs/research/spotify-shunt-assessment.md).
+  When resuming this workstream, complete S2 before S1. Automatic hooks,
+  code-writing workers and Jev remain deferred; no Portal installation is
+  planned.
 - `test-review` remains an explicit experimental extra. Initial pilot and isolated
   mutation evidence are in `docs/evals/test-review/README.md`. Three samples
   recorded so far: the initial T1–T3 historical pilot (B) and two fresh-feature
@@ -66,11 +72,36 @@
   (2026-10-17) are implemented and committed on `main` (U6 `0815222`, U7
   `8d45508`), and U8/F6 (2026-10-18) is committed on `main` in `f065e5a`.
   U9/U10/U11 (2026-10-22) are committed in `af37cf6` — see
-  Done. Remaining tasks U12–U14/U16 are pending; U15 is implemented (2026-10-22).
+  Done. Remaining tasks U12–U14 are pending; U15 is implemented (2026-10-22)
+  and U16 is complete (2026-10-24, see Done).
   This transfer authorizes documentation integration only; the F13
   `changes_requested` policy option B is implemented (U15).
 
 ## Done
+
+- 2026-10-24 main-review-hardening U16 (F14), first C4 step: measured the
+  parent-session skill load in an isolated Pi 0.84.2 install, without touching
+  the personal Pi setup or any consumer project. After `pi install .`, a parent
+  session discovered 64 skills from the package and rendered 59 (five
+  `disable-model-invocation` exclusions): 17,706 bytes of visible descriptions,
+  a 29,525-byte skills block and a 32,236-byte base parent prompt in the recorded
+  run. No name collisions or identical descriptions; controlled project-local
+  symlink/copy variants kept 64/59, while a copy produced 64 name collisions and
+  shadowed the package revision. Static profile projection: `nodejs` would cut
+  the block by 62.6%, `full` by 4.6%; filtering removes capabilities and has no
+  measured quality/cost benefit, so it is not recommended as the next change.
+  Child injection was kept separate (e.g. `nodejs` planner: 12 rendered skills,
+  5,070-byte block); context-file duplication remains unmeasured. No token,
+  billed-cost or latency measurement is claimed. Commands, environment,
+  controlled duplicate checks and limits:
+  [U16 report](../../docs/evals/pi-skill-load/U16-2026-10-24.md). Review
+  follow-up: `measure.mjs` now requires an explicit agent dir (or
+  `PI_CODING_AGENT_DIR`) before loading the SDK, keeps the SDK's `auth.json` and
+  `models-store.json` in that disposable directory, and emits projected profile
+  block bytes plus reduction; the report records the symlink/copy commands and
+  collision check, and corrects the nextjs child description bytes to
+  7,037/7,083/7,321. C4 remains open; next is S2 usage instrumentation and
+  baseline, then S1. No runtime, profile or skill changed.
 
 - 2026-10-23 C3: selectively improved the existing `security-reviewer` skill
   with the feasible Cloudflare `security-audit` method (assessed in
