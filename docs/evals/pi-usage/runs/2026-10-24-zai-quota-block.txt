@@ -1,0 +1,12 @@
+# zai quota block probe, 2026-10-24
+# disposable agent dir: independent models-store.json copy; ambient ZAI_API_KEY
+# command: node docs/evals/pi-usage/quota-probe.mjs <agentDir> <projectDir> --model zai/glm-5.2
+agent_end [{"role":"user"},{"role":"assistant","stopReason":"error","error":"429: {\"code\":\"1308\",\"message\":\"Usage limit reached for 5 hour. Your limit will reset at 2026-10-25 03:00:14\"}","usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"totalTokens":0,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}}}]
+auto_retry_start {"attempt":1,"maxAttempts":3,"error":"429: {\"code\":\"1308\",\"message\":\"Usage limit reached for 5 hour. Your limit will reset at 2026-10-25 03:00:14\"}"}
+agent_end [{"role":"assistant","stopReason":"error","error":"429: {\"code\":\"1308\",\"message\":\"Usage limit reached for 5 hour. Your limit will reset at 2026-10-25 03:00:14\"}","usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"totalTokens":0,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}}}]
+auto_retry_start {"attempt":2,"maxAttempts":3,"error":"429: {\"code\":\"1308\",\"message\":\"Usage limit reached for 5 hour. Your limit will reset at 2026-10-25 03:00:14\"}"}
+agent_end [{"role":"assistant","stopReason":"error","error":"429: {\"code\":\"1308\",\"message\":\"Usage limit reached for 5 hour. Your limit will reset at 2026-10-25 03:00:14\"}","usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"totalTokens":0,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}}}]
+auto_retry_start {"attempt":3,"maxAttempts":3,"error":"429: {\"code\":\"1308\",\"message\":\"Usage limit reached for 5 hour. Your limit will reset at 2026-10-25 03:00:14\"}"}
+agent_end [{"role":"assistant","stopReason":"error","error":"429: {\"code\":\"1308\",\"message\":\"Usage limit reached for 5 hour. Your limit will reset at 2026-10-25 03:00:14\"}","usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"totalTokens":0,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}}}]
+agent_end_batches 4
+elapsed_ms 18905

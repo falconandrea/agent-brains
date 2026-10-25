@@ -13,7 +13,8 @@
   [roadmap](../../docs/plans/pi-plugin-adoption-roadmap.md#cross-harness-workflow-migration-m).
   Includes per-project `.ai` alignment and the C1/C2 preservation constraints.
   Documentation only: global installation, skill rename and consumer migration
-  have not started; next action is C4 (U16 measured 2026-10-24, S2 next).
+  have not started; next action is C4 (U16 and S2 complete; the definitive S2
+  baseline was recorded 2026-10-25, so S1 is next).
   Detailed completion status belongs
   to the migration plan, priority and coordination to the roadmap.
 
@@ -23,7 +24,8 @@
   C3 feasible Cloudflare ideas in existing security-reviewer → C4 context/cost
   baseline then optimization → C5 skill usefulness review. No OS sandbox or
   full Cloudflare installation is planned. Analytics is excluded. C1/C2/C3 are
-  complete; C4 is in progress (U16 measured, S2 next) and C5 is pending. R1
+  complete; C4 is in progress (U16 and S2 complete; S2 closed 2026-10-25 with
+  the definitive zai baseline, S1 next) and C5 is pending. R1
   plugin trials follow this sequence.
 
 - New `agent-readiness` and `html-report` skills are registered in common/full;
@@ -34,16 +36,25 @@
   the upstream README PR recipe are in
   [the adaptation note](../../docs/research/alfonso-skills-adaptation.md).
 - Spotify-inspired context/read-cost workstream is in progress under C4:
-  U16 parent-load measurement is complete (2026-10-24); next is S2
-  cost/cache/latency instrumentation and baseline, then S1 deduplicate
-  discovered/injected context and compare, then S3 consider an explicit
-  optional read-only bulk-reader.
+  U16 parent-load measurement is complete (2026-10-24); S2 usage
+  instrumentation, the direct-reads protocol and the definitive zai baseline
+  are complete (2026-10-25), including a deterministic audit showing the root
+  `AGENTS.md` entering the child twice (2 entries, 1 canonical path, 220
+  duplicated bytes). The 4-task baseline recorded 78,420 input / 11,197 output
+  / 242,880 cacheRead / $0.222204 SDK cost / 179.9 s, with 20 reads (18
+  task/file pairs, 14 distinct files), 2 intra-task rereads and 4/4 answers
+  correct. Next is S1 deduplicate
+  discovered/injected context and rerun the same audit and protocol against
+  that baseline, then consider S3, an explicit optional read-only bulk-reader.
   Status and acceptance criteria live in
   [the adoption roadmap](../../docs/plans/pi-plugin-adoption-roadmap.md#s--local-context-and-read-cost-optimization);
   U16 evidence is in
-  [the U16 report](../../docs/evals/pi-skill-load/U16-2026-10-24.md), supporting
+  [the U16 report](../../docs/evals/pi-skill-load/U16-2026-10-24.md), S2
+  instrumentation and baseline evidence in
+  [the S2 report](../../docs/evals/pi-usage/S2-2026-10-24.md), supporting
   rationale in [the assessment](../../docs/research/spotify-shunt-assessment.md).
-  When resuming this workstream, complete S2 before S1. Automatic hooks,
+  Both S1 and the post-S1 comparison must reuse the S2 protocol.
+  Automatic hooks,
   code-writing workers and Jev remain deferred; no Portal installation is
   planned.
 - `test-review` remains an explicit experimental extra. Initial pilot and isolated
@@ -78,6 +89,58 @@
   `changes_requested` policy option B is implemented (U15).
 
 ## Done
+
+- 2026-10-24 C4/S2: usage accounting and the direct-reads protocol are
+  complete; **S2 closed 2026-10-25** with the definitive zai baseline. One
+  Pi-free module (`src/usage.ts`) owns the shapes every layer
+  shares: per-call `CallUsageDetail` and per-role `UsageTotals`, both with
+  optional token/cache/cost/elapsed fields (absent = never reported, 0 =
+  reported zero), per-field `coverage` and `isPartialUsageTotals`. The runner
+  folds every `agent_end` batch of one `session.prompt()` (retries/compaction),
+  de-duplicating repeated assistant messages by identity; provider and the full
+  model id (slashes intact) are stored separately; `usage: null` is safe; the
+  call's wall-clock is reported even when no tokens were. `agent.completed`
+  carries the uncoerced per-call detail; the workflow folds totals; the outcome
+  persists them plus the launch-segment `elapsedMs`; resume seeds from the same
+  fold so `outcome.usage === fold(all agent.completed events)` with no double
+  counting (pinned by tests). Renderers print `?` for unreported values and
+  `partial` when a total covers fewer calls — per role AND across roles, so a
+  cross-role sum missing one role's cost/tokens/cache/elapsed is not presented
+  as complete; `fmtDuration(119_600)` is `2m00s`. Review fixes: independent
+  catalog copy + symlink guard (exit 2), no invented zeros, retry
+  accumulation, full model ids, null safety, cross-role aggregate coverage.
+  Evidence: deterministic loader audit (`context-overlap`: 2 entries for one
+  unique `AGENTS.md`, 220 duplicated of 440 loaded bytes; the 3 repo tasks load
+  0) — the S1 before/after instrument; post-fix real smoke on OpenRouter
+  `mistralai/mistral-nemo` (1,230 in / 3 out / 16 cacheRead / $0.00002346 /
+  1,036 ms) and a real overlap run (182/60/2,544/0, $0.000005258, 2,249 ms,
+  1 read; wrong marker, a small-model quality point). The 3-task zai run
+  (71,715 in / 10,637 out / 240,832 cacheRead / $0.2098 SDK cost / 216.5s;
+  36 tool calls, 18 read calls over 16 files, 2 rereads; cacheRead 77.1% of
+  input-side) is PRE-REMEDIATION supporting evidence only: it used the old
+  single-batch capture and symlinked catalog and cannot prove its loop count.
+  Definitive 2026-10-25 run (commit `75ffea5` + uncommitted S2 code; tree
+  fingerprint `06f2bbec…`, manifest regenerated unchanged after the run): four
+  `zai/glm-5.2` tasks, all succeeded with non-zero usage and verbatim answers.
+  Totals 78,420 in / 11,197 out / 242,880 cacheRead / 0 cacheWrite /
+  $0.222204 SDK cost / 179.9 s; 34 tool calls, 20 reads (18 task/file pairs,
+  14 distinct files), 2 intra-task rereads; 4/4 answers correct against the
+  grading keys, including the
+  `context-overlap` marker `FIXTURE-AGENTS-MARKER` that the earlier OpenRouter
+  nemo run missed. Raw output and provenance:
+  `docs/evals/pi-usage/runs/2026-10-25-baseline-zai*.{json,txt}`.
+  The 2026-10-24 zai quota block (`429 code 1308`) is historical; an
+  availability probe on 2026-10-25 returned real usage.
+  Protocol, commands, grading keys, raw outputs and limits:
+  [S2 report](../../docs/evals/pi-usage/S2-2026-10-24.md) (`runs/` beside it).
+  Verification: `npm test` 429/429 (`tests/usage.test.ts` has 21 cases plus
+  updated workflow/resume/launcher/run-log suites), `npm run typecheck` clean,
+  `git diff --check` clean. Limits: single model/one run (variance
+  unmeasured), no `/feature` end-to-end run, verify-command durations
+  unmeasured, cache economics provider-specific, duplicated bytes not
+  separately billed, and the baseline JSON records absolute local read paths.
+  No profile, skill, plugin or reviewer changed; S1/S3 not
+  implemented; U16 remains the separate parent-load reference. Next: S1.
 
 - 2026-10-24 main-review-hardening U16 (F14), first C4 step: measured the
   parent-session skill load in an isolated Pi 0.84.2 install, without touching

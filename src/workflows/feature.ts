@@ -34,6 +34,13 @@ import { selectSkills } from "../skill-router.ts";
 import { routeContext } from "../context-router.ts";
 import { withBestEffortNotify } from "../ui-safe.ts";
 import {
+  copyUsageTotals,
+  foldCallUsage,
+  hasUsageData,
+  type CallUsageDetail,
+  type UsageTotals,
+} from "../usage.ts";
+import {
   decideNextRound,
   validateReviewResult,
   type ReviewIssue,
@@ -62,11 +69,10 @@ export interface FeatureDeps {
   signal?: AbortSignal;
 }
 
-export interface UsageTotals {
-  input: number;
-  output: number;
-  cost?: number;
-}
+// Re-exported for the callers that historically imported usage types from
+// this module (run launcher, extension, resume tests). The shape lives in
+// src/usage.ts since S2.
+export type { CallUsageDetail, UsageTotals } from "../usage.ts";
 
 /** Cumulative token usage per role over the whole run. */
 export type UsageByRole = Partial<Record<string, UsageTotals>>;
@@ -233,22 +239,22 @@ export async function runFeatureWorkflow(
     });
   }
 
-  // Token accounting: every agent result folds in here and ships with the
-  // outcome, whatever way the run ends. A missing usage (fake runners, a
-  // provider that reports nothing) simply does not add.
-  // In resume mode, we seed with reconstructed usage from the log.
-  const usage: UsageByRole = resume ? { ...resume.usage } : {};
-  const recordUsage = (role: string, u?: { input?: number; output?: number; cost?: number }): void => {
-    if (u === undefined) return;
-    const input = u.input ?? 0;
-    const output = u.output ?? 0;
-    const cost = u.cost;
-    if (input === 0 && output === 0 && cost === undefined) return;
-    const current = usage[role] ?? { input: 0, output: 0 };
-    current.input += input;
-    current.output += output;
-    if (cost !== undefined) current.cost = (current.cost ?? 0) + cost;
-    usage[role] = current;
+  // Token accounting (S2): every agent result folds in here and ships with
+  // the outcome, whatever way the run ends — tokens, cache, SDK-exposed
+  // cost, elapsed and the resolved model, with absent fields meaning "not
+  // reported". A usage with no data at all (fake runners, a provider that
+  // reports nothing) simply does not add.
+  // In resume mode, we seed with reconstructed usage from the log. Copy each
+  // role's totals: folding NEW calls mutates the totals object, and the replay
+  // state must stay an immutable snapshot of the interrupted run.
+  const usage: UsageByRole = resume
+    ? Object.fromEntries(
+        Object.entries(resume.usage).map(([role, totals]) => [role, copyUsageTotals(totals)]),
+      )
+    : {};
+  const recordUsage = (role: string, u?: CallUsageDetail): void => {
+    if (!hasUsageData(u)) return;
+    usage[role] = foldCallUsage(usage[role], u);
   };
 
   // --- Phase A: discovery --------------------------------------------------
@@ -291,9 +297,9 @@ export async function runFeatureWorkflow(
         type: "agent.completed",
         runId,
         role: "planner",
-        ...(result.usage
-          ? { usage: { input: result.usage.input ?? 0, output: result.usage.output ?? 0 } }
-          : {}),
+        // S2: the per-call detail passes through uncoerced — absent fields
+        // were not reported; the totals live only on the outcome event.
+        ...(hasUsageData(result.usage) ? { usage: result.usage } : {}),
       });
       recordUsage("planner", result.usage);
       return result;
@@ -581,7 +587,7 @@ export async function runFeatureWorkflow(
         type: "agent.completed",
         runId,
         role: "developer",
-        ...(devRun.usage ? { usage: { input: devRun.usage.input ?? 0, output: devRun.usage.output ?? 0 } } : {}),
+        ...(hasUsageData(devRun.usage) ? { usage: devRun.usage } : {}),
       });
       recordUsage("developer", devRun.usage);
       if (devRun.aborted || deps.signal?.aborted) return { status: "cancelled", at: "development", usage };
@@ -756,7 +762,7 @@ export async function runFeatureWorkflow(
       type: "agent.completed",
       runId,
       role: "reviewer",
-      ...(raw.usage ? { usage: { input: raw.usage.input ?? 0, output: raw.usage.output ?? 0 } } : {}),
+      ...(hasUsageData(raw.usage) ? { usage: raw.usage } : {}),
     });
     recordUsage("reviewer", raw.usage);
     if (raw.aborted || deps.signal?.aborted) return { status: "cancelled", at: `review #${reviewRound}`, usage };

@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { DEFAULT_MAX_REVIEW_ROUNDS } from "../config.ts";
 import type { WorkflowEvent, GitBaseline, GitService, HumanInput } from "../ports.ts";
 import { digestScripts, isPlainRecord, type VerifyFreeze } from "../verify.ts";
+import { foldCallUsage, hasUsageData } from "../usage.ts";
 import type { ResumeState, UsageByRole } from "./feature.ts";
 import { descriptionMarker, hasValidTaskList } from "./feature.ts";
 import type { ReviewIssue, ReviewResult } from "../review.ts";
@@ -252,11 +253,11 @@ export function replayRunLog(events: WorkflowEvent[], options: ReplayOptions = {
   events.forEach((event, i) => {
     switch (event.type) {
       case "agent.completed": {
-        if (event.usage) {
-          const current = usage[event.role] ?? { input: 0, output: 0 };
-          current.input += event.usage.input;
-          current.output += event.usage.output;
-          usage[event.role] = current;
+        // S2: same folding as the live workflow (shared helper), so replayed
+        // totals and outcome totals stay identical. Logs predating S2 carry
+        // `{input, output}` only — they fold with cost/elapsed/models absent.
+        if (hasUsageData(event.usage)) {
+          usage[event.role] = foldCallUsage(usage[event.role], event.usage);
         }
         break;
       }

@@ -1,0 +1,95 @@
+{
+  "recordedAt": "2026-10-24T18:17:34.377Z",
+  "model": "openrouter/mistralai/mistral-nemo",
+  "runner": "PiAgentRunner (src/pi/pi-agent-runner.ts)",
+  "protocol": "S2 direct-reads baseline; same tasks/scripts rerun for S1",
+  "taskFilter": [
+    "context-overlap"
+  ],
+  "fixture": {
+    "purpose": "context-overlap (S1 instrument)",
+    "files": [
+      {
+        "path": "AGENTS.md",
+        "bytes": 220,
+        "sha256": "f3e6a15f94b0c7d0f9cf693df7e953e4eac78b4a81520dfbe82154c955919dbd"
+      },
+      {
+        "path": "src/limits.ts",
+        "bytes": 154,
+        "sha256": "8735579ddfff61869674f9c46e2e0c92818e075a6dd09c4a4fd049d2e822f26d"
+      },
+      {
+        "path": "README.md",
+        "bytes": 171,
+        "sha256": "e8574cac1ae6d9012534e8fde63aac368d7e45400ee17f9d8d9042ccf4b5ff81"
+      }
+    ]
+  },
+  "contextAudits": {
+    "context-overlap": {
+      "agentsFileEntries": 2,
+      "uniquePaths": 1,
+      "duplicatePaths": [
+        {
+          "path": "AGENTS.md",
+          "count": 2
+        }
+      ],
+      "duplicateBytes": 220,
+      "loadedBytes": 440,
+      "effectiveBytes": 220,
+      "filePaths": [
+        "AGENTS.md",
+        "AGENTS.md"
+      ]
+    }
+  },
+  "tasks": [
+    {
+      "task": "context-overlap",
+      "project": "overlap",
+      "model": "openrouter/mistralai/mistral-nemo",
+      "injectedContextFiles": [
+        "AGENTS.md"
+      ],
+      "contextAudit": {
+        "agentsFileEntries": 2,
+        "uniquePaths": 1,
+        "duplicatePaths": [
+          {
+            "path": "AGENTS.md",
+            "count": 2
+          }
+        ],
+        "duplicateBytes": 220,
+        "loadedBytes": 440,
+        "effectiveBytes": 220,
+        "filePaths": [
+          "AGENTS.md",
+          "AGENTS.md"
+        ]
+      },
+      "usage": {
+        "input": 182,
+        "output": 60,
+        "cacheRead": 2544,
+        "cacheWrite": 0,
+        "cost": 0.0000052579999999999995,
+        "provider": "openrouter",
+        "model": "mistralai/mistral-nemo",
+        "elapsedMs": 2249
+      },
+      "wallClockMs": 2253,
+      "aborted": false,
+      "answerChars": 132,
+      "answer": "The canonical retry limit is 7, and the required marker is 'retryLimit'. In the file src/limits.ts, MAX_BATCH_SIZE is defined as 42.",
+      "toolCalls": {
+        "read": 1
+      },
+      "readCounts": {
+        "src/limits.ts": 1
+      }
+    }
+  ]
+}

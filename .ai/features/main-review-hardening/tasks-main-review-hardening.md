@@ -564,7 +564,9 @@ setting. Documentation integration does not authorize implementation.
   the block by 62.6%, `full` by only 4.6%, but filtering removes capabilities
   and has no measured quality or cost benefit, so it is not recommended here.
   Child injection remains separate (e.g. `nodejs` planner: 12 rendered skills /
-  5,070-byte block) and context-file duplication remains unmeasured. Evidence,
-  commands, controlled symlink/copy duplicate checks and limits:
+  5,070-byte block); context-file duplication was measured later by S2
+  (`context-overlap`: 1 canonical `AGENTS.md`, 2 entries, 220 duplicated
+  bytes). Evidence, commands, controlled symlink/copy duplicate checks and
+  limits:
   [U16 report](../../../docs/evals/pi-skill-load/U16-2026-10-24.md).
-  C4 remains open for the S2 baseline; no runtime, profile or skill changed.
+  C4 remains open for S1 and its comparison; no runtime, profile or skill changed.

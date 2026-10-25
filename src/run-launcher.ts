@@ -53,6 +53,13 @@ import type { WorkflowEvent, WorkflowEventSink } from "./ports.ts";
 import type { AcquireResult } from "./run-lock.ts";
 import type { FlowRunStatus } from "./pi/flow-stop.ts";
 import type { FeatureOutcome, UsageByRole } from "./workflows/feature.ts";
+import {
+  aggregateUsageCoverage,
+  copyUsageTotals,
+  isPartialUsageTotals,
+  type UsageField,
+  type UsageTotals,
+} from "./usage.ts";
 import { safeUi } from "./ui-safe.ts";
 
 /**
@@ -113,6 +120,10 @@ export function launchRun(
 ): Promise<void> {
   const events = createEventSink(deps);
   return (async () => {
+    // S2: wall-clock of THIS launch segment, from body start to the persisted
+    // outcome. A resumed run reports only its own segment; the pre-resume
+    // work stays visible in the summed per-call usage.
+    const segmentStartedAt = Date.now();
     try {
       // Inside the body, not before it: a sink callback that throws on
       // this first event (a broken run-log dep) still reaches the finally
@@ -124,9 +135,9 @@ export function launchRun(
       }
       const outcome = await runWorkflow(events);
       deps.run.status = outcome.status;
-      // Persist the full outcome — review findings included — before any
-      // TUI rendering can lose it (IDEAS.md run-state escalation).
-      events.emit(outcomeEvent(deps.run.runId, outcome));
+      // Persist the full outcome — review findings and usage included —
+      // before any TUI rendering can lose it (IDEAS.md run-state escalation).
+      events.emit(outcomeEvent(deps.run.runId, outcome, Date.now() - segmentStartedAt));
       // U8 (F6): the UI effects are best-effort. A stale/removed Pi context
       // throwing here must not reach the catch below — it would persist a
       // contradictory `workflow.failed` after `workflow.outcome` — nor reject
@@ -290,8 +301,12 @@ function createEventSink(deps: LaunchRunDeps): WorkflowEventSink {
 
 type OutcomeEvent = Extract<WorkflowEvent, { type: "workflow.outcome" }>;
 
-/** The persisted outcome event, built from the workflow's return value. */
-function outcomeEvent(runId: string, outcome: FeatureOutcome): OutcomeEvent {
+/**
+ * The persisted outcome event, built from the workflow's return value.
+ * `segmentElapsedMs` (S2) is the wall-clock of the launch segment that
+ * produced this outcome.
+ */
+function outcomeEvent(runId: string, outcome: FeatureOutcome, segmentElapsedMs: number): OutcomeEvent {
   return {
     type: "workflow.outcome",
     runId,
@@ -316,31 +331,111 @@ function outcomeEvent(runId: string, outcome: FeatureOutcome): OutcomeEvent {
           },
         }
       : {}),
+    // S2: usage passes through UNCOERCED — cost/elapsed stay absent when no
+    // call reported them, so an unavailable cost never looks like zero. The
+    // totals are copies of the workflow's per-role aggregates.
     usage: Object.fromEntries(
-      Object.entries(outcome.usage).map(([role, u]) => [
-        role,
-        { input: u?.input ?? 0, output: u?.output ?? 0 },
-      ]),
+      Object.entries(outcome.usage).map(([role, u]) => [role, copyUsageTotals(u)]),
     ),
+    elapsedMs: segmentElapsedMs,
   };
 }
 
-/** "planner 1.2k/0.4k · developer 8.9k/2.1k · total 10.1k/2.5k" (in/out). */
+/**
+ * "tokens in/out: planner 1.2k/0.4k · total 10.1k/2.5k · cache r1.2k/w0.4k ·
+ * sdk cost $0.0123 · elapsed 45.2s". The cost is explicitly labeled `sdk
+ * cost`: provider-exposed pricing, not billing. Segments appear only when
+ * some call reported the data; a field nobody reported renders as `?`, never
+ * as an invented zero. ` · partial` marks a total that exists but covers
+ * fewer calls than were folded — inside a role OR across roles, since a sum
+ * that silently skips one role's unreported field is incomplete too (see
+ * UsageTotals.coverage and aggregateUsageCoverage).
+ */
 export function renderUsage(usage: UsageByRole): string {
-  const roles = Object.entries(usage);
+  const roles = Object.entries(usage) as Array<[string, UsageTotals]>;
   if (roles.length === 0) return "";
-  const parts = roles.map(([role, u]) => `${role} ${fmtTokens(u!.input)}/${fmtTokens(u!.output)}`);
-  const total = roles.reduce(
-    (acc, [, u]) => ({ input: acc.input + u!.input, output: acc.output + u!.output }),
-    { input: 0, output: 0 },
-  );
-  parts.push(`total ${fmtTokens(total.input)}/${fmtTokens(total.output)}`);
-  return `tokens in/out: ${parts.join(" · ")}`;
+  const segments: string[] = [];
+
+  // Completeness of the CROSS-ROLE sums rendered below: a field nobody in a
+  // role reported still means those calls are not covered by the total.
+  const aggregate = aggregateUsageCoverage(usage);
+  const incomplete = (field: UsageField): boolean =>
+    aggregate !== undefined && aggregate.calls > 0 && aggregate.coverage[field] < aggregate.calls;
+  let partial = roles.some(([, u]) => isPartialUsageTotals(u));
+
+  const tokenRoles = roles.filter(([, u]) => u.input !== undefined || u.output !== undefined);
+  if (tokenRoles.length > 0) {
+    const parts = tokenRoles.map(([role, u]) => `${role} ${fmtMaybe(u.input)}/${fmtMaybe(u.output)}`);
+    const totalInput = sumDefined(tokenRoles.map(([, u]) => u.input));
+    const totalOutput = sumDefined(tokenRoles.map(([, u]) => u.output));
+    if (totalInput !== undefined && incomplete("input")) partial = true;
+    if (totalOutput !== undefined && incomplete("output")) partial = true;
+    parts.push(`total ${fmtMaybe(totalInput)}/${fmtMaybe(totalOutput)}`);
+    segments.push(`tokens in/out: ${parts.join(" · ")}`);
+  }
+
+  const cacheRead = sumDefined(roles.map(([, u]) => u.cacheRead));
+  const cacheWrite = sumDefined(roles.map(([, u]) => u.cacheWrite));
+  if (cacheRead !== undefined || cacheWrite !== undefined) {
+    if (cacheRead !== undefined && incomplete("cacheRead")) partial = true;
+    if (cacheWrite !== undefined && incomplete("cacheWrite")) partial = true;
+    segments.push(`cache r${fmtMaybe(cacheRead)}/w${fmtMaybe(cacheWrite)}`);
+  }
+
+  const cost = sumDefined(roles.map(([, u]) => u.cost));
+  if (cost !== undefined) {
+    if (incomplete("cost")) partial = true;
+    segments.push(`sdk cost ${fmtCost(cost)}`);
+  }
+
+  const elapsed = sumDefined(roles.map(([, u]) => u.elapsedMs));
+  if (elapsed !== undefined) {
+    if (incomplete("elapsedMs")) partial = true;
+    segments.push(`elapsed ${fmtDuration(elapsed)}`);
+  }
+
+  if (partial) segments.push("partial");
+  return segments.join(" · ");
 }
 
-/** 1234 → "1.2k", 250 → "250" — compact enough for a status line. */
+/** Sum only the totals that reported a value; undefined when none did. */
+function sumDefined(values: Array<number | undefined>): number | undefined {
+  let total: number | undefined;
+  for (const value of values) {
+    if (value !== undefined) total = (total ?? 0) + value;
+  }
+  return total;
+}
+
+/** 1234 → "1.2k", 250 → "250", undefined → "?" (unreported, not zero). */
 export function fmtTokens(n: number): string {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+}
+
+function fmtMaybe(n: number | undefined): string {
+  return n === undefined ? "?" : fmtTokens(n);
+}
+
+/**
+ * SDK-exposed cost in USD. Four decimals suit normal per-run costs, but a
+ * cheap model can report a real cost below $0.0001; printing that as
+ * `$0.0000` would make a measured cost look like zero. Small nonzero values
+ * keep enough decimals to stay visibly nonzero.
+ */
+export function fmtCost(n: number): string {
+  if (n === 0) return "$0.0000";
+  if (Math.abs(n) >= 0.0001) return `$${n.toFixed(4)}`;
+  return `$${n.toFixed(7)}`;
+}
+
+/** Milliseconds as seconds ("45.2s") or minutes ("3m12s"). */
+export function fmtDuration(ms: number): string {
+  // Round to whole seconds BEFORE splitting minutes/seconds: rounding the
+  // remainder afterwards can produce "1m60s" (e.g. 119_600 ms).
+  const totalSeconds = Math.round(ms / 1000);
+  if (totalSeconds < 60) return `${(ms / 1000).toFixed(1)}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  return `${minutes}m${String(totalSeconds % 60).padStart(2, "0")}s`;
 }
 
 function renderOutcome(outcome: FeatureOutcome): string {

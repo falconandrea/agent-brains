@@ -105,9 +105,21 @@ Analytics (`extra/skills/ga4-analytics/`) is excluded pending the user's decisio
    package; no name collisions or identical descriptions. Profile filtering
    would cut the block by 62.6% for `nodejs` but only 4.6% for `full`, and it
    removes capabilities without measured quality or cost benefit. Child skill
-   injection was measured separately and child context-file duplication remains
-   unmeasured. Evidence:
+   injection was measured separately. Evidence:
    [U16 report](../evals/pi-skill-load/U16-2026-10-24.md).
+   **S2 complete and closed (2026-10-25):** usage instrumentation (provider/
+   model, tokens, cache-read/write, SDK-exposed cost, elapsed) persists per call
+   and per run through run logs and resume, with absent ≠ zero, coverage for
+   partial totals (per role and across roles) and SDK cost ≠ billing. The
+   deterministic loader audit measures the duplicated child context
+   (`context-overlap`: one `AGENTS.md` discovered and injected, 2 entries /
+   220 duplicated bytes). The definitive 4-task `zai/glm-5.2` baseline is
+   recorded on the current tree: 78,420 input / 11,197 output / 242,880
+   cacheRead / $0.222204 SDK cost / 179.9 s, 20 reads (18 task/file pairs,
+   14 distinct files), 2 intra-task rereads; all four answers grade correct
+   against the keys, including the `context-overlap` marker. The earlier 3-task
+   zai run and OpenRouter runs are supporting evidence only. Evidence:
+   [S2 report](../evals/pi-usage/S2-2026-10-24.md). Next: S1.
 5. **C5 — Review the usefulness of the skill collection.** Run a bounded manual
    audit of triggers, permissions, overlap, distribution and actual incremental
    value with current models. Compare representative cases with and without
@@ -118,10 +130,13 @@ Analytics (`extra/skills/ga4-analytics/`) is excluded pending the user's decisio
    remain conditional material for this review or a real project need, not
    separate immediate projects. Analytics remains excluded.
 
-**Current next action:** C4 in progress — U16 measured the parent skill load
-(2026-10-24); next is S2 usage instrumentation and the pre-change baseline,
-then S1 deduplication. C1 and C2 are complete (2026-10-22); C3 is complete
-(2026-10-23); C5 remains pending. R1.1–R1.3 follow this sequence and still require
+**Current next action:** C4 in progress — U16 (parent skill load) and S2
+(instrumentation + definitive direct-reads baseline) are complete; **S2 closed
+2026-10-25**. Next is S1 deduplication and the before/after comparison on the
+same protocol. The deterministic overlap audit is the model-independent S1
+check (2 entries / 220 duplicate bytes before). C1 and C2 are complete
+(2026-10-22); C3 is complete (2026-10-23); C5 remains pending.
+R1.1–R1.3 follow this sequence and still require
 an explicit trial request. W2/W3 and R2 retain their evidence-based deferral;
 C2 does not activate them.
 
@@ -132,7 +147,8 @@ Supporting evidence: [TDD assessment](../research/tdd-agent-loop-assessment.md),
 
 **Status:** planned, implementation not started (recorded 2026-10-22).
 At recording time the next action was C3; C3 completed 2026-10-23, U16 completed
-2026-10-24 and C4 is in progress with S2 next. Recording M does not start a migration,
+2026-10-24, and S2 instrumentation/protocol completed 2026-10-24 with the
+definitive baseline recorded 2026-10-25; C4 continues with S1. Recording M does not start a migration,
 reorder C1–C5 or activate extension trials. This roadmap owns coordination and
 priority; the [migration plan](cross-harness-workflow-migration.md) owns detailed
 checklists, acceptance criteria and consumer-project status. It was moved from
@@ -488,11 +504,22 @@ or replacing `/feature` with the package's own orchestration workflow.
 
 ## S — Local context and read-cost optimization
 
-**Status:** planned, implementation not started. Under C4, U16 parent-load
-measurement is complete (2026-10-24); complete S2 instrumentation/baseline
-before S1, compare after S1, then consider S3. Evidence:
-[U16 report](../evals/pi-skill-load/U16-2026-10-24.md). This roadmap owns task
-status; the research report owns supporting evidence and rationale.
+**Status:** S2 instrumentation, protocol and the definitive baseline are
+complete (2026-10-25, on top of `75ffea5` + the uncommitted S2 instrumentation;
+tree fingerprint `06f2bbec…`), including a deterministic `context-overlap`
+audit of the discovered-plus-injected duplication S1 removes. **S2 closed
+2026-10-25.** The primary-model (`zai/glm-5.2`) 4-task run is the accepted
+"before": 78,420 input / 11,197 output / 242,880 cacheRead / $0.222204 SDK
+cost / 179.9 s, 20 reads (18 task/file pairs, 14 distinct files), 2 intra-task
+rereads, 4/4 answers correct
+against the keys (including the `context-overlap` marker). Next: S1
+deduplication, then the same audit + 4-task protocol on the post-S1 tree;
+consider S3 after. Evidence:
+[U16 report](../evals/pi-skill-load/U16-2026-10-24.md) (parent load) and
+[S2 report](../evals/pi-usage/S2-2026-10-24.md) (usage instrumentation,
+protocol, audit and definitive baseline; raw outputs under
+`docs/evals/pi-usage/runs/`). This roadmap owns task status; the research
+reports own supporting evidence and rationale.
 
 ### S1 Deduplicate discovered and injected context
 
@@ -508,15 +535,34 @@ duplication was reproduced; no billed-session savings have been measured.
 
 ### S2 Complete usage accounting and establish a baseline
 
-- [ ] Capture provider/model, input/output, cache-read/cache-write usage,
+- [x] Capture provider/model, input/output, cache-read/cache-write usage,
   exposed cost and elapsed time; preserve them through run logs and resume.
-- [ ] Distinguish unavailable cost from zero cost. Label provider-reported
+  Implemented 2026-10-24 in `src/usage.ts` + runner/workflow/launcher/resume;
+  per-call detail persists on `agent.completed`, totals on
+  `workflow.outcome`, and resume seeds from the same fold (no double
+  counting, pinned by tests).
+- [x] Distinguish unavailable cost from zero cost. Label provider-reported
   cost separately from actual subscription billing or estimated savings.
-- [ ] Record representative multi-file exploration tasks with direct reads,
+  Absent fields mean "not reported" everywhere (JSONL keeps the distinction);
+  cost is always labeled SDK-exposed pricing, never billing.
+- [x] Record representative multi-file exploration tasks with direct reads,
   including quality, follow-up reads, verification and review outcomes.
+  Protocol (3 repo tasks + `context-overlap`), deterministic loader audit and
+  the definitive `zai/glm-5.2` 4-task run recorded 2026-10-25 on the current
+  tree: all four calls succeeded with non-zero usage and all four answers
+  graded correct. Earlier 3-task zai and OpenRouter runs are supporting
+  evidence only. [S2 report](../evals/pi-usage/S2-2026-10-24.md).
 
 **Acceptance:** the baseline supports a total-cost and latency comparison,
 including future worker calls; reduced parent tokens alone are insufficient.
+— **MET (2026-10-25).** The definitive "before" records per-task and total
+tokens, cacheRead, SDK-exposed cost, elapsed, tools/reads/rereads and answer
+quality on the primary model (78,420 / 11,197 / 242,880 / $0.222204 / 179.9 s;
+4/4 correct), plus the deterministic duplication audit (2 entries / 220
+duplicate bytes before S1). Limits (single model, one run per task, no
+verify-phase timing, SDK-exposed cost only, 220 duplicated bytes not separately
+billed, no `/feature` end-to-end run) are documented in the report. The S1
+comparison must rerun the same protocol on the same tasks.
 
 ### S3 Trial an explicit optional bulk-reader
 
@@ -570,6 +616,8 @@ A future session should:
 4. Change exactly one item to `IN PROGRESS`.
 5. Record evidence and the promote/reject decision here when the item ends.
 
-**Next action:** C4 — S2 usage instrumentation and pre-change baseline (U16 is
-complete, 2026-10-24). Under C4, S2 measurement precedes S1 deduplication. R1.1
+**Next action:** C4 — S1 context deduplication, then rerun the same audit and
+4-task protocol against the definitive S2 baseline (recorded 2026-10-25; U16 and
+S2 are complete and S2 is closed). S2 measurement preceded S1
+and its protocol is the comparison instrument. R1.1
 (`pi-vcc`) is postponed behind C1–C5 and still requires an explicit trial request.

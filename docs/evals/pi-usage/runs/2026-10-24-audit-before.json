@@ -1,0 +1,74 @@
+{
+  "recordedAt": "2026-10-24T18:19:53.871Z",
+  "model": "zai/glm-5.2",
+  "runner": "PiAgentRunner (src/pi/pi-agent-runner.ts)",
+  "protocol": "S2 direct-reads baseline; same tasks/scripts rerun for S1",
+  "taskFilter": null,
+  "fixture": {
+    "purpose": "context-overlap (S1 instrument)",
+    "files": [
+      {
+        "path": "AGENTS.md",
+        "bytes": 220,
+        "sha256": "f3e6a15f94b0c7d0f9cf693df7e953e4eac78b4a81520dfbe82154c955919dbd"
+      },
+      {
+        "path": "src/limits.ts",
+        "bytes": 154,
+        "sha256": "8735579ddfff61869674f9c46e2e0c92818e075a6dd09c4a4fd049d2e822f26d"
+      },
+      {
+        "path": "README.md",
+        "bytes": 171,
+        "sha256": "e8574cac1ae6d9012534e8fde63aac368d7e45400ee17f9d8d9042ccf4b5ff81"
+      }
+    ]
+  },
+  "contextAudits": {
+    "config-flow": {
+      "agentsFileEntries": 0,
+      "uniquePaths": 0,
+      "duplicatePaths": [],
+      "duplicateBytes": 0,
+      "loadedBytes": 0,
+      "effectiveBytes": 0,
+      "filePaths": []
+    },
+    "resume-protocol": {
+      "agentsFileEntries": 0,
+      "uniquePaths": 0,
+      "duplicatePaths": [],
+      "duplicateBytes": 0,
+      "loadedBytes": 0,
+      "effectiveBytes": 0,
+      "filePaths": []
+    },
+    "usage-path": {
+      "agentsFileEntries": 0,
+      "uniquePaths": 0,
+      "duplicatePaths": [],
+      "duplicateBytes": 0,
+      "loadedBytes": 0,
+      "effectiveBytes": 0,
+      "filePaths": []
+    },
+    "context-overlap": {
+      "agentsFileEntries": 2,
+      "uniquePaths": 1,
+      "duplicatePaths": [
+        {
+          "path": "AGENTS.md",
+          "count": 2
+        }
+      ],
+      "duplicateBytes": 220,
+      "loadedBytes": 440,
+      "effectiveBytes": 220,
+      "filePaths": [
+        "AGENTS.md",
+        "AGENTS.md"
+      ]
+    }
+  },
+  "tasks": []
+}

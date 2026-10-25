@@ -1,0 +1,15 @@
+{
+  "model": "zai/glm-5.2",
+  "text": "pong",
+  "usage": {
+    "input": 440,
+    "output": 3,
+    "cacheRead": 832,
+    "cacheWrite": 0,
+    "cost": 0.00084552,
+    "provider": "zai",
+    "model": "glm-5.2",
+    "elapsedMs": 1867
+  },
+  "aborted": false
+}

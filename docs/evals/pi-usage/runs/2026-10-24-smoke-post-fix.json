@@ -1,0 +1,15 @@
+{
+  "model": "openrouter/mistralai/mistral-nemo",
+  "text": "Pong",
+  "usage": {
+    "input": 1230,
+    "output": 3,
+    "cacheRead": 16,
+    "cacheWrite": 0,
+    "cost": 0.00002346,
+    "provider": "openrouter",
+    "model": "mistralai/mistral-nemo",
+    "elapsedMs": 1036
+  },
+  "aborted": false
+}

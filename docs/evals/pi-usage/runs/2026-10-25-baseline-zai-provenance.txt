@@ -1,0 +1,44 @@
+S2 baseline tree provenance (generated before the measurement run)
+recordedAt: 2026-10-25T19:31:11Z
+commit: 75ffea55ac9115fd2fbcae75793835d46460166d
+branch: main
+node: v24.12.0
+protocol script: docs/evals/pi-usage/run-baseline.mjs
+protocol script sha256: b0e84a66be0d10f4e70710080a4d1f1da8c06755e3df5e6c5fa953ed71f604f5
+
+== git diff --stat HEAD (tracked modifications) ==
+ .ai/memory/progress.md                   |  72 ++++++++--
+ docs/plans/pi-plugin-adoption-roadmap.md |  84 +++++++++---
+ extensions/pi-brain.ts                   |  65 ++++++---
+ src/agent.ts                             |   8 +-
+ src/pi/pi-agent-runner.ts                | 111 ++++++++++-----
+ src/ports.ts                             |  25 +++-
+ src/run-launcher.ts                      | 133 +++++++++++++++---
+ src/workflows/feature.ts                 |  58 ++++----
+ src/workflows/resume.ts                  |  11 +-
+ tests/feature-workflow.test.ts           | 224 ++++++++++++++++++++++++++++---
+ tests/resume.test.ts                     | 154 ++++++++++++++++++++-
+ tests/run-launcher.test.ts               | 157 ++++++++++++++++++++--
+ tests/run-log.test.ts                    |  49 ++++++-
+ 13 files changed, 989 insertions(+), 162 deletions(-)
+
+== measured files manifest (sha256 <path>) ==
+2b356aa55520adb3119c4d467985a8e66b970b067fa855995486ebf660a3e01f  .ai/memory/progress.md
+bfdecadaa372d9437b625532f7ec5442f81be1fb8223362320cd3fbe67a2bea6  docs/plans/pi-plugin-adoption-roadmap.md
+d8f7eaec97706ff1f1dc7111bc2e2b5ba3ff56e7868c2801ddef32ee746e8072  extensions/pi-brain.ts
+b1685609809858deb3bbdaf03951244c380c3936d670681b099003671c0cfe9e  src/agent.ts
+56050d3df975ad6755d336c5362adbe3e98f94789bd9c78ee2a6d43e41d3750e  src/pi/pi-agent-runner.ts
+0433524fed2ea8a351c6180771a704d427ad569e1be61fe6bf501007e6ef0cdc  src/ports.ts
+bb598ca06a4a17b0d8abe408806912a149599e95639c5ce70e621963e11deb60  src/run-launcher.ts
+9cb521784335cd7cad102dcc5e81c8f480b98d116f8d1804aaf99edc673f157a  src/usage.ts
+4d5c7320eea1dd79c76dff7c7474949da4ea324df3a44f9a803594d41c84dec1  src/workflows/feature.ts
+214bb9fbd3880f04defd7dc93c629ddb43aa04ba1fc54bc88fd08b75c362e422  src/workflows/resume.ts
+ce08a9f8baa0c05e20d657fb21d6fd6c7512ed70750f5225b25ee5cff98c7b78  tests/feature-workflow.test.ts
+e4fb8d58cf4c82ff2c93b92464fac3c5014693374eecd207efe41431f6163a9c  tests/resume.test.ts
+f81a1024a7a74398d5c4e342c4fc03fefd7a3d5a7b75bc2e53b776cdeb6c5553  tests/run-launcher.test.ts
+7530d85a580dd62beb8058ba534af45b752360d2252791ed13b41d00ed0d8370  tests/run-log.test.ts
+2f55298eb4aa321cb5ebb40d6501578bd3f3a4ba06717767411be9cdfc2c4701  tests/usage.test.ts
+
+treeFingerprint_sha256: 06f2bbece1af4dd1233cb1078f0e6b527da65405fc13e5a65ef9487a5eab6e9a
+fingerprint scope: commit HEAD content for tracked modifications + untracked non-ignored files, excluding docs/evals/pi-usage/ (protocol and evidence); = sha256 of the manifest above
+reproduce: { git diff --name-only HEAD; git ls-files --others --exclude-standard; } | sort -u | grep -v '^docs/evals/pi-usage/' | xargs shasum -a 256

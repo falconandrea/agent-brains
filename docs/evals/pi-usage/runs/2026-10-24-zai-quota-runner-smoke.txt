@@ -1,0 +1,17 @@
+# PiAgentRunner smoke against zai during the quota block, 2026-10-24
+# command: node docs/evals/pi-usage/smoke.mjs <projectDir> <agentDir> --model zai/glm-5.2
+{
+  "model": "zai/glm-5.2",
+  "text": "",
+  "usage": {
+    "input": 0,
+    "output": 0,
+    "cacheRead": 0,
+    "cacheWrite": 0,
+    "cost": 0,
+    "provider": "zai",
+    "model": "glm-5.2",
+    "elapsedMs": 18088
+  },
+  "aborted": false
+}

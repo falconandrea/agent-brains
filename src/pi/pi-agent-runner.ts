@@ -21,6 +21,7 @@ import {
 import { Type } from "typebox";
 
 import type { AgentRunner, AgentRunRequest, AgentRunResult, ResultToolSpec } from "../agent.ts";
+import { usageFromAgentEnds, type CallUsageDetail } from "../usage.ts";
 import { toTypeBox, type JsonSchemaNode } from "./json-schema.ts";
 import {
   ASK_USER_BATCH_PARAMETERS,
@@ -35,7 +36,18 @@ export interface PiAgentRunnerDeps {
   /** Repo root. Also drives session naming and tool path resolution. */
   cwd: string;
   /** Operational trace for the TUI. Never raw model output. */
-  onEvent?: (event: { runId: string; role: string; type: string; detail?: string }) => void;
+  onEvent?: (event: {
+    runId: string;
+    role: string;
+    type: string;
+    detail?: string;
+    /**
+     * A whitelist of non-sensitive tool arguments (S2 instrumentation):
+     * `path`/`pattern` when the call carries them as strings. Never rendered,
+     * never persisted — callers use it to count reads/rereads.
+     */
+    args?: { path?: string; pattern?: string };
+  }) => void;
   /**
    * Bridge for `ask_user` raised from inside a child run. Returning null means
    * "nobody answered" and the child is told to assume and continue.
@@ -54,6 +66,32 @@ const READ_ONLY_TOOLS = ["read", "grep", "find", "ls"];
 const NO_ANSWER =
   "The user is not available right now. Pick the most reasonable option, state the " +
   "assumption explicitly in your final report, and continue.";
+
+/**
+ * Per-role skill filtering (spec §8.3). `skillsOverride` is a transformer over
+ * whatever discovery found, so passing cwd/agentDir here keeps normal
+ * discovery working — it is only bypassed when the loader itself is omitted.
+ *
+ * Exported so the S2 baseline can audit what the loader actually injects
+ * (discovered vs routed context) without duplicating this construction.
+ */
+export function buildResourceLoader(
+  request: Pick<AgentRunRequest, "cwd" | "skills" | "contextFiles">,
+): DefaultResourceLoader {
+  const wanted = request.skills;
+  const extra = request.contextFiles;
+  return new DefaultResourceLoader({
+    cwd: request.cwd,
+    agentDir: getAgentDir(),
+    skillsOverride: (base) => ({
+      skills: wanted ? base.skills.filter((s) => wanted.includes(s.name)) : base.skills,
+      diagnostics: base.diagnostics,
+    }),
+    ...(extra
+      ? { agentsFilesOverride: (base) => ({ agentsFiles: [...base.agentsFiles, ...extra] }) }
+      : {}),
+  });
+}
 
 export class PiAgentRunner implements AgentRunner {
   readonly #modelRuntime: ModelRuntime;
@@ -107,7 +145,7 @@ export class PiAgentRunner implements AgentRunner {
         cwd: request.cwd,
         sessionManager: SessionManager.inMemory(request.cwd),
         modelRuntime: this.#modelRuntime,
-        resourceLoader: this.#buildLoader(request),
+        resourceLoader: buildResourceLoader(request),
         model: await this.#resolveModel(request),
         thinkingLevel: request.model?.thinking,
         customTools,
@@ -118,7 +156,12 @@ export class PiAgentRunner implements AgentRunner {
       throw err;
     }
 
-    let usage: AgentRunResult["usage"];
+    let usage: CallUsageDetail | undefined;
+    // One session.prompt() can end the agent loop more than once (automatic
+    // retries, compaction recovery): each agent_end carries the messages of
+    // its own execution. Keep every batch and fold them together at the end —
+    // replacing per event would retain only the last execution's usage.
+    const agentEndBatches: unknown[][] = [];
     const unsubscribe = session.subscribe((event) => {
       if (event.type === "tool_execution_start") {
         this.#deps.onEvent?.({
@@ -126,16 +169,14 @@ export class PiAgentRunner implements AgentRunner {
           role: request.role,
           type: "tool",
           detail: event.toolName,
+          args: toolTraceArgs(event.args),
         });
       } else if (event.type === "agent_end") {
-        const totals = { input: 0, output: 0 };
-        for (const message of event.messages) {
-          if (message.role === "assistant") {
-            totals.input += message.usage.input;
-            totals.output += message.usage.output;
-          }
-        }
-        usage = totals;
+        // S2: full per-call usage — tokens, cache, SDK-exposed cost and the
+        // resolved provider/model — not just input/output. The fold is
+        // defensive (untyped SDK payload) and lives in the Pi-free usage
+        // module, where it is unit-tested (including multi-agent_end calls).
+        agentEndBatches.push(event.messages);
         this.#deps.onEvent?.({ runId: request.runId, role: request.role, type: "agent_end" });
       }
     });
@@ -153,7 +194,18 @@ export class PiAgentRunner implements AgentRunner {
     }
 
     try {
-      await session.prompt(request.prompt);
+      // S2: wall-clock of the whole agent call — prompt to agent end,
+      // tool rounds included. Reported even when usage is undefined (an
+      // aborted call still took time).
+      const callStartedAt = Date.now();
+      try {
+        await session.prompt(request.prompt);
+      } finally {
+        // Fold every agent_end batch of this call (retries included), then
+        // add the call's wall-clock. elapsedMs is reported even when no
+        // execution exposed any token/cost data.
+        usage = { ...(usageFromAgentEnds(agentEndBatches) ?? {}), elapsedMs: Date.now() - callStartedAt };
+      }
       return {
         role: request.role,
         text: lastAssistantText(session.messages),
@@ -171,27 +223,6 @@ export class PiAgentRunner implements AgentRunner {
       unsubscribe();
       session.dispose();
     }
-  }
-
-  /**
-   * Per-role skill filtering (spec §8.3). `skillsOverride` is a transformer over
-   * whatever discovery found, so passing cwd/agentDir here keeps normal
-   * discovery working — it is only bypassed when the loader itself is omitted.
-   */
-  #buildLoader(request: AgentRunRequest): DefaultResourceLoader {
-    const wanted = request.skills;
-    const extra = request.contextFiles;
-    return new DefaultResourceLoader({
-      cwd: request.cwd,
-      agentDir: getAgentDir(),
-      skillsOverride: (base) => ({
-        skills: wanted ? base.skills.filter((s) => wanted.includes(s.name)) : base.skills,
-        diagnostics: base.diagnostics,
-      }),
-      ...(extra
-        ? { agentsFilesOverride: (base) => ({ agentsFiles: [...base.agentsFiles, ...extra] }) }
-        : {}),
-    });
   }
 
   /**
@@ -328,6 +359,20 @@ function isAbort(err: unknown, signal?: AbortSignal): boolean {
   if (signal?.aborted) return true;
   const name = (err as { name?: string } | null)?.name;
   return name === "AbortError";
+}
+
+/**
+ * Whitelist of non-sensitive tool arguments for the onEvent trace (S2): only
+ * string `path`/`pattern` fields pass, never full tool payloads (write/edit
+ * args carry file contents) — the trace is for counting reads/rereads.
+ */
+function toolTraceArgs(args: unknown): { path?: string; pattern?: string } | undefined {
+  if (typeof args !== "object" || args === null) return undefined;
+  const { path, pattern } = args as { path?: unknown; pattern?: unknown };
+  const next: { path?: string; pattern?: string } = {};
+  if (typeof path === "string" && path !== "") next.path = path;
+  if (typeof pattern === "string" && pattern !== "") next.pattern = pattern;
+  return Object.keys(next).length > 0 ? next : undefined;
 }
 
 function buildResultTool(spec: ResultToolSpec, capture: (payload: unknown) => void): ToolDefinition {

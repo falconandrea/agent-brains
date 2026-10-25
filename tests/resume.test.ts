@@ -12,6 +12,7 @@ import { createHash } from "node:crypto";
 
 import { replayRunLog, isResumable, validateResumePreconditions, hasPatchChanged, askResumeWithChangedDiff, type Refusal } from "../src/workflows/resume.ts";
 import { digestScripts } from "../src/verify.ts";
+import { foldCallUsage } from "../src/usage.ts";
 import type { WorkflowEvent, GitService, GitBaseline, HumanInput } from "../src/ports.ts";
 
 // Simple fakes for testing
@@ -133,7 +134,17 @@ test("replayRunLog reconstructs state from log interrupted mid-develop", () => {
   assert.equal(result.state.phase, "develop");
   assert.equal(result.state.developerRuns, 0, "interrupted develop is re-run, not counted");
   assert.equal(result.state.reviewRound, 0);
-  assert.deepEqual(result.state.usage, { planner: { input: 1000, output: 500 } });
+  assert.deepEqual(result.state.usage, {
+    // S2: the fold adds the aggregate fields; cache/cost/elapsed/models stay
+    // ABSENT because this pre-S2 event reported none (no inherited zeros).
+    planner: {
+      input: 1000,
+      output: 500,
+      models: [],
+      calls: 1,
+      coverage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: 0, elapsedMs: 0 },
+    },
+  });
 });
 
 test("replayRunLog reconstructs state from log after develop completed (verify)", () => {
@@ -274,10 +285,135 @@ test("replayRunLog aggregates usage per role", () => {
   const result = replayRunLog(events);
   assert.equal(result.ok, true);
   assert.deepEqual(result.state.usage, {
-    planner: { input: 1000, output: 500 },
-    developer: { input: 3500, output: 1750 },
-    reviewer: { input: 3000, output: 1500 },
+    planner: {
+      input: 1000,
+      output: 500,
+      models: [],
+      calls: 1,
+      coverage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: 0, elapsedMs: 0 },
+    },
+    developer: {
+      input: 3500,
+      output: 1750,
+      models: [],
+      calls: 2,
+      coverage: { input: 2, output: 2, cacheRead: 0, cacheWrite: 0, cost: 0, elapsedMs: 0 },
+    },
+    reviewer: {
+      input: 3000,
+      output: 1500,
+      models: [],
+      calls: 1,
+      coverage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: 0, elapsedMs: 0 },
+    },
   });
+});
+
+test("replayRunLog folds S2 detail: cache, cost, elapsed, models — old and new events together", () => {
+  const events: WorkflowEvent[] = [
+    { type: "workflow.started", runId: "run-s2", workflow: "feature", baseline: "abc123" },
+    { type: "phase.started", runId: "run-s2", phase: "spec" },
+    // Pre-S2 event shape (input/output only).
+    { type: "agent.completed", runId: "run-s2", role: "planner", usage: { input: 100, output: 50 } },
+    { type: "phase.started", runId: "run-s2", phase: "develop" },
+    // Full S2 shape.
+    {
+      type: "agent.completed",
+      runId: "run-s2",
+      role: "developer",
+      usage: {
+        input: 900,
+        output: 300,
+        cacheRead: 400,
+        cacheWrite: 100,
+        cost: 0.004,
+        elapsedMs: 20_000,
+        provider: "zai",
+        model: "glm-5.2",
+      },
+    },
+    // A second S2 call: same model, adds cost/elapsed; model stays distinct-once.
+    {
+      type: "agent.completed",
+      runId: "run-s2",
+      role: "developer",
+      usage: { input: 10, output: 5, cost: 0.001, elapsedMs: 1_000, provider: "zai", model: "glm-5.2" },
+    },
+    { type: "phase.started", runId: "run-s2", phase: "review #1" },
+  ];
+  const result = replayRunLog(events);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.state.usage.planner, {
+    input: 100,
+    output: 50,
+    models: [],
+    calls: 1,
+    coverage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: 0, elapsedMs: 0 },
+  });
+  assert.deepEqual(result.state.usage.developer, {
+    input: 910,
+    output: 305,
+    cacheRead: 400,
+    cacheWrite: 100,
+    cost: 0.005,
+    elapsedMs: 21_000,
+    models: ["zai/glm-5.2"],
+    calls: 2,
+    coverage: { input: 2, output: 2, cacheRead: 1, cacheWrite: 1, cost: 2, elapsedMs: 2 },
+  });
+});
+
+test("resume seeds usage from the log once: replay of the concatenated log equals the resumed outcome totals", () => {
+  // The no-double-counting invariant (S2): the outcome of a resumed run is
+  // seeded with the pre-resume per-call events and adds only the new calls,
+  // so folding ALL agent.completed events of the concatenated log must equal
+  // the resumed run's outcome usage exactly.
+  const interrupted: WorkflowEvent[] = [
+    { type: "workflow.started", runId: "run-nd", workflow: "feature", baseline: "abc123" },
+    { type: "phase.started", runId: "run-nd", phase: "develop" },
+    {
+      type: "agent.completed",
+      runId: "run-nd",
+      role: "developer",
+      usage: { input: 1000, output: 400, cacheRead: 200, cacheWrite: 50, cost: 0.01, elapsedMs: 10_000 },
+    },
+    { type: "phase.started", runId: "run-nd", phase: "verify" },
+  ];
+  const first = replayRunLog(interrupted);
+  assert.equal(first.ok, true);
+
+  // The resumed run adds one developer call on top of the seed.
+  const seeded = foldCallUsage(first.state.usage.developer, {
+    input: 500,
+    output: 200,
+    cacheRead: 100,
+    cacheWrite: 0,
+    cost: 0.005,
+    elapsedMs: 5_000,
+  });
+
+  // Concatenated log: interruption + resume marker + the new call.
+  const resumed: WorkflowEvent[] = [
+    ...interrupted,
+    { type: "workflow.resumed", runId: "run-nd", phase: "verify" },
+    { type: "phase.started", runId: "run-nd", phase: "verify" },
+    {
+      type: "agent.completed",
+      runId: "run-nd",
+      role: "developer",
+      usage: { input: 500, output: 200, cacheRead: 100, cacheWrite: 0, cost: 0.005, elapsedMs: 5_000 },
+    },
+    { type: "phase.started", runId: "run-nd", phase: "review #1" },
+  ];
+  const second = replayRunLog(resumed);
+  assert.equal(second.ok, true);
+  assert.deepEqual(
+    second.state.usage.developer,
+    seeded,
+    "replaying the whole log matches seed + new calls — nothing counted twice",
+  );
+  assert.equal(second.state.usage.developer!.calls, 2);
+  assert.equal(second.state.usage.developer!.cost, 0.015);
 });
 
 test("replayRunLog handles torn final line gracefully", () => {
@@ -517,7 +653,15 @@ test("an approved review without outcome is already_decided, not a new fix round
   assert.equal(result.refusal.status, "completed");
   assert.deepEqual(result.refusal.review, { verdict: "approved", summary: "all good", issues: [] });
   assert.deepEqual(result.refusal.files, ["src/file.ts"]);
-  assert.deepEqual(result.refusal.usage, { reviewer: { input: 11, output: 7 } });
+  assert.deepEqual(result.refusal.usage, {
+    reviewer: {
+      input: 11,
+      output: 7,
+      models: [],
+      calls: 1,
+      coverage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: 0, elapsedMs: 0 },
+    },
+  });
 });
 
 test("a needs_human review verdict without outcome is already_decided too", () => {

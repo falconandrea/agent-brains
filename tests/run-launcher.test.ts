@@ -9,10 +9,29 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { agentStatus, launchRun, type LaunchRunDeps, type LauncherRunState } from "../src/run-launcher.ts";
+import { agentStatus, fmtCost, fmtDuration, launchRun, renderUsage, type LaunchRunDeps, type LauncherRunState } from "../src/run-launcher.ts";
 import { UserDismissedError } from "../src/ports.ts";
 import type { WorkflowEvent, WorkflowEventSink } from "../src/ports.ts";
 import type { FeatureOutcome } from "../src/workflows/feature.ts";
+import type { UsageTotals } from "../src/usage.ts";
+
+/** Complete UsageTotals literal with the S2 defaults spelled out. */
+const totals = (input: number, output: number, extra: Partial<UsageTotals> = {}): UsageTotals => ({
+  input,
+  output,
+  models: [],
+  calls: 1,
+  coverage: {
+    input: 1,
+    output: 1,
+    cacheRead: extra.cacheRead !== undefined ? 1 : 0,
+    cacheWrite: extra.cacheWrite !== undefined ? 1 : 0,
+    cost: extra.cost !== undefined ? 1 : 0,
+    elapsedMs: extra.elapsedMs !== undefined ? 1 : 0,
+    ...extra.coverage,
+  },
+  ...extra,
+});
 
 /** Fake active-run record — the mutable thing /flow status|log|stop read. */
 function makeRun(): LauncherRunState {
@@ -136,7 +155,7 @@ const completedOutcome: FeatureOutcome = {
     summary: "clean",
     issues: [{ id: "R1", severity: "warning", category: "maintainability", problem: "long function" }],
   },
-  usage: { planner: { input: 100, output: 20 }, developer: { input: 400, output: 80 } },
+  usage: { planner: totals(100, 20), developer: totals(400, 80) },
 };
 
 test("completed: full outcome event last, status/phase transitions, lock released exactly once", async () => {
@@ -174,8 +193,10 @@ test("completed: full outcome event last, status/phase transitions, lock release
       summary: "clean",
       issues: [{ id: "R1", severity: "warning", category: "maintainability", problem: "long function" }],
     },
-    usage: { planner: { input: 100, output: 20 }, developer: { input: 400, output: 80 } },
+    usage: { planner: totals(100, 20), developer: totals(400, 80) },
+    elapsedMs: (state.runLog.at(-1) as { elapsedMs?: number }).elapsedMs,
   });
+  assert.equal(typeof (state.runLog.at(-1) as { elapsedMs?: number }).elapsedMs, "number", "S2 segment elapsed on the outcome");
 
   assert.equal(state.notifications.length, 1);
   assert.equal(state.notifications[0]!.level, "info");
@@ -195,7 +216,7 @@ test("needs_human: reason and review on the outcome event, warning notification"
     status: "needs_human",
     reason: "verify failed after 3 attempts",
     review: { verdict: "needs_human", summary: "flaky suite", issues: [] },
-    usage: { developer: { input: 10, output: 5 } },
+    usage: { developer: totals(10, 5) },
   });
   await launched;
 
@@ -206,7 +227,7 @@ test("needs_human: reason and review on the outcome event, warning notification"
   assert.equal("summary" in outcome, false);
   assert.equal("files" in outcome, false);
   assert.deepEqual(outcome.review, { verdict: "needs_human", summary: "flaky suite", issues: [] });
-  assert.deepEqual(outcome.usage, { developer: { input: 10, output: 5 } });
+  assert.deepEqual(outcome.usage, { developer: totals(10, 5) });
   assert.deepEqual(state.notifications.map((n) => n.level), ["warning"]);
   assert.match(state.notifications[0]!.message, /NEEDS HUMAN — verify failed after 3 attempts/);
   assert.equal(state.bells, 1);
@@ -343,8 +364,13 @@ test("workflow.outcome carries the complete payload: optional issue fields, usag
         { id: "R2", severity: "suggestion", category: "tests", problem: "no test" },
       ],
     },
-    // `cost` never persists on the outcome event; only input/output do.
-    usage: { planner: { input: 3, output: 4, cost: 0.01 }, reviewer: { input: 5, output: 6 } },
+    // S2: cost/cache/elapsed/models/calls persist on the outcome event —
+    // `cost` is no longer dropped (that was the pre-S2 behavior), and a role
+    // whose cost was never reported keeps `cost` ABSENT, not zero.
+    usage: {
+      planner: totals(3, 4, { cacheRead: 7, cacheWrite: 2, cost: 0.01, elapsedMs: 1500, models: ["zai/glm-5.2"], calls: 1 }),
+      reviewer: totals(5, 6),
+    },
   });
   await launched;
 
@@ -370,8 +396,29 @@ test("workflow.outcome carries the complete payload: optional issue fields, usag
         { id: "R2", severity: "suggestion", category: "tests", problem: "no test" },
       ],
     },
-    usage: { planner: { input: 3, output: 4 }, reviewer: { input: 5, output: 6 } },
+    usage: {
+      planner: {
+        input: 3,
+        output: 4,
+        cacheRead: 7,
+        cacheWrite: 2,
+        cost: 0.01,
+        elapsedMs: 1500,
+        models: ["zai/glm-5.2"],
+        calls: 1,
+        coverage: { input: 1, output: 1, cacheRead: 1, cacheWrite: 1, cost: 1, elapsedMs: 1 },
+      },
+      reviewer: {
+        input: 5,
+        output: 6,
+        models: [],
+        calls: 1,
+        coverage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: 0, elapsedMs: 0 },
+      },
+    },
+    elapsedMs: (state.runLog.at(-1) as { elapsedMs?: number }).elapsedMs,
   });
+  assert.ok((state.runLog.at(-1) as { elapsedMs?: number }).elapsedMs! >= 0, "segment elapsed present");
   assert.equal(state.releases, 1);
 });
 
@@ -562,4 +609,98 @@ test("U8: agentStatus passes a working status through unchanged", () => {
   const onEvent = agentStatus((text) => void seen.push(text));
   onEvent({ role: "planner", type: "agent_end" });
   assert.deepEqual(seen, ["planner: agent_end"]);
+});
+
+test("S2: fmtCost keeps a small nonzero cost visible instead of rounding it to zero", () => {
+  assert.equal(fmtCost(0), "$0.0000", "a reported zero stays zero");
+  assert.equal(fmtCost(0.0123), "$0.0123");
+  assert.equal(fmtCost(0.00002346), "$0.0000235", "a sub-cent cost does not render as $0.0000");
+  assert.notEqual(fmtCost(0.00002346), fmtCost(0));
+});
+
+test("S2: fmtDuration rounds before splitting minutes and seconds", () => {
+  assert.equal(fmtDuration(45_200), "45.2s");
+  assert.equal(fmtDuration(59_400), "59.4s");
+  // 119.6s used to render as "1m60s": round to 120s first, then split.
+  assert.equal(fmtDuration(119_600), "2m00s");
+  assert.equal(fmtDuration(60_000), "1m00s");
+  assert.equal(fmtDuration(3_600_000), "60m00s");
+});
+
+/** Totals whose only fact is a token pair (no coverage for cost/cache/elapsed). */
+const tokenOnly = (input: number | undefined, output: number | undefined): UsageTotals => ({
+  ...(input !== undefined ? { input } : {}),
+  ...(output !== undefined ? { output } : {}),
+  models: [],
+  calls: 1,
+  coverage: {
+    input: input !== undefined ? 1 : 0,
+    output: output !== undefined ? 1 : 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    cost: 0,
+    elapsedMs: 0,
+  },
+});
+
+test("S2: cross-role cost total missing one role's cost is marked partial", () => {
+  // Review reproduction: planner reported $0.10, developer reported none.
+  // The $0.10 sum is real but does not cover the developer call.
+  const line = renderUsage({
+    planner: totals(3, 4, { cost: 0.1 }),
+    developer: totals(5, 6),
+  });
+  assert.match(line, /sdk cost \$0\.1000/);
+  assert.match(line, /· partial$/);
+});
+
+test("S2: cross-role token totals missing one side are marked partial", () => {
+  const line = renderUsage({
+    planner: tokenOnly(100, 4),
+    developer: tokenOnly(undefined, 6),
+  });
+  assert.match(line, /total 100\/10/);
+  assert.match(line, /· partial$/);
+
+  const complete = renderUsage({
+    planner: tokenOnly(100, 4),
+    developer: tokenOnly(50, 6),
+  });
+  assert.doesNotMatch(complete, /partial/);
+});
+
+test("S2: cross-role cache and elapsed totals missing one role are marked partial", () => {
+  const cache = renderUsage({
+    planner: totals(1, 1, { cacheRead: 7, cacheWrite: 2 }),
+    developer: totals(1, 1),
+  });
+  assert.match(cache, /cache r7\/w2/);
+  assert.match(cache, /· partial$/);
+
+  const elapsed = renderUsage({
+    planner: totals(1, 1, { elapsedMs: 1_000 }),
+    developer: totals(1, 1),
+  });
+  assert.match(elapsed, /elapsed 1\.0s/);
+  assert.match(elapsed, /· partial$/);
+});
+
+test("S2: a cross-role total over complete roles stays unmarked", () => {
+  const line = renderUsage({
+    planner: totals(1, 2, { cacheRead: 3, cacheWrite: 4, cost: 0.01, elapsedMs: 1_500 }),
+    developer: totals(5, 6, { cacheRead: 7, cacheWrite: 8, cost: 0.02, elapsedMs: 2_500 }),
+  });
+  assert.doesNotMatch(line, /partial/);
+  assert.match(line, /sdk cost \$0\.0300/);
+});
+
+test("S2: unknown cross-role coverage is not claimed as partial", () => {
+  // A role replayed from a pre-coverage log has calls but no coverage; its
+  // completeness is unknown, so the aggregate must not guess either way.
+  const legacy: UsageTotals = { input: 2, output: 2, models: [], calls: 1 };
+  const line = renderUsage({
+    planner: totals(1, 1, { cost: 0.1 }),
+    developer: legacy,
+  });
+  assert.doesNotMatch(line, /partial/);
 });

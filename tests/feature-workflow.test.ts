@@ -30,6 +30,8 @@ import {
   validateTaskList,
   type FeatureDeps,
 } from "../src/workflows/feature.ts";
+import { replayRunLog } from "../src/workflows/resume.ts";
+import { usageFromEvents } from "../src/usage.ts";
 import { mkdirSync, writeFileSync } from "node:fs";
 
 const PROFILES_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "profiles");
@@ -208,10 +210,31 @@ test("token usage aggregates per role and ships with the outcome", async () => {
   const outcome = await runFeatureWorkflow(deps, "add invitations", "run-usage");
 
   assert.equal(outcome.status, "completed");
+  // None of these calls reported cache/cost/elapsed: those fields stay
+  // ABSENT on the totals (unavailable), while coverage records that the
+  // token counters were reported by every call.
   assert.deepEqual(outcome.usage, {
-    planner: { input: 1000, output: 500 },
-    developer: { input: 4000, output: 1800 },
-    reviewer: { input: 6000, output: 2400 },
+    planner: {
+      input: 1000,
+      output: 500,
+      models: [],
+      calls: 1,
+      coverage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: 0, elapsedMs: 0 },
+    },
+    developer: {
+      input: 4000,
+      output: 1800,
+      models: [],
+      calls: 2,
+      coverage: { input: 2, output: 2, cacheRead: 0, cacheWrite: 0, cost: 0, elapsedMs: 0 },
+    },
+    reviewer: {
+      input: 6000,
+      output: 2400,
+      models: [],
+      calls: 2,
+      coverage: { input: 2, output: 2, cacheRead: 0, cacheWrite: 0, cost: 0, elapsedMs: 0 },
+    },
   });
 
   const agentDone = events.filter((e) => e.type === "agent.completed");
@@ -236,6 +259,73 @@ test("a run with no reported usage yields an empty usage map, not undefined", as
   );
   const outcome = await runFeatureWorkflow(deps, "add invitations", "run-no-usage");
   assert.deepEqual(outcome.usage, {});
+});
+
+test("S2: agent.completed carries the full per-call detail uncoerced, partial usage included", async () => {
+  let reviewIndex = 0;
+  const { deps, events } = harness((req) => {
+    if (req.role === "planner") {
+      // Partial usage: only cost — no tokens at all. Must persist as-is,
+      // never inflated with invented zeros on the event.
+      return { ...plannerResult, usage: { cost: 0.001 } };
+    }
+    if (req.role === "developer") {
+      return {
+        ...devResult,
+        usage: {
+          input: 2000,
+          output: 900,
+          cacheRead: 800,
+          cacheWrite: 100,
+          cost: 0.02,
+          elapsedMs: 12_000,
+          provider: "zai",
+          model: "glm-5.2",
+        },
+      };
+    }
+    reviewIndex += 1;
+    return reviewOf({ verdict: "approved", summary: "ok", issues: [] });
+  });
+
+  const outcome = await runFeatureWorkflow(deps, "add invitations", "run-s2-detail");
+  assert.equal(outcome.status, "completed");
+
+  const done = events.filter((e): e is Extract<WorkflowEvent, { type: "agent.completed" }> => e.type === "agent.completed");
+  // The planner event keeps ONLY the reported cost: no input/output keys.
+  assert.deepEqual(done.find((e) => e.role === "planner")!.usage, { cost: 0.001 });
+  assert.deepEqual(done.find((e) => e.role === "developer")!.usage, {
+    input: 2000,
+    output: 900,
+    cacheRead: 800,
+    cacheWrite: 100,
+    cost: 0.02,
+    elapsedMs: 12_000,
+    provider: "zai",
+    model: "glm-5.2",
+  });
+
+  // And the totals fold everything the calls reported. The cost-only call
+  // produces NO token/cache fields: absent, not fabricated zeros.
+  assert.deepEqual(outcome.usage.planner, {
+    cost: 0.001,
+    models: [],
+    calls: 1,
+    coverage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 1, elapsedMs: 0 },
+  });
+  assert.deepEqual(outcome.usage.developer, {
+    input: 2000,
+    output: 900,
+    cacheRead: 800,
+    cacheWrite: 100,
+    cost: 0.02,
+    elapsedMs: 12_000,
+    models: ["zai/glm-5.2"],
+    calls: 1,
+    coverage: { input: 1, output: 1, cacheRead: 1, cacheWrite: 1, cost: 1, elapsedMs: 1 },
+  });
+  // The reviewer reported nothing: no entry at all, not a zeroed one.
+  assert.equal(outcome.usage.reviewer, undefined);
 });
 
 test("happy path: changes requested on round 1, approved on round 2", async () => {
@@ -1048,7 +1138,13 @@ test("revise then approve calls the same planner twice and sends revised files t
   const outcome = await runFeatureWorkflow(deps, "add invitations", "run-revise");
 
   assert.equal(outcome.status, "completed");
-  assert.deepEqual(outcome.usage.planner, { input: 30, output: 15 });
+  assert.deepEqual(outcome.usage.planner, {
+    input: 30,
+    output: 15,
+    models: [],
+    calls: 2,
+    coverage: { input: 2, output: 2, cacheRead: 0, cacheWrite: 0, cost: 0, elapsedMs: 0 },
+  });
   assert.equal(plannerCalls, 2);
   assert.equal(agents.calls.filter((c) => c.role === "developer").length, 1);
   const featureDir = join(cwd, ".ai/features/add-invitations");
@@ -1673,16 +1769,22 @@ test("resume mid-develop re-runs the developer, keeps the persisted baseline and
   seedFeatureArtifacts(cwd, DESCRIPTION);
   const baseline: GitBaseline = { repoRoot: cwd, branch: "resumed", headSha: "x", baseCommit: "persisted-base" };
 
-  const outcome = await runFeatureWorkflow(
-    deps,
-    DESCRIPTION,
-    "run-r1",
-    resumeStateOf({
-      phase: "develop",
-      usage: { developer: { input: 5000, output: 2500 } },
-      baseline,
-    }),
-  );
+  const resume = resumeStateOf({
+    phase: "develop",
+    usage: {
+      developer: {
+        input: 5000,
+        output: 2500,
+        cacheRead: 0,
+        cacheWrite: 0,
+        models: [],
+        calls: 2,
+        coverage: { input: 2, output: 2, cacheRead: 2, cacheWrite: 2, cost: 0, elapsedMs: 0 },
+      },
+    },
+    baseline,
+  });
+  const outcome = await runFeatureWorkflow(deps, DESCRIPTION, "run-r1", resume);
 
   assert.equal(outcome.status, "completed");
   assert.equal(agents.calls.filter((c) => c.role === "planner").length, 0, "no planner call on resume");
@@ -1694,8 +1796,25 @@ test("resume mid-develop re-runs the developer, keeps the persisted baseline and
   assert.ok(!events.some((e) => e.type === "workflow.started"), "workflow.started is not re-emitted");
   assert.equal((deps.git as FakeGit).baselineCalls, 0, "the persisted baseline is reused, never re-snapshotted");
   assert.deepEqual(outcome.usage, {
-    developer: { input: 7000, output: 3400 }, // 5000/2500 reconstructed + 2000/900 fresh
+    // 5000/2500 reconstructed (2 calls) + 2000/900 fresh: sums continue, no reset.
+    // The fresh call reported no cache, so the cache total covers 2 of 3 calls
+    // and the aggregate is explicitly partial.
+    developer: {
+      input: 7000,
+      output: 3400,
+      cacheRead: 0,
+      cacheWrite: 0,
+      models: [],
+      calls: 3,
+      coverage: { input: 3, output: 3, cacheRead: 2, cacheWrite: 2, cost: 0, elapsedMs: 0 },
+    },
   });
+
+  // Folding the fresh call must not mutate the replay snapshot the caller
+  // handed in: resume state is a record of the interrupted run, not scratch
+  // space for the resumed one.
+  assert.equal(resume.usage!.developer!.calls, 2, "the replay snapshot keeps its own call count");
+  assert.equal(resume.usage!.developer!.input, 5000);
 });
 
 test("resume at review skips developer and verify, and reviews the ORIGINAL baseline diff", async () => {
@@ -1711,7 +1830,9 @@ test("resume at review skips developer and verify, and reviews the ORIGINAL base
     resumeStateOf({
       phase: "review #1",
       developerRuns: 1,
-      usage: { developer: { input: 5000, output: 2500 } },
+      usage: {
+        developer: { input: 5000, output: 2500, cacheRead: 0, cacheWrite: 0, models: [], calls: 1 },
+      },
     }),
   );
 
@@ -1719,6 +1840,77 @@ test("resume at review skips developer and verify, and reviews the ORIGINAL base
   assert.deepEqual(agents.calls.map((c) => c.role), ["reviewer"], "only the reviewer runs");
   assert.equal((verifier as FakeVerifier).calls, 0, "verify already passed before the interruption");
   assert.deepEqual(phaseTrace(events), ["review #1"]);
+});
+
+test("S2 resume without double counting: outcome totals equal the replay of the concatenated log", async () => {
+  // The interrupted run's persisted events — full S2 detail, one developer
+  // call completed before the crash during verify.
+  const interrupted: WorkflowEvent[] = [
+    { type: "workflow.started", runId: "run-ndc", workflow: "feature", description: DESCRIPTION, stack: { primary: "nodejs", frameworks: [] }, baseline: "snap-base" },
+    { type: "phase.started", runId: "run-ndc", phase: "develop" },
+    {
+      type: "agent.completed",
+      runId: "run-ndc",
+      role: "developer",
+      usage: { input: 1000, output: 400, cacheRead: 200, cacheWrite: 50, cost: 0.01, elapsedMs: 10_000, provider: "zai", model: "glm-5.2" },
+    },
+    { type: "phase.started", runId: "run-ndc", phase: "verify" },
+  ];
+  const replay = replayRunLog(interrupted);
+  assert.equal(replay.ok, true, "the interrupted log is resumable");
+
+  // The resumed run completes: verify was never observed, so it re-runs and
+  // passes; the developer is NOT re-run (its phase already completed).
+  const { deps, cwd, events } = harness((req) =>
+    req.role === "reviewer"
+      ? { ...reviewOf({ verdict: "approved", summary: "ok", issues: [] }), usage: { input: 300, output: 100, cacheRead: 0, cacheWrite: 0, cost: 0.002, elapsedMs: 3_000, provider: "zai", model: "glm-5.2" } }
+      : { ...devResult, usage: { input: 500, output: 200, cacheRead: 100, cacheWrite: 0, cost: 0.005, elapsedMs: 5_000, provider: "zai", model: "glm-5.2" } },
+  );
+  seedFeatureArtifacts(cwd, DESCRIPTION);
+
+  const outcome = await runFeatureWorkflow(
+    deps,
+    DESCRIPTION,
+    "run-ndc",
+    { ...replay.state, baseline: { repoRoot: cwd, branch: "resumed", headSha: "x", baseCommit: "snap-base" } },
+  );
+  assert.equal(outcome.status, "completed");
+
+  // Resuming at verify does NOT re-run the developer: its pre-crash usage is
+  // counted exactly once (the seed), and only the reviewer call is fresh.
+  assert.deepEqual(outcome.usage, {
+    developer: {
+      input: 1000,
+      output: 400,
+      cacheRead: 200,
+      cacheWrite: 50,
+      cost: 0.01,
+      elapsedMs: 10_000,
+      models: ["zai/glm-5.2"],
+      calls: 1,
+      coverage: { input: 1, output: 1, cacheRead: 1, cacheWrite: 1, cost: 1, elapsedMs: 1 },
+    },
+    reviewer: {
+      input: 300,
+      output: 100,
+      cacheRead: 0,
+      cacheWrite: 0,
+      cost: 0.002,
+      elapsedMs: 3_000,
+      models: ["zai/glm-5.2"],
+      calls: 1,
+      coverage: { input: 1, output: 1, cacheRead: 1, cacheWrite: 1, cost: 1, elapsedMs: 1 },
+    },
+  });
+
+  // The invariant the S1 comparison depends on: folding EVERY per-call event
+  // of the concatenated log (pre-crash + post-resume) yields exactly the
+  // resumed outcome's totals — the seed is counted once, never twice.
+  const concatenated = [...interrupted, ...events.filter((e) => e.type === "agent.completed")];
+  const replayed = usageFromEvents(
+    concatenated.filter((e): e is Extract<WorkflowEvent, { type: "agent.completed" }> => e.type === "agent.completed"),
+  );
+  assert.deepEqual(replayed, outcome.usage);
 });
 
 test("resume at review with changes_requested runs the fix round instead of looping forever", async () => {

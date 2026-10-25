@@ -31,7 +31,21 @@ test("events are appended as JSONL and read back in order", () => {
       runId: "run-1",
       status: "needs_human",
       reason: "max rounds",
-      usage: { reviewer: { input: 42, output: 7 } },
+      // S2 full-detail totals, persisted verbatim: cost/elapsed stay absent
+      // when absent — never coerced to zero by the JSONL round trip.
+      usage: {
+        reviewer: {
+          input: 42,
+          output: 7,
+          cacheRead: 11,
+          cacheWrite: 3,
+          cost: 0.0042,
+          elapsedMs: 21_000,
+          models: ["zai/glm-5.2"],
+          calls: 2,
+        },
+      },
+      elapsedMs: 95_000,
     },
   ];
   for (const event of events) log.append(event);
@@ -42,7 +56,38 @@ test("events are appended as JSONL and read back in order", () => {
   assert.deepEqual((read[2] as { issues: unknown[] }).issues, [
     { id: "R1", severity: "blocking", category: "bug", problem: "boom" },
   ]);
-  assert.deepEqual((read[3] as { usage: unknown }).usage, { reviewer: { input: 42, output: 7 } });
+  assert.deepEqual((read[3] as { usage: unknown }).usage, {
+    reviewer: {
+      input: 42,
+      output: 7,
+      cacheRead: 11,
+      cacheWrite: 3,
+      cost: 0.0042,
+      elapsedMs: 21_000,
+      models: ["zai/glm-5.2"],
+      calls: 2,
+    },
+  });
+
+  // Missing vs zero survives the round trip: a role without cost keeps the
+  // field absent (unavailable), a zero cost stays a reported zero.
+  log.append({
+    type: "workflow.outcome",
+    runId: "run-1",
+    status: "completed",
+    usage: {
+      // Cache was never measured for this role: the field is ABSENT, and the
+      // JSONL round trip must not turn it into a reported zero.
+      planner: { input: 1, output: 1, cost: 0, models: [], calls: 1 },
+    },
+  });
+  const reRead = readRunLog(root, "run-1");
+  const plannerUsage = (reRead.at(-1) as unknown as { usage: { planner: Record<string, unknown> } }).usage.planner;
+  assert.equal("cost" in plannerUsage, true);
+  assert.equal(plannerUsage.cost, 0, "a reported zero cost reads back as 0");
+  assert.equal("cacheRead" in plannerUsage, false, "an unmeasured cache stays absent");
+  assert.equal("cacheWrite" in plannerUsage, false);
+  assert.equal("elapsedMs" in plannerUsage, false, "an unreported elapsed stays absent");
 
   // The outcome line is on disk verbatim — the incident that motivated this
   // module was losing exactly this content to TUI scrolling.

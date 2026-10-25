@@ -5,6 +5,7 @@
  */
 
 import type { VerifyCommand, VerifyFreeze } from "./verify.ts";
+import type { CallUsageDetail, UsageTotals } from "./usage.ts";
 
 export interface ConfirmQuestion {
   message: string;
@@ -156,8 +157,13 @@ export type WorkflowEvent =
       type: "agent.completed";
       runId: string;
       role: string;
-      /** Token usage of THIS agent call, when the runner reports it. */
-      usage?: { input: number; output: number };
+      /**
+       * Usage of THIS agent call (S2): tokens, cache, SDK-exposed cost,
+       * elapsed and resolved provider/model — every field optional, absent =
+       * not reported, 0 = reported zero. Logs predating S2 carry
+       * `{input, output}` only.
+       */
+      usage?: CallUsageDetail;
     }
   | { type: "agent.waiting_input"; runId: string; role: string; question: string }
   | { type: "command.completed"; runId: string; command: string; exitCode: number }
@@ -207,7 +213,20 @@ export type WorkflowEvent =
           recommendation?: string;
         }>;
       };
-      usage?: Record<string, { input: number; output: number }>;
+      /**
+       * Cumulative usage per role (S2): token/cache sums, SDK-exposed cost
+       * (undefined when no call reported one — never a guessed zero), summed
+       * elapsed, distinct models and the folded call count. Logs predating
+       * S2 carry `{input, output}` per role. The per-call detail lives in the
+       * `agent.completed` events; do not add the two together.
+       */
+      usage?: Partial<Record<string, UsageTotals>>;
+      /**
+       * Wall-clock of the launch segment that produced this outcome, in ms
+       * (S2). A resumed run reports only its own post-resume segment; the
+       * pre-resume part is visible in the summed per-call usage.
+       */
+      elapsedMs?: number;
     }
   | { type: "workflow.completed"; runId: string; status: string }
   | { type: "workflow.failed"; runId: string; error: string }

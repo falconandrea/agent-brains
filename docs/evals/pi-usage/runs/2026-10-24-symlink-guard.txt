@@ -1,0 +1,2 @@
+run-baseline.mjs: models-store.json in the agent dir is a symlink; copy the catalog instead (the SDK store is writable and must not reach personal state).
+exit=2

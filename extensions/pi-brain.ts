@@ -25,11 +25,12 @@ import { acquireRunLock, describeLock, type AcquireResult } from "../src/run-loc
 import { PiHumanInput } from "../src/pi/human-input.ts";
 import { blocksFeatureStart, requestFlowStop, type FlowRunStatus } from "../src/pi/flow-stop.ts";
 import { PiAgentRunner } from "../src/pi/pi-agent-runner.ts";
-import { runFeatureWorkflow, type UsageByRole } from "../src/workflows/feature.ts";
+import { runFeatureWorkflow } from "../src/workflows/feature.ts";
 import { replayRunLog, validateResumePreconditions, hasPatchChanged, askResumeWithChangedDiff, type Refusal } from "../src/workflows/resume.ts";
+import { usageFromEvents, copyUsageTotals } from "../src/usage.ts";
 import type { WorkflowEvent } from "../src/ports.ts";
 import { RunLog, readRunLog, listRunIds } from "../src/run-log.ts";
-import { fmtTokens, launchRun, renderUsage, startRun, agentStatus } from "../src/run-launcher.ts";
+import { fmtTokens, fmtCost, fmtDuration, launchRun, renderUsage, startRun, agentStatus } from "../src/run-launcher.ts";
 
 const PACKAGE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PROFILES_DIR = join(PACKAGE_ROOT, "profiles");
@@ -280,16 +281,12 @@ export default function piBrain(pi: ExtensionAPI): void {
           return;
         }
         default: {
-          // Live usage folded from agent.completed events (per-call deltas).
-          const live: UsageByRole = {};
-          for (const event of active.events) {
-            if (event.type !== "agent.completed" || !event.usage) continue;
-            const current = live[event.role] ?? { input: 0, output: 0 };
-            current.input += event.usage.input;
-            current.output += event.usage.output;
-            live[event.role] = current;
-          }
-          const usageLine = renderUsage(live);
+          // Live usage folded from agent.completed events (per-call deltas),
+          // with the same folding the workflow and resume use (S2).
+          const agentDone = active.events.filter(
+            (e): e is Extract<WorkflowEvent, { type: "agent.completed" }> => e.type === "agent.completed",
+          );
+          const usageLine = renderUsage(usageFromEvents(agentDone));
           ctx.ui.notify(
             [
               `pi-brain ${active.workflow} [${active.status}] phase=${active.phase} run=${active.runId}`,
@@ -346,11 +343,10 @@ export default function piBrain(pi: ExtensionAPI): void {
               }
             : {}),
           ...(replay.refusal.files !== undefined ? { files: replay.refusal.files } : {}),
+          // S2: replayed totals pass through uncoerced (defensive copies, so
+          // the heal event never aliases the replay state).
           usage: Object.fromEntries(
-            Object.entries(replay.refusal.usage).map(([role, usage]) => [
-              role,
-              { input: usage?.input ?? 0, output: usage?.output ?? 0 },
-            ]),
+            Object.entries(replay.refusal.usage).map(([role, usage]) => [role, copyUsageTotals(usage)]),
           ),
         });
         heal.append({ type: "workflow.completed", runId, status });
@@ -605,6 +601,27 @@ function lockRefusal(lock: Extract<AcquireResult, { ok: false }>): string {
   }
 }
 
+/** Compact token count where an absent counter is "?" (unavailable), not 0. */
+function fmtMaybeToken(value: number | undefined): string {
+  return value === undefined ? "?" : fmtTokens(value);
+}
+
+/**
+ * One compact per-call usage line for /flow log (S2): tokens in/out, cache,
+ * SDK-exposed cost and elapsed — each only when the call reported it.
+ */
+function usageSummary(usage: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; cost?: number; elapsedMs?: number }): string {
+  const parts: string[] = [];
+  if (usage.input !== undefined || usage.output !== undefined) {
+    parts.push(`${fmtMaybeToken(usage.input)} in / ${fmtMaybeToken(usage.output)} out`);
+  }
+  if (usage.cacheRead !== undefined && usage.cacheRead > 0) parts.push(`r ${fmtTokens(usage.cacheRead)}`);
+  if (usage.cacheWrite !== undefined && usage.cacheWrite > 0) parts.push(`w ${fmtTokens(usage.cacheWrite)}`);
+  if (usage.cost !== undefined) parts.push(fmtCost(usage.cost));
+  if (usage.elapsedMs !== undefined) parts.push(fmtDuration(usage.elapsedMs));
+  return parts.length > 0 ? ` (${parts.join(", ")})` : "";
+}
+
 function describe(event: WorkflowEvent): string {
   switch (event.type) {
     case "phase.started":
@@ -612,7 +629,7 @@ function describe(event: WorkflowEvent): string {
     case "agent.started":
       return `  ${event.role} → ${event.model}${event.skills?.length ? ` [${event.skills.join(", ")}]` : ""}`;
     case "agent.completed":
-      return `  ${event.role} done${event.usage ? ` (${fmtTokens(event.usage.input)} in / ${fmtTokens(event.usage.output)} out)` : ""}`;
+      return `  ${event.role} done${event.usage ? usageSummary(event.usage) : ""}`;
     case "command.completed":
       return `  ${event.exitCode === 0 ? "✓" : "✗"} ${event.command}`;
     case "review.completed":
@@ -632,14 +649,24 @@ function describe(event: WorkflowEvent): string {
       const usageLine =
         event.usage && Object.keys(event.usage).length > 0
           ? `\n  tokens: ${Object.entries(event.usage)
-              .map(([role, u]) => `${role} ${u.input}/${u.output}`)
+              .map(([role, u]) => {
+                // Absent is "?" (never measured), not a fabricated zero; the
+                // same contract the usage module and /flow status use.
+                const parts = [`${role} ${fmtMaybeToken(u?.input)}/${fmtMaybeToken(u?.output)}`];
+                if (u?.cacheRead !== undefined) parts.push(`r${fmtTokens(u.cacheRead)}`);
+                if (u?.cacheWrite !== undefined) parts.push(`w${fmtTokens(u.cacheWrite)}`);
+                if (u?.cost !== undefined) parts.push(fmtCost(u.cost));
+                if (u?.elapsedMs !== undefined) parts.push(fmtDuration(u.elapsedMs));
+                return parts.join(" ");
+              })
               .join(" · ")}`
           : "";
       const reviewLine =
         event.review && event.review.issues.length > 0
           ? `\n  review issues: ${event.review.issues.map((i) => `${i.id}[${i.severity}]`).join(", ")}`
           : "";
-      return `■ outcome: ${event.status}${event.reason ? ` — ${event.reason}` : ""}${event.summary ? `\n  ${event.summary}` : ""}${usageLine}${reviewLine}`;
+      const elapsedLine = event.elapsedMs !== undefined ? `\n  segment elapsed: ${fmtDuration(event.elapsedMs)}` : "";
+      return `■ outcome: ${event.status}${event.reason ? ` — ${event.reason}` : ""}${event.summary ? `\n  ${event.summary}` : ""}${usageLine}${reviewLine}${elapsedLine}`;
     }
     default:
       return `  ${event.type}`;

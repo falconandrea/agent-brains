@@ -7,6 +7,7 @@
 
 import type { Role } from "./skill-router.ts";
 import type { ThinkingLevel } from "./config.ts";
+import type { CallUsageDetail } from "./usage.ts";
 
 export interface ModelSelection {
   provider?: string;
@@ -48,7 +49,12 @@ export interface AgentRunResult {
   text: string;
   /** Payload captured from `resultTool`, when one was declared. */
   structured?: unknown;
-  usage?: { input?: number; output?: number; cost?: number };
+  /**
+   * Usage of THIS call (S2): tokens, cache, SDK-exposed cost, elapsed and the
+   * resolved provider/model — each present only when reported. Absent whole
+   * when the runner has nothing (fake runners, aborted before any turn).
+   */
+  usage?: CallUsageDetail;
   aborted: boolean;
 }
 
