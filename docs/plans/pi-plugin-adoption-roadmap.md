@@ -119,7 +119,19 @@ Analytics (`extra/skills/ga4-analytics/`) is excluded pending the user's decisio
    14 distinct files), 2 intra-task rereads; all four answers grade correct
    against the keys, including the `context-overlap` marker. The earlier 3-task
    zai run and OpenRouter runs are supporting evidence only. Evidence:
-   [S2 report](../evals/pi-usage/S2-2026-10-24.md). Next: S1.
+   [S2 report](../evals/pi-usage/S2-2026-10-24.md).
+   **S1 implemented (2026-10-25, uncommitted for review):** discovered and
+   injected context files now merge by canonical absolute path in a Pi-free
+   module, with explicit-injection-over-discovery precedence and a visible
+   stderr warning on same-path content conflicts. The deterministic audit goes
+   from 2 entries / 220 duplicate bytes to 1 entry / 0 duplicate bytes; the
+   same 4-task `zai/glm-5.2` protocol rerun succeeded 4/4 with no quality
+   regression (63,551 input / 11,038 output / 256,192 cacheRead / $0.204149
+   SDK cost / 175.3 s). Tasks 1–3 load no agents-files, so their deltas are
+   exploration-path variance and **no cost or latency benefit is attributed to
+   S1** from this single run; benefit measurement needs repetitions or a
+   same-tree A/B. Evidence: same report, post-S1 artifacts under
+   `docs/evals/pi-usage/runs/`. Next: review and commit S1.
 5. **C5 — Review the usefulness of the skill collection.** Run a bounded manual
    audit of triggers, permissions, overlap, distribution and actual incremental
    value with current models. Compare representative cases with and without
@@ -132,10 +144,13 @@ Analytics (`extra/skills/ga4-analytics/`) is excluded pending the user's decisio
 
 **Current next action:** C4 in progress — U16 (parent skill load) and S2
 (instrumentation + definitive direct-reads baseline) are complete; **S2 closed
-2026-10-25**. Next is S1 deduplication and the before/after comparison on the
-same protocol. The deterministic overlap audit is the model-independent S1
-check (2 entries / 220 duplicate bytes before). C1 and C2 are complete
-(2026-10-22); C3 is complete (2026-10-23); C5 remains pending.
+2026-10-25**. **S1 is implemented, verified and left uncommitted for review**
+(2026-10-25): the deterministic overlap audit is 1 entry / 0 duplicate bytes
+(2 entries / 220 duplicate bytes before), the 4-task protocol reran 4/4
+correct, and no benefit is claimed from that single run. After review and
+commit, measure a benefit only with repetitions or a same-tree A/B, then
+consider S3. C1 and C2 are complete (2026-10-22); C3 is complete (2026-10-23);
+C5 remains pending.
 R1.1–R1.3 follow this sequence and still require
 an explicit trial request. W2/W3 and R2 retain their evidence-based deferral;
 C2 does not activate them.
@@ -512,26 +527,52 @@ audit of the discovered-plus-injected duplication S1 removes. **S2 closed
 "before": 78,420 input / 11,197 output / 242,880 cacheRead / $0.222204 SDK
 cost / 179.9 s, 20 reads (18 task/file pairs, 14 distinct files), 2 intra-task
 rereads, 4/4 answers correct
-against the keys (including the `context-overlap` marker). Next: S1
-deduplication, then the same audit + 4-task protocol on the post-S1 tree;
-consider S3 after. Evidence:
+against the keys (including the `context-overlap` marker). **S1 is implemented
+on top of S2 commit `fb66860` and left uncommitted for review.** The same audit
+now reports 1 entry / 0 duplicate bytes / 220 loaded bytes, and the same
+4-task protocol reran on the post-S1 tree (`2a72af34…`): 63,551 input / 11,038
+output / 256,192 cacheRead / $0.204149 SDK cost / 175.3 s, 22 reads (17
+task/file pairs, 12 distinct files), 3 reread pairs, 4/4 correct. Tasks 1–3
+LOAD NO agents-files on either tree, so those deltas are exploration-path
+variance; only `context-overlap` is mechanically affected, and its one sample
+moved within noise. **No benefit is attributed to S1**; correctness and
+absence of regression are established, benefit is not. Consider S3 only after
+reviewing S1 and measuring with repetitions or a same-tree A/B. Evidence:
 [U16 report](../evals/pi-skill-load/U16-2026-10-24.md) (parent load) and
 [S2 report](../evals/pi-usage/S2-2026-10-24.md) (usage instrumentation,
-protocol, audit and definitive baseline; raw outputs under
+protocol, audit, definitive baseline and the S1 rerun; raw outputs under
 `docs/evals/pi-usage/runs/`). This roadmap owns task status; the research
 reports own supporting evidence and rationale.
 
 ### S1 Deduplicate discovered and injected context
 
-- [ ] Deduplicate `DefaultResourceLoader` discovered files and
+- [x] Deduplicate `DefaultResourceLoader` discovered files and
   `request.contextFiles` by canonical absolute path, accounting for relative
   paths and symlinks while preserving distinct scoped instruction files.
-- [ ] Add a focused regression check for a project-root `AGENTS.md` being
+  Implemented 2026-10-25 in `src/context-dedup.ts` (Pi-free) and wired through
+  `buildResourceLoader()`: relative aliases and symlinks collapse to one
+  canonical key; first-seen order is preserved; an
+  explicit injection wins over a discovery, first explicit among explicit and
+  first discovery among discoveries; same-path content conflicts emit a stderr
+  warning with the canonical path and both sha256 hashes. No skill filtering,
+  S3 or plugin was added. **Review fixes 2026-10-26:** an identical injected
+  duplicate now claims the slot so the first injection keeps precedence, and
+  canonicalization uses `realpathSync.native` on the raw path (longest existing
+  prefix) so a symlink followed by `..` keeps the file the OS actually reads.
+- [x] Add a focused regression check for a project-root `AGENTS.md` being
   both discovered and routed, plus preservation of distinct context files.
+  `tests/context-dedup.test.ts` has 11 cases: root discovered+injected once,
+  relative/dot-segment/absolute aliases, symlinked project root, file symlink,
+  symlink + `..` (relative and absolute), distinct/scoped/curated preservation,
+  conflict precedence+warning, identical-first-injection precedence, pure-merge
+  hashes. Full suite 440/440; typecheck and `git diff --check` clean.
 
 **Acceptance:** the root file enters the child context once, and distinct
 scoped instructions and curated documents remain present. Loader-level
-duplication was reproduced; no billed-session savings have been measured.
+duplication was reproduced and removed (2 entries / 220 duplicate bytes → 1
+entry / 0); the real 4-task rerun is 4/4 correct with no abort. **Met for
+correctness (2026-10-25); benefit remains unmeasured**, so no billed-session
+saving is claimed. The change is uncommitted pending review.
 
 ### S2 Complete usage accounting and establish a baseline
 
@@ -616,8 +657,11 @@ A future session should:
 4. Change exactly one item to `IN PROGRESS`.
 5. Record evidence and the promote/reject decision here when the item ends.
 
-**Next action:** C4 — S1 context deduplication, then rerun the same audit and
-4-task protocol against the definitive S2 baseline (recorded 2026-10-25; U16 and
-S2 are complete and S2 is closed). S2 measurement preceded S1
-and its protocol is the comparison instrument. R1.1
+**Next action:** C4 — S1 context deduplication is implemented and left
+uncommitted for review; review and commit it, then measure whether a benefit
+exists with repetitions or a same-tree A/B. The 2026-10-25 4-task rerun and its
+artifacts predate the 2026-10-26 review fixes, so they are not reused for a
+benefit claim; the deterministic audit after the fixes is 1 entry / 0 duplicate
+bytes. S2 measurement preceded S1 and its protocol is the comparison
+instrument. R1.1
 (`pi-vcc`) is postponed behind C1–C5 and still requires an explicit trial request.

@@ -1,0 +1,49 @@
+S1 review-fix tree provenance (generated 2026-10-26, after the fixes)
+audit recordedAt: 2026-10-26T14:13:49.443Z
+base commit: fb66860fd968028b302ab0e7e1ca9ecff5ebb2c2
+base commit subject: feat(usage): add per-call usage accounting and S2 baseline
+working tree: uncommitted S1 change + the two 2026-10-26 review fixes
+branch: main
+node: v24.12.0
+protocol script: docs/evals/pi-usage/run-baseline.mjs
+protocol script sha256: b0e84a66be0d10f4e70710080a4d1f1da8c06755e3df5e6c5fa953ed71f604f5
+
+== git diff --stat HEAD (tracked modifications) ==
+ .../tasks-main-review-hardening.md                 |   7 +-
+ .ai/memory/progress.md                             |  80 ++++++-
+ docs/evals/pi-usage/S2-2026-10-24.md               | 263 ++++++++++++++++++---
+ docs/evals/pi-usage/runs/README.md                 |  19 +-
+ docs/plans/pi-plugin-adoption-roadmap.md           |  76 ++++--
+ src/pi/pi-agent-runner.ts                          |  29 ++-
+ 6 files changed, 411 insertions(+), 63 deletions(-)
+
+== uncommitted S1 + review-fix diff identification ==
+tracked diff sha256 (git diff HEAD): d2fd13e78f93475eef8d8e7cb6da0f1ccc4250e02e9bdb5e0bf85f00077c8518
+note: this hash covers every tracked modification, including evidence/docs; the tree
+fingerprint below is the durable identifier and excludes docs/evals/pi-usage/.
+untracked files: src/context-dedup.ts, tests/context-dedup.test.ts (covered by the manifest)
+note: this tree supersedes the 2026-10-25 post-S1 tree only for the two fixed
+edge cases; the 2026-10-25 model artifacts remain tied to their own tree and
+are not evidence about this one.
+
+== measured files manifest (sha256 <path>) ==
+b073deb4c7bce824764c6f0df8ba7711381cc00f8814ea319f9506b9b3cd416a  .ai/features/main-review-hardening/tasks-main-review-hardening.md
+15fd6d3e5be4cd4a14178c9f88296a2790a38cbad1ec4d075a149a352919f0c7  .ai/memory/progress.md
+f303603f0684cc4e5d39289d6af0353351b8ce4495dcd4289cf9722baba42197  docs/plans/pi-plugin-adoption-roadmap.md
+d78e4abad4f8c7c5189cf6a4a85303615c3ee98c3aab465bd8bed6e7e938389c  src/context-dedup.ts
+f1647cea38b7773a506bd139c929a40433b305ad11c8a9554c9cd949530c7282  src/pi/pi-agent-runner.ts
+f56c6ad40942a5d8f5b08300e4599475fe8c0c43f2caf37f072007e20f61ae8f  tests/context-dedup.test.ts
+
+treeFingerprint_sha256: 76f5cebffb76045b3290997d35bd68f76c9b289b74221d51f23d7e337d62799d
+fingerprint scope: commit HEAD content for tracked modifications + untracked non-ignored files, excluding docs/evals/pi-usage/ (protocol and evidence); = sha256 of the manifest above
+reproduce: { git diff --name-only HEAD; git ls-files --others --exclude-standard; } | sort -u | grep -v '^docs/evals/pi-usage/' | xargs shasum -a 256
+
+== run inputs (same isolation contract as the S2 baseline) ==
+Disposable HOME and Pi agent dir; independent COPY of models-store.json; ambient
+ZAI_API_KEY only. No model call was made for this artifact.
+Command:
+  HOME="$TMP/home" node docs/evals/pi-usage/run-baseline.mjs "$PWD" "$TMP/agent" \
+    --audit-only --out "$TMP/audit-after-review.json"
+
+== artifacts from this tree ==
+2026-10-26-post-s1-audit-after-review.json : audit-only, no model call, same tree

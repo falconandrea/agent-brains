@@ -569,4 +569,9 @@ setting. Documentation integration does not authorize implementation.
   bytes). Evidence, commands, controlled symlink/copy duplicate checks and
   limits:
   [U16 report](../../../docs/evals/pi-skill-load/U16-2026-10-24.md).
-  C4 remains open for S1 and its comparison; no runtime, profile or skill changed.
+  C4's S1 deduplication is implemented (2026-10-25, uncommitted for review)
+  and removed the 220-byte duplication; two review findings
+  (first-injection precedence, symlink + `..`) were fixed on 2026-10-26 with
+  regressions. Its measured benefit remains open because the single rerun
+  cannot separate it from exploration-path variance.
+  No runtime, profile or skill changed.

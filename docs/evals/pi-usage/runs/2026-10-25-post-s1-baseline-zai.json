@@ -1,0 +1,234 @@
+{
+  "recordedAt": "2026-10-25T19:53:06.258Z",
+  "model": "zai/glm-5.2",
+  "runner": "PiAgentRunner (src/pi/pi-agent-runner.ts)",
+  "protocol": "S2 direct-reads baseline; same tasks/scripts rerun for S1",
+  "taskFilter": null,
+  "fixture": {
+    "purpose": "context-overlap (S1 instrument)",
+    "files": [
+      {
+        "path": "AGENTS.md",
+        "bytes": 220,
+        "sha256": "f3e6a15f94b0c7d0f9cf693df7e953e4eac78b4a81520dfbe82154c955919dbd"
+      },
+      {
+        "path": "src/limits.ts",
+        "bytes": 154,
+        "sha256": "8735579ddfff61869674f9c46e2e0c92818e075a6dd09c4a4fd049d2e822f26d"
+      },
+      {
+        "path": "README.md",
+        "bytes": 171,
+        "sha256": "e8574cac1ae6d9012534e8fde63aac368d7e45400ee17f9d8d9042ccf4b5ff81"
+      }
+    ]
+  },
+  "contextAudits": {
+    "config-flow": {
+      "agentsFileEntries": 0,
+      "uniquePaths": 0,
+      "duplicatePaths": [],
+      "duplicateBytes": 0,
+      "loadedBytes": 0,
+      "effectiveBytes": 0,
+      "filePaths": []
+    },
+    "resume-protocol": {
+      "agentsFileEntries": 0,
+      "uniquePaths": 0,
+      "duplicatePaths": [],
+      "duplicateBytes": 0,
+      "loadedBytes": 0,
+      "effectiveBytes": 0,
+      "filePaths": []
+    },
+    "usage-path": {
+      "agentsFileEntries": 0,
+      "uniquePaths": 0,
+      "duplicatePaths": [],
+      "duplicateBytes": 0,
+      "loadedBytes": 0,
+      "effectiveBytes": 0,
+      "filePaths": []
+    },
+    "context-overlap": {
+      "agentsFileEntries": 1,
+      "uniquePaths": 1,
+      "duplicatePaths": [],
+      "duplicateBytes": 0,
+      "loadedBytes": 220,
+      "effectiveBytes": 220,
+      "filePaths": [
+        "AGENTS.md"
+      ]
+    }
+  },
+  "tasks": [
+    {
+      "task": "config-flow",
+      "project": "repo",
+      "model": "zai/glm-5.2",
+      "injectedContextFiles": [],
+      "contextAudit": {
+        "agentsFileEntries": 0,
+        "uniquePaths": 0,
+        "duplicatePaths": [],
+        "duplicateBytes": 0,
+        "loadedBytes": 0,
+        "effectiveBytes": 0,
+        "filePaths": []
+      },
+      "usage": {
+        "input": 11910,
+        "output": 1919,
+        "cacheRead": 9984,
+        "cacheWrite": 0,
+        "cost": 0.02771344,
+        "provider": "zai",
+        "model": "glm-5.2",
+        "elapsedMs": 27920
+      },
+      "wallClockMs": 27923,
+      "aborted": false,
+      "answerChars": 3412,
+      "answer": "I've read the relevant files directly. Here's the complete picture:\n\n## 1) Config files and keys involved\n\nDefined in **`src/config.ts`** (paths at the bottom of the file):\n\n- **Global**: `~/.pi/agent/pi-brain/config.json` (`GLOBAL_CONFIG_PATH`)\n- **Project**: `<repo>/.pi/pi-brain.json` (`projectConfigPath(repoRoot)`) — wins over global via the merge in `loadConfig()` (defaults → global → project → code overrides)\n\nThe key is **`verifyTimeoutMs`** (integer, milliseconds), set alongside `verify` (the command array). Example in `docs/pi-brain/README.md` (~line 93): `\"verifyTimeoutMs\": 300000`.\n\n## 2) Source file that reads and validates it\n\n**`src/config.ts`**, in `normalizeConfig()`:\n\n- An inner `verifyTimeoutMs(value)` validator (lines 133–149) accepts a value only if it is a number, an integer, and within `[MIN_VERIFY_TIMEOUT_MS, MAX_VERIFY_TIMEOUT_MS]`.\n- **Missing key** (`undefined`) → silently keeps the default (legacy-config case, per the comment at lines 131–132).\n- **Present but invalid** (non-integer, out of range, wrong type, `null`) → falls back to the default with a warning naming the bounds: `\"verifyTimeoutMs: expected an integer between 1000 and 3600000, got … — using 600000\"`.\n\nPinned by tests in `tests/unit.test.ts` (lines 775–808: default/absent, invalid values `[\"soon\", 0, 999, 3_600_001, 1.5, -1, null]`, and pass-through of `[1000, 30_000, 3_600_000]`).\n\n## 3) Runtime enforcement and timeout behavior\n\n**`src/shell.ts`**, class `ShellVerifyRunner` (implements `VerifyRunner`, line 486), instantiated in **`extensions/pi-brain.ts`** (lines 175 and 505) with `{ timeoutMs: config.verifyTimeoutMs }` (constructor falls back to `DEFAULT_VERIFY_TIMEOUT_MS` if unset, line 495):\n\n- Each command runs via plain `spawn(\"bash\", [\"-lc\", command], { detached: true })` so the shell leads its **own process group** (the comment notes `exec*` silently drops `detached` on current Node).\n- A timer at line 628: `setTimeout(() => terminate(\"timeout\"), this.#timeoutMs)`.\n- On timeout: **SIGTERM to the whole process group** (`process.kill(-child.pid, \"SIGTERM\")`), escalating to **SIGKILL after `DEFAULT_KILL_GRACE_MS = 5000` ms** via `forceSettle()`, which also destroys stdout/stderr pipes so a straggler can't keep the promise pending. `settle()` polls (10 ms interval) until the group is gone (ESRCH), giving up after `SETTLE_UNKILLABLE_MS = 2000` ms for unkillable D-state survivors — the result then reports cleanup as unconfirmed instead of hanging.\n- The returned `CommandResult` has `exitCode: 124` (`TIMEOUT_EXIT_CODE`, GNU `timeout` convention), `timedOut: true`, and output annotated `\"<command> timed out after <N>ms; …\"`. (Abort/`/flow stop` yields exit code 143 instead.) Output overflow (>16 MB, `VERIFY_OUTPUT_LIMIT`) triggers immediate `forceSettle()` with no grace.\n\n## 4) Bounds and fallback values (all in `src/config.ts`, lines 63–65)\n\n| Constant | Value | Meaning |\n|---|---|---|\n| `DEFAULT_VERIFY_TIMEOUT_MS` | `10 * 60 * 1000` = **600000** | default (10 min) |\n| `MIN_VERIFY_TIMEOUT_MS` | **1000** | lower bound (1 s) |\n| `MAX_VERIFY_TIMEOUT_MS` | `60 * 60 * 1000` = **3600000** | upper bound (1 h) |\n\nFallback: any invalid value → **600000** with a bounds-naming warning; absent key → **600000** silently. The rationale (per the doc comment): below 1 s a check can't start; above 1 h the timeout no longer protects the repository lock within a working session.",
+      "toolCalls": {
+        "grep": 2,
+        "ls": 1,
+        "read": 1
+      },
+      "readCounts": {
+        "src/config.ts": 1
+      }
+    },
+    {
+      "task": "resume-protocol",
+      "project": "repo",
+      "model": "zai/glm-5.2",
+      "injectedContextFiles": [],
+      "contextAudit": {
+        "agentsFileEntries": 0,
+        "uniquePaths": 0,
+        "duplicatePaths": [],
+        "duplicateBytes": 0,
+        "loadedBytes": 0,
+        "effectiveBytes": 0,
+        "filePaths": []
+      },
+      "usage": {
+        "input": 24939,
+        "output": 3906,
+        "cacheRead": 106560,
+        "cacheWrite": 0,
+        "cost": 0.0798066,
+        "provider": "zai",
+        "model": "glm-5.2",
+        "elapsedMs": 61315
+      },
+      "wallClockMs": 61317,
+      "aborted": false,
+      "answerChars": 7716,
+      "answer": "I have everything needed. Here is the run–resume protocol as implemented in the code:\n\n## Source files\n\n| Role | File |\n|---|---|\n| Pure replay + refusals + preconditions | `src/workflows/resume.ts` (`replayRunLog`, `Refusal`, `validateResumePreconditions`, `hasPatchChanged`, `askResumeWithChangedDiff`) |\n| `/flow resume <runId>` command wiring | `extensions/pi-brain.ts` (`handleResume`, `refusalMessage`) |\n| Log persistence/read-back | `src/run-log.ts` (`readRunLog`, `RunLog.open` with torn-final-line healing) |\n| Event vocabulary | `src/ports.ts` (`WorkflowEvent` union) |\n| How resume state seeds the workflow | `src/workflows/feature.ts` (`ResumeState`, `runFeatureWorkflow`) |\n| Launcher emitting the resume marker | `src/run-launcher.ts` (`launchRun`, `LaunchRunOptions.resumedPhase`) |\n| Usage folding | `src/usage.ts` (`foldCallUsage`, `hasUsageData`, `copyUsageTotals`) |\n\n## 1) Event types the replay reads and what each contributes\n\n`replayRunLog` in `src/workflows/resume.ts` switches on these events:\n\n- **`workflow.started`** (must be `events[0]`) — provides `workflow` (must be `\"feature\"`), `description`, the git `baseline` commit, `ignoreRulesDigest`, `repoStateDigest` (U3), and the frozen verify inputs (`verify`, U2) validated by `replayVerifyFreeze`: absent → legacy compatibility; present-but-corrupt (wrong shape, `scriptsDigest` not binding its scripts, bad `perimeter`) → refusal.\n- **`agent.completed`** — per-call `usage` (`CallUsageDetail`) folded per `role` via the shared helpers `hasUsageData`/`foldCallUsage` (same folding as the live workflow, \"S2\").\n- **`phase.started`** — tracks `activePhase`, the **last** one being the interruption point (`lastPhaseIdx`); on `review #N` phases it captures `patchSha` as `interruptedPatchSha`; resets per-phase flags (`lastReviewCompleted`, `verifyObservation`, `freeVerifyObservation`) and drives `developerRuns` counting (a developer pass counts as complete only when a `verify`/`review #` phase follows it — consecutive developer `phase.started` are the same logical pass re-run by an earlier resume).\n- **`verification.completed`** — sets `verifyObservation` (`passed`/`failed`) and increments `verifyRetries` for failed verifications, honoring the `freeVerifyObservation` rule (a resumed run re-observes a banked failed verify without consuming a second retry).\n- **`spec.approved`** — replays `prdSha`/`tasksSha` into `state.spec` (spec tamper guard; also counts as gate-approved evidence).\n- **`review.completed`** — increments `reviewRound`, reconstructs `lastReview` (via `asReviewResult`), `lastReviewFiles`, blocking `fixes` and `previousBlockingIds`, computes no-progress (`lastReviewNoProgress` via repeated blocking ids + unchanged patch shas), clears `interruptedPatchSha`.\n- **`workflow.resumed`** — resets `previousCompletedReviewPatchSha` (first review after a resume can't be classified no-progress) and sets `freeVerifyObservation` when the resume was at `verify` with a failed observation; also counts as gate-approved evidence.\n- **`workflow.outcome` / `workflow.completed`** — scanned only to detect a terminal outcome and refuse.\n\nThe reconstructed `ResumeState` (`src/workflows/feature.ts`): `phase`, `verifyRetryBanked`, `reviewRound`, `verifyRetries`, `developerRuns`, `fixes`, `previousBlockingIds`, `lastReview`, `usage`, `interruptedPatchSha`, `spec`, `verify` (plus `baseline` added by the extension).\n\n## 2) Conditions that refuse a resume\n\nFrom the `Refusal` union in `src/workflows/resume.ts`:\n\n- `empty_log` — no events (extension says “unknown run”); `missing_workflow_started`; `not_feature_workflow`; `missing_baseline` (old-format log); `corrupt_verify_freeze`; `terminal_outcome` (any `workflow.outcome` or `workflow.completed` — note **`workflow.failed` is resumable**, it's the state resume exists for); `gate_not_approved` (no `develop`/`fix #…`/`verify`/`review #…` `phase.started`, no `workflow.resumed`, no `spec.approved`; also no `phase.started` at all, and `discover`/`spec` interruptions — pre-gate, a fresh `/feature` is the honest path).\n- `already_decided` — the last `review.completed` already decided the run (verdict `needs_human`, or blocking issues with `reviewRound >= maxReviewRounds` or no-progress). The extension then **heals the log** instead of resuming: it re-opens the `RunLog` and appends a reconstructed `workflow.outcome` (with review and copied usage) plus `workflow.completed`, no agent runs.\n- `missing_artifacts` — no PRD/tasks pair under `.ai/features/` carrying the `descriptionMarker` and a valid task list (`validateResumePreconditions`); `unresolvable_baseline` — `git.diffSince(baseline)` throws (e.g., gc dropped the snapshot commit).\n\nExtension-level refusals (`handleResume`): unknown runId; another active run in the session (`blocksFeatureStart`); missing `description` or `baseline` in the log; `acquireRunLock` refusal (`held`/`held_stale`/`takeover_in_progress`); user aborts at the `askResumeWithChangedDiff` dialog (only when re-entering at `review #N` and the current patch sha differs from `interruptedPatchSha`); failure creating the agent runtime. A refused resume appends nothing to the run's log (opened only after all refusal paths are past).\n\n## 3) How the re-entry phase is chosen\n\nDerived in `replayRunLog` from `lastPhase` (the last `phase.started`):\n\n- **Developer phase** (`develop` or `fix #N`) → re-run it honestly under its own name: `develop` if `developerRuns === 0`, else `fix #${developerRuns}` (the interrupted pass was never counted).\n- **`verify`** → `verify`, with `verifyRetryBanked = true` iff a failed `verification.completed` followed the last verify phase.\n- **`spec`** (with `spec.approved` present) → `develop` (gate approved, but the process died before the first loop phase).\n- **`review #N`** → if a `review.completed` followed it, the fix round is due (developer re-entry as above); otherwise re-run the same review round.\n- Anything else → `gate_not_approved` refusal.\n\nIn `feature.ts` this becomes `entry`, which gates **only the first loop pass** and is consumed immediately; `launchRun` (`src/run-launcher.ts`) emits a `workflow.resumed` event with `resumedPhase` **synchronously before the workflow is invoked**, so the marker is on disk even if the process dies right after launch. A resumed run also skips `discover`/`spec` phases and keeps the **original** baseline (`resume?.baseline ?? git.baseline()`).\n\n## 4) How token usage is carried into the resumed run\n\nThe chain (`src/workflows/resume.ts` → `src/usage.ts` → `src/workflows/feature.ts`):\n\n1. During replay, every `agent.completed` with `hasUsageData(event.usage)` is folded per role: `usage[event.role] = foldCallUsage(usage[event.role], event.usage)` — the same shared helper the live workflow uses, so replayed totals equal live totals. The **missing-vs-zero contract** holds throughout: absent fields were never reported and are never coerced to 0; pre-S2 logs carrying only `{input, output}` fold with cache/cost/elapsed/models absent.\n2. The folded `UsageByRole` lands in `ResumeState.usage`.\n3. `runFeatureWorkflow` seeds its live `usage` from it via `copyUsageTotals` per role — defensive copies so folding **new** calls never mutates the replay state (which stays an immutable snapshot of the interrupted run).\n4. `recordUsage` then folds each new agent call on top of the seeded totals, so the final `workflow.outcome` carries the cumulative per-role `UsageTotals` including the pre-resume part. The outcome's `elapsedMs` covers only the post-resume segment (the pre-resume wall-clock lives in the per-call events), as documented in `ports.ts`. The same copy-through pattern is used for the `already_decided` heal event in the extension.",
+      "toolCalls": {
+        "ls": 1,
+        "grep": 4,
+        "read": 7
+      },
+      "readCounts": {
+        "src/workflows/resume.ts": 1,
+        "src/run-log.ts": 1,
+        "extensions/pi-brain.ts": 1,
+        "src/usage.ts": 1,
+        "src/workflows/feature.ts": 2,
+        "src/ports.ts": 1
+      }
+    },
+    {
+      "task": "usage-path",
+      "project": "repo",
+      "model": "zai/glm-5.2",
+      "injectedContextFiles": [],
+      "contextAudit": {
+        "agentsFileEntries": 0,
+        "uniquePaths": 0,
+        "duplicatePaths": [],
+        "duplicateBytes": 0,
+        "loadedBytes": 0,
+        "effectiveBytes": 0,
+        "filePaths": []
+      },
+      "usage": {
+        "input": 26205,
+        "output": 4865,
+        "cacheRead": 134208,
+        "cacheWrite": 0,
+        "cost": 0.09298708,
+        "provider": "zai",
+        "model": "glm-5.2",
+        "elapsedMs": 75844
+      },
+      "wallClockMs": 75848,
+      "aborted": false,
+      "answerChars": 7477,
+      "answer": "I've read every file in the chain. Here is the complete, verified trace of one agent call's usage into the persisted `workflow.outcome` event.\n\n## The pipeline (one agent call → JSONL on disk)\n\n```\nPi SDK agent_end messages\n → src/pi/pi-agent-runner.ts     capture + fold per call, add call elapsedMs\n → src/agent.ts                  port contract: AgentRunResult.usage\n → src/workflows/feature.ts      per-role totals + agent.completed emission\n → src/run-launcher.ts           builds workflow.outcome, adds segment elapsedMs\n → src/run-log.ts                JSON.stringify → appendFileSync to disk\n```\n\n`src/usage.ts` is the Pi-free library each layer calls for its transformation (it is not a runtime hop by itself).\n\n### 1. Pi SDK → Runner: `src/pi/pi-agent-runner.ts`\nThe only file that touches the SDK (with `src/pi/human-input-policy.ts` and the extension). Inside `run()`:\n- A session subscription collects **every** `agent_end` batch into `agentEndBatches` — one `session.prompt()` can end the agent loop multiple times (retries, compaction recovery); keeping all batches avoids retaining only the last execution's tokens.\n- In the `finally` after `session.prompt()`: `usage = { ...(usageFromAgentEnds(agentEndBatches) ?? {}), elapsedMs: Date.now() - callStartedAt }`. **Transformation:** raw untyped SDK messages → one defensively-shaped `CallUsageDetail`, plus the call's wall-clock (reported even when no token data exists, e.g. an aborted call).\n- Returns it as `AgentRunResult.usage`.\n\n### 2. Shaping library: `src/usage.ts`\n- `usageFromAgentEnds`: de-duplicates assistant message objects by identity across batches, delegates to `usageFromAssistantMessages`.\n- `usageFromAssistantMessages`: sums `input`, `output`, `cacheRead`, `cacheWrite`, `cost.total` **across assistant messages only**; records `provider`/`model` only when all assistant messages agree (a mixed call stays unlabeled); returns `undefined` when nothing was reported. Fully defensive against untyped payloads (explicit null checks, finite-number gates).\n- `foldCallUsage`, `hasUsageData`, `copyUsageTotals`, `isPartialUsageTotals`, `aggregateUsageCoverage` — the fold/copy/gate primitives used by all later layers.\n\n### 3. Port contract: `src/agent.ts`\n`AgentRunResult.usage?: CallUsageDetail` — the boundary that lets workflow code depend on no Pi. Contract in the doc comment: \"each present only when reported. Absent whole when the runner has nothing (fake runners, aborted before any turn).\"\n\n### 4. Workflow: `src/workflows/feature.ts`\nIdentical pattern at each role's call site — planner (~line 300–304), developer (~line 587–592), reviewer (~line 762–767):\n1. Emits `agent.completed` with `...(hasUsageData(result.usage) ? { usage: result.usage } : {})` — the **per-call detail passes through uncoerced**; a `usage` key is omitted entirely when the call had no data.\n2. `recordUsage(role, result.usage)` → `foldCallUsage(usage[role], u)` — **Transformation:** per-call details → per-role `UsageTotals` (sums, `models` labels, `calls`, per-field `coverage`).\n3. In resume mode, totals are seeded from the replayed log via `copyUsageTotals` (immutable snapshot copy, then new folds mutate the copy).\n4. Every terminal path — `completed`, `needs_human`, `cancelled` — returns the `usage` map in `FeatureOutcome`.\n\n### 5. Launcher: `src/run-launcher.ts`\n- `launchRun` times the launch segment (`segmentStartedAt`) and calls `outcomeEvent(runId, outcome, Date.now() - segmentStartedAt)` **before** any TUI rendering, \"persisted before any TUI rendering can lose it\".\n- `outcomeEvent` (line ~303): **Transformation:** `usage: Object.fromEntries(Object.entries(outcome.usage).map(([role, u]) => [role, copyUsageTotals(u)]))` — defensive copies, pass-through **uncoerced** — and adds the top-level `elapsedMs` = the launch-segment wall-clock (distinct from the summed per-call `elapsedMs` inside `usage`).\n- The shared event sink (`createEventSink`) pushes the event to: the in-memory buffer (`/flow status`), best-effort `history()` (Pi-side, swallowed on throw), then `deps.runLog.append(event)`.\n\n### 6. Run log: `src/run-log.ts`\n`RunLog.append` does `appendFileSync(path, JSON.stringify(event) + \"\\n\")` to `.pi/pi-brain/runs/<runId>.jsonl`. **Transformation:** none — pure serialization (absent fields simply don't appear in the JSON). Best-effort by design: an fs error degrades the sink to no-op (`#broken`), it never kills the run.\n\n### 7. Event shapes: `src/ports.ts`\nThe persisted contract: `agent.completed.usage?: CallUsageDetail` (\"absent = not reported, 0 = reported zero; logs predating S2 carry `{input, output}` only\") and `workflow.outcome.usage?: Partial<Record<string, UsageTotals>>` plus `workflow.outcome.elapsedMs?` (segment wall-clock). Downstream consumers: `/flow log` renders absent as `?` (`extensions/pi-brain.ts`, `describe()`); `/flow status` re-folds live `agent.completed` events via `usageFromEvents` + `renderUsage`; `src/workflows/resume.ts` (lines 251–261) re-folds the same way for replay; and the crash-heal path in `extensions/pi-brain.ts` (~line 323–336) appends a reconstructed `workflow.outcome` whose `usage` is again `copyUsageTotals` copies of the replayed totals.\n\n## Which usage fields exist today\n\n| Field | Per call (`CallUsageDetail`) | Per role (`UsageTotals`) | Notes |\n|---|---|---|---|\n| `input` / `output` | optional number | optional sum | present 0 = reported zero |\n| `cacheRead` / `cacheWrite` | optional number | optional sum | a provider with no cache counters yields no field |\n| `cost` | optional number | optional sum | **SDK-exposed** cost (Model.cost pricing), explicitly not billing |\n| `elapsedMs` | optional (call wall-clock, runner) | optional sum | plus a **separate top-level** `elapsedMs` on `workflow.outcome` = launch-segment wall-clock |\n| `provider` / `model` | optional strings (kept separate; model ids may contain `/`) | `models: string[]` distinct `\"provider/model\"` labels | |\n| `calls` / `coverage` | — | `calls: number`, `coverage?: UsageCoverage` (per-field reporter counts) | `coverage` absent on totals replayed from pre-coverage logs — completeness unknown, never guessed |\n\n## Where missing data is kept distinct from zeros\n\nThe contract is stated in the `src/usage.ts` header: **absent = never reported (unavailable); present 0 = reported as zero. Nothing in the module coerces undefined to 0.** Enforced at each hop:\n\n- `usageFromAssistantMessages` only sets fields that carried finite numbers; a payload with cost but no tokens yields `{ cost }`.\n- `foldCallUsage` skips a data-less call entirely (no zeroed role entry, doesn't count as a call); a field is added to totals only when at least one call reported it, and `coverage[field]` counts how many did.\n- `isPartialUsageTotals` / `aggregateUsageCoverage` distinguish *partial* (present aggregate, `coverage < calls`) from *unavailable* (no aggregate) — pre-coverage logs return neither.\n- `copyUsageTotals` copies only fields actually present, so an old log that never measured cache never gains a fake zero on replay.\n- `outcomeEvent` in `run-launcher.ts` passes totals through uncoerced (\"an unavailable cost never looks like zero\").\n- Rendering honors it everywhere: `?` for absent, never an invented zero (`fmtMaybe`/`fmtMaybeToken` in `run-launcher.ts` and `extensions/pi-brain.ts`); `renderUsage` appends `· partial` when coverage is short; `fmtCost` keeps sub-$0.0001 nonzero costs visibly nonzero so a measured cost can't print as `$0.0000`.",
+      "toolCalls": {
+        "ls": 1,
+        "grep": 3,
+        "read": 12
+      },
+      "readCounts": {
+        "src/pi/pi-agent-runner.ts": 1,
+        "src/usage.ts": 1,
+        "src/agent.ts": 1,
+        "src/run-log.ts": 1,
+        "src/run-launcher.ts": 1,
+        "src/ports.ts": 1,
+        "src/workflows/feature.ts": 4,
+        "extensions/pi-brain.ts": 2
+      }
+    },
+    {
+      "task": "context-overlap",
+      "project": "overlap",
+      "model": "zai/glm-5.2",
+      "injectedContextFiles": [
+        "AGENTS.md"
+      ],
+      "contextAudit": {
+        "agentsFileEntries": 1,
+        "uniquePaths": 1,
+        "duplicatePaths": [],
+        "duplicateBytes": 0,
+        "loadedBytes": 220,
+        "effectiveBytes": 220,
+        "filePaths": [
+          "AGENTS.md"
+        ]
+      },
+      "usage": {
+        "input": 497,
+        "output": 348,
+        "cacheRead": 5440,
+        "cacheWrite": 0,
+        "cost": 0.0036414000000000004,
+        "provider": "zai",
+        "model": "glm-5.2",
+        "elapsedMs": 10260
+      },
+      "wallClockMs": 10263,
+      "aborted": false,
+      "answerChars": 490,
+      "answer": "Here are the facts, read directly from the files:\n\n**From `AGENTS.md` (project instructions):**\n- Canonical retry limit: **7 attempts**\n- Required marker: **FIXTURE-AGENTS-MARKER** (to be cited whenever quoting these instructions)\n\n**From `src/limits.ts`:**\n- `MAX_BATCH_SIZE = **42**`\n- It is defined in the file **`src/limits.ts`** (`export const MAX_BATCH_SIZE = 42;`)\n- Notably, that file also contains a `retryLimit()` function returning `7`, consistent with the AGENTS.md retry limit.",
+      "toolCalls": {
+        "ls": 2,
+        "find": 2,
+        "read": 2
+      },
+      "readCounts": {
+        "AGENTS.md": 1,
+        "src/limits.ts": 1
+      }
+    }
+  ]
+}

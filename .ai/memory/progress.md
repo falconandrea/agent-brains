@@ -14,7 +14,7 @@
   Includes per-project `.ai` alignment and the C1/C2 preservation constraints.
   Documentation only: global installation, skill rename and consumer migration
   have not started; next action is C4 (U16 and S2 complete; the definitive S2
-  baseline was recorded 2026-10-25, so S1 is next).
+  baseline was recorded 2026-10-25, and S1 is implemented and pending review).
   Detailed completion status belongs
   to the migration plan, priority and coordination to the roadmap.
 
@@ -25,7 +25,8 @@
   baseline then optimization → C5 skill usefulness review. No OS sandbox or
   full Cloudflare installation is planned. Analytics is excluded. C1/C2/C3 are
   complete; C4 is in progress (U16 and S2 complete; S2 closed 2026-10-25 with
-  the definitive zai baseline, S1 next) and C5 is pending. R1
+  the definitive zai baseline; S1 implemented 2026-10-25 and pending review)
+  and C5 is pending. R1
   plugin trials follow this sequence.
 
 - New `agent-readiness` and `html-report` skills are registered in common/full;
@@ -43,9 +44,17 @@
   duplicated bytes). The 4-task baseline recorded 78,420 input / 11,197 output
   / 242,880 cacheRead / $0.222204 SDK cost / 179.9 s, with 20 reads (18
   task/file pairs, 14 distinct files), 2 intra-task rereads and 4/4 answers
-  correct. Next is S1 deduplicate
-  discovered/injected context and rerun the same audit and protocol against
-  that baseline, then consider S3, an explicit optional read-only bulk-reader.
+  correct. **S1 is implemented (2026-10-25, uncommitted for review):** the
+  audit is now 1 entry / 0 duplicate bytes, and the same protocol reran 4/4
+  correct (63,551 input / 11,038 output / 256,192 cacheRead / $0.204149 SDK
+  cost / 175.3 s; 22 reads, 17 task/file pairs, 12 distinct files, 3 reread
+  pairs). No benefit is attributed to S1: tasks 1–3 load no agents-files and
+  their deltas are exploration-path variance; the affected `context-overlap`
+  sample moved within noise. Two review findings were fixed on 2026-10-26
+  (first-injection precedence and symlink + `..`, with regressions). Next is
+  review/commit S1, then measure a benefit
+  only with repetitions or a same-tree A/B, then consider S3, an explicit
+  optional read-only bulk-reader.
   Status and acceptance criteria live in
   [the adoption roadmap](../../docs/plans/pi-plugin-adoption-roadmap.md#s--local-context-and-read-cost-optimization);
   U16 evidence is in
@@ -53,7 +62,7 @@
   instrumentation and baseline evidence in
   [the S2 report](../../docs/evals/pi-usage/S2-2026-10-24.md), supporting
   rationale in [the assessment](../../docs/research/spotify-shunt-assessment.md).
-  Both S1 and the post-S1 comparison must reuse the S2 protocol.
+  Both the S1 audit and the post-S1 comparison reused the S2 protocol.
   Automatic hooks,
   code-writing workers and Jev remain deferred; no Portal installation is
   planned.
@@ -89,6 +98,55 @@
   `changes_requested` policy option B is implemented (U15).
 
 ## Done
+
+- 2026-10-25 C4/S1: deduplicated discovered and injected child context,
+  **left uncommitted for review** on top of S2 commit `fb66860`. A new Pi-free
+  module (`src/context-dedup.ts`) canonicalizes paths with
+  `realpathSync.native` on the raw path, resolving the longest existing prefix
+  (stable absolute fallback for the missing tail), and merges
+  `DefaultResourceLoader` discoveries with
+  `request.contextFiles` in first-seen order, returning fresh objects.
+  `buildResourceLoader()` wires it inside `agentsFilesOverride`. Precedence is
+  deterministic: explicit injection wins over discovery, first explicit among
+  explicit, first discovery among discoveries; identical duplicates collapse
+  silently, while a same-path content conflict writes one stderr line naming
+  the canonical path, winner/loser origin and both sha256 prefixes. Two review
+  fixes (2026-10-26): an identical injected duplicate now claims the slot so
+  the first injection keeps precedence, and canonicalization uses
+  `realpathSync.native` on the raw path (longest existing prefix) so a symlink
+  followed by `..` keeps the file the OS actually reads rather than the
+  lexically resolved one. Distinct
+  files, ancestor and scoped `AGENTS.md` files and routed `.ai/` documents are
+  preserved; injected-only paths keep their supplied form. No skill filtering,
+  S3 or plugin was touched. Eleven regressions in
+  `tests/context-dedup.test.ts` pin the production loader: root
+  discovered+injected once, relative/dot-segment/absolute aliases, symlinked
+  project root, file symlink, symlink + `..` relative and absolute,
+  distinct/scoped/curated preservation, conflict precedence + warning,
+  identical-first-injection precedence, and the pure merge hashes. Verification:
+  `npm test` 440/440 (429 before + 11), `npm run typecheck` clean,
+  `git diff --check` clean. Deterministic audit: `context-overlap` 2 entries / 1 canonical path /
+  220 duplicate of 440 loaded bytes → 1 entry / 0 duplicate / 220 loaded; the
+  three repo tasks load 0 on both trees. Same 4-task `zai/glm-5.2` protocol
+  rerun (recorded 2026-10-25T19:53:06Z, tree fingerprint `2a72af34…`): all
+  four calls succeeded, 4/4 answers correct, totals 63,551 input / 11,038
+  output / 256,192 cacheRead / 0 cacheWrite / $0.204149 SDK cost / 175.3 s;
+  38 tool calls, 22 reads (17 task/file pairs, 12 distinct files), 3 reread
+  pairs / 5 extra reads. Cost arithmetic ties exactly
+  (63,551×$1.4/M + 11,038×$4.4/M + 256,192×$0.26/M = $0.20414852). **No
+  benefit is attributed to deduplication:** tasks 1–3 load no agents-files and
+  their deltas are exploration-path variance (e.g. `usage-path` 7 → 12 reads),
+  and the only mechanically affected task (`context-overlap`) moved the other
+  way in this single sample (+36 input / +48 output). Correctness and absence
+  of quality regression are established; benefit needs repetitions or a
+  same-tree A/B. The 2026-10-25 model rerun and its audit predate the
+  2026-10-26 review fixes and are kept unedited; the deterministic audit was
+  repeated after the fixes (`2026-10-26-post-s1-audit-after-review.json`) with
+  the same 1 entry / 0 duplicate / 220 loaded result. Raw outputs and provenance:
+  `docs/evals/pi-usage/runs/2026-10-25-post-s1-*.{json,txt}`. Limits: one run
+  per task, single model, static 220-byte reduction not isolated in billing,
+  no `/feature` end-to-end run. Evidence:
+  [S2 report](../../docs/evals/pi-usage/S2-2026-10-24.md) (S1 section).
 
 - 2026-10-24 C4/S2: usage accounting and the direct-reads protocol are
   complete; **S2 closed 2026-10-25** with the definitive zai baseline. One
@@ -139,8 +197,9 @@
   unmeasured), no `/feature` end-to-end run, verify-command durations
   unmeasured, cache economics provider-specific, duplicated bytes not
   separately billed, and the baseline JSON records absolute local read paths.
-  No profile, skill, plugin or reviewer changed; S1/S3 not
-  implemented; U16 remains the separate parent-load reference. Next: S1.
+  No profile, skill, plugin or reviewer changed; S3 not implemented; S1 is
+  implemented in the entry above. U16 remains the separate parent-load
+  reference.
 
 - 2026-10-24 main-review-hardening U16 (F14), first C4 step: measured the
   parent-session skill load in an isolated Pi 0.84.2 install, without touching
@@ -163,8 +222,9 @@
   `models-store.json` in that disposable directory, and emits projected profile
   block bytes plus reduction; the report records the symlink/copy commands and
   collision check, and corrects the nextjs child description bytes to
-  7,037/7,083/7,321. C4 remains open; next is S2 usage instrumentation and
-  baseline, then S1. No runtime, profile or skill changed.
+  7,037/7,083/7,321. C4 then completed S2 (2026-10-25) and implemented S1
+  (uncommitted for review); S1's measured benefit remains open. No runtime,
+  profile or skill changed.
 
 - 2026-10-23 C3: selectively improved the existing `security-reviewer` skill
   with the feasible Cloudflare `security-audit` method (assessed in

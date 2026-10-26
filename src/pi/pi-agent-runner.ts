@@ -21,6 +21,7 @@ import {
 import { Type } from "typebox";
 
 import type { AgentRunner, AgentRunRequest, AgentRunResult, ResultToolSpec } from "../agent.ts";
+import { dedupeAgentsFiles, type AgentsFileConflict } from "../context-dedup.ts";
 import { usageFromAgentEnds, type CallUsageDetail } from "../usage.ts";
 import { toTypeBox, type JsonSchemaNode } from "./json-schema.ts";
 import {
@@ -88,9 +89,35 @@ export function buildResourceLoader(
       diagnostics: base.diagnostics,
     }),
     ...(extra
-      ? { agentsFilesOverride: (base) => ({ agentsFiles: [...base.agentsFiles, ...extra] }) }
+      ? {
+          agentsFilesOverride: (base) => {
+            const merged = dedupeAgentsFiles(request.cwd, base.agentsFiles, extra);
+            warnContextConflicts(merged.conflicts);
+            return { agentsFiles: merged.files };
+          },
+        }
       : {}),
   });
+}
+
+/**
+ * S1: a same-path content conflict must not disappear silently. The merge
+ * already chose the winner deterministically (explicit injection over
+ * discovery); this is the visible half of that contract. Written to stderr so
+ * it is visible in the TUI/logs without changing the child prompt.
+ */
+function warnContextConflicts(conflicts: readonly AgentsFileConflict[]): void {
+  for (const conflict of conflicts) {
+    const winner =
+      conflict.winner === "injected" ? "request.contextFiles content" : "discovered file content";
+    const loser =
+      conflict.loser === "injected" ? "request.contextFiles content" : "discovered file content";
+    process.stderr.write(
+      `pi-brain: context conflict for ${conflict.path}: ${winner} wins over ${loser} ` +
+        `(sha256 ${conflict.winnerSha256.slice(0, 12)} vs ${conflict.loserSha256.slice(0, 12)}); ` +
+        "entries were deduplicated by canonical path.\n",
+    );
+  }
 }
 
 export class PiAgentRunner implements AgentRunner {
