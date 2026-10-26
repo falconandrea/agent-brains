@@ -1,0 +1,719 @@
+{
+  "experiment": "S1 benefit A/B (C4): duplicated context (A, pre-S1 fb66860 append) vs deduplicated context (B, production buildResourceLoader)",
+  "recordedAtStart": "2026-10-26T18:38:39.202Z",
+  "model": "zai/glm-5.2",
+  "harness": "docs/evals/pi-usage/run-ab-dedup.mjs (experimental; no runtime option added)",
+  "sessionConstruction": "replicates PiAgentRunner.run() for a read-only role (no custom tools, no skills); branch B uses the exported production buildResourceLoader, branch A only replaces agentsFilesOverride with the pre-S1 append; shared ModelRuntime",
+  "provenance": {
+    "commit": "cf5af8f3cf954dd5ef9d0a214acc0f8a34d57901",
+    "subject": "fix(context): deduplicate discovered and injected child context",
+    "cleanTree": false,
+    "dirtyNotes": [
+      "?? docs/evals/pi-usage/run-ab-dedup.mjs"
+    ],
+    "node": "v24.12.0",
+    "projectDir": "/Users/andreafalcon/dev/agent-brains"
+  },
+  "config": {
+    "pairs": 4,
+    "orderPattern": "pair p odd: A then B; pair p even: B then A (alternating)",
+    "prompt": "Using this project's instructions, state the canonical retry limit and the required marker. Then read src/limits.ts and report MAX_BATCH_SIZE and the file that defines it. Name concrete files and values. Read the files directly; do not guess.",
+    "injectedContextFiles": [
+      {
+        "path": "AGENTS.md",
+        "sha256": "f3e6a15f94b0c7d0f9cf693df7e953e4eac78b4a81520dfbe82154c955919dbd"
+      }
+    ],
+    "fixture": {
+      "purpose": "context-overlap (S1 instrument), byte-identical to run-baseline.mjs",
+      "files": [
+        {
+          "path": "AGENTS.md",
+          "bytes": 220,
+          "sha256": "f3e6a15f94b0c7d0f9cf693df7e953e4eac78b4a81520dfbe82154c955919dbd"
+        },
+        {
+          "path": "src/limits.ts",
+          "bytes": 154,
+          "sha256": "8735579ddfff61869674f9c46e2e0c92818e075a6dd09c4a4fd049d2e822f26d"
+        },
+        {
+          "path": "README.md",
+          "bytes": 171,
+          "sha256": "e8574cac1ae6d9012534e8fde63aac368d7e45400ee17f9d8d9042ccf4b5ff81"
+        }
+      ]
+    },
+    "expectedAudit": {
+      "A": {
+        "agentsFileEntries": 2,
+        "duplicateBytes": 220,
+        "loadedBytes": 440
+      },
+      "B": {
+        "agentsFileEntries": 1,
+        "duplicateBytes": 0,
+        "loadedBytes": 220
+      }
+    },
+    "isolation": "disposable HOME and Pi agent dir; independent catalog copy (symlink refused); ambient credentials only; one shared fixture directory for every call; fresh in-memory session per call"
+  },
+  "calls": [
+    {
+      "label": "s1ab-p1-A",
+      "branch": "A",
+      "startedAt": "2026-10-26T18:38:39.328Z",
+      "endedAt": "2026-10-26T18:38:54.801Z",
+      "wallClockMs": 15473,
+      "loaderAudit": {
+        "branch": "A",
+        "agentsFileEntries": 2,
+        "uniquePaths": 1,
+        "duplicatePaths": [
+          {
+            "path": "AGENTS.md",
+            "count": 2
+          }
+        ],
+        "duplicateBytes": 220,
+        "loadedBytes": 440,
+        "effectiveBytes": 220
+      },
+      "usage": {
+        "input": 1468,
+        "output": 277,
+        "cacheRead": 2880,
+        "cacheWrite": 0,
+        "cost": 0.0040228,
+        "provider": "zai",
+        "model": "glm-5.2",
+        "elapsedMs": 15473
+      },
+      "agentEndBatches": 1,
+      "aborted": false,
+      "answerChars": 452,
+      "answer": "Both answers come from direct reads:\n\n**From `AGENTS.md` (project instructions):**\n- Canonical retry limit: **7 attempts**\n- Required marker: **FIXTURE-AGENTS-MARKER** (to be cited whenever quoting these instructions)\n\n**From `src/limits.ts`:**\n- `MAX_BATCH_SIZE = 42`\n- It is defined and exported in the file **`src/limits.ts`** itself\n\n(Note: `src/limits.ts` also contains a `retryLimit()` helper returning `7`, consistent with the instruction file.)",
+      "toolCalls": {
+        "ls": 1,
+        "find": 1,
+        "read": 2
+      },
+      "readCounts": {
+        "AGENTS.md": 1,
+        "src/limits.ts": 1
+      },
+      "keywordCheck": {
+        "retryLimit7": true,
+        "marker": true,
+        "maxBatchSize42": true,
+        "limitsTs": true
+      },
+      "pair": 1,
+      "slot": 1
+    },
+    {
+      "label": "s1ab-p1-B",
+      "branch": "B",
+      "startedAt": "2026-10-26T18:38:54.812Z",
+      "endedAt": "2026-10-26T18:39:16.369Z",
+      "wallClockMs": 21558,
+      "loaderAudit": {
+        "branch": "B",
+        "agentsFileEntries": 1,
+        "uniquePaths": 1,
+        "duplicatePaths": [],
+        "duplicateBytes": 0,
+        "loadedBytes": 220,
+        "effectiveBytes": 220
+      },
+      "usage": {
+        "input": 473,
+        "output": 493,
+        "cacheRead": 5504,
+        "cacheWrite": 0,
+        "cost": 0.00426244,
+        "provider": "zai",
+        "model": "glm-5.2",
+        "elapsedMs": 21555
+      },
+      "agentEndBatches": 1,
+      "aborted": false,
+      "answerChars": 684,
+      "answer": "Per the project instructions in **`AGENTS.md`** (marker: **FIXTURE-AGENTS-MARKER**):\n\n- **Canonical retry limit:** 7 attempts — \"This project's canonical retry limit is 7 attempts.\"\n- **Required marker:** **FIXTURE-AGENTS-MARKER**, which must be cited whenever quoting these instructions.\n\nFrom **`src/limits.ts`**, read directly:\n\n- **`MAX_BATCH_SIZE = 42`** — defined in `src/limits.ts` (line 2): `export const MAX_BATCH_SIZE = 42;`\n- The same file also contains a `retryLimit()` function (line 5) returning `7`, consistent with the canonical limit in `AGENTS.md`.\n\nNote: a project-wide grep confirmed `MAX_BATCH_SIZE` is defined only in `src/limits.ts` — no other file declares it.",
+      "toolCalls": {
+        "find": 2,
+        "read": 2,
+        "grep": 1
+      },
+      "readCounts": {
+        "src/limits.ts": 1,
+        "AGENTS.md": 1
+      },
+      "keywordCheck": {
+        "retryLimit7": true,
+        "marker": true,
+        "maxBatchSize42": true,
+        "limitsTs": true
+      },
+      "pair": 1,
+      "slot": 2
+    },
+    {
+      "label": "s1ab-p2-B",
+      "branch": "B",
+      "startedAt": "2026-10-26T18:39:16.407Z",
+      "endedAt": "2026-10-26T18:39:29.836Z",
+      "wallClockMs": 13429,
+      "loaderAudit": {
+        "branch": "B",
+        "agentsFileEntries": 1,
+        "uniquePaths": 1,
+        "duplicatePaths": [],
+        "duplicateBytes": 0,
+        "loadedBytes": 220,
+        "effectiveBytes": 220
+      },
+      "usage": {
+        "input": 541,
+        "output": 548,
+        "cacheRead": 4032,
+        "cacheWrite": 0,
+        "cost": 0.004216920000000001,
+        "provider": "zai",
+        "model": "glm-5.2",
+        "elapsedMs": 13428
+      },
+      "agentEndBatches": 1,
+      "aborted": false,
+      "answerChars": 745,
+      "answer": "Per the project's instructions in **AGENTS.md** (read directly):\n\n- **Canonical retry limit:** **7 attempts** — stated in `AGENTS.md`, and consistent with `retryLimit(): number { return 7; }` in `src/limits.ts`.\n- **Required marker:** **FIXTURE-AGENTS-MARKER** — `AGENTS.md` says to always cite this marker when quoting its instructions.\n\nFrom **src/limits.ts** (read directly):\n\n- **MAX_BATCH_SIZE = 42**, defined on line 2 of `src/limits.ts` (`export const MAX_BATCH_SIZE = 42;`).\n\nSummary of concrete files and values:\n\n| Item | Value | File |\n|---|---|---|\n| Retry limit | 7 attempts | `AGENTS.md` (and `retryLimit()` in `src/limits.ts`) |\n| Marker | `FIXTURE-AGENTS-MARKER` | `AGENTS.md` |\n| MAX_BATCH_SIZE | 42 | `src/limits.ts` (line 2) |",
+      "toolCalls": {
+        "ls": 1,
+        "find": 1,
+        "read": 3
+      },
+      "readCounts": {
+        "AGENTS.md": 1,
+        "README.md": 1,
+        "src/limits.ts": 1
+      },
+      "keywordCheck": {
+        "retryLimit7": true,
+        "marker": true,
+        "maxBatchSize42": true,
+        "limitsTs": true
+      },
+      "pair": 2,
+      "slot": 1
+    },
+    {
+      "label": "s1ab-p2-A",
+      "branch": "A",
+      "startedAt": "2026-10-26T18:39:29.857Z",
+      "endedAt": "2026-10-26T18:39:48.470Z",
+      "wallClockMs": 18613,
+      "loaderAudit": {
+        "branch": "A",
+        "agentsFileEntries": 2,
+        "uniquePaths": 1,
+        "duplicatePaths": [
+          {
+            "path": "AGENTS.md",
+            "count": 2
+          }
+        ],
+        "duplicateBytes": 220,
+        "loadedBytes": 440,
+        "effectiveBytes": 220
+      },
+      "usage": {
+        "input": 513,
+        "output": 441,
+        "cacheRead": 5568,
+        "cacheWrite": 0,
+        "cost": 0.00410628,
+        "provider": "zai",
+        "model": "glm-5.2",
+        "elapsedMs": 18613
+      },
+      "agentEndBatches": 1,
+      "aborted": false,
+      "answerChars": 446,
+      "answer": "Per the project instructions (`AGENTS.md`), quoting with the required marker **FIXTURE-AGENTS-MARKER**:\n\n- **Canonical retry limit:** 7 attempts\n- **Required marker:** `FIXTURE-AGENTS-MARKER`\n\nFrom the direct read of the source file:\n\n- **`MAX_BATCH_SIZE = 42`** — defined in **`src/limits.ts`** (line 2)\n\nAs a cross-check, `src/limits.ts` also exports `retryLimit()`, which returns `7` — matching the canonical retry limit stated in `AGENTS.md`.",
+      "toolCalls": {
+        "ls": 2,
+        "find": 1,
+        "read": 2
+      },
+      "readCounts": {
+        "AGENTS.md": 1,
+        "src/limits.ts": 1
+      },
+      "keywordCheck": {
+        "retryLimit7": true,
+        "marker": true,
+        "maxBatchSize42": true,
+        "limitsTs": true
+      },
+      "pair": 2,
+      "slot": 2
+    },
+    {
+      "label": "s1ab-p3-A",
+      "branch": "A",
+      "startedAt": "2026-10-26T18:39:48.482Z",
+      "endedAt": "2026-10-26T18:40:02.190Z",
+      "wallClockMs": 13708,
+      "loaderAudit": {
+        "branch": "A",
+        "agentsFileEntries": 2,
+        "uniquePaths": 1,
+        "duplicatePaths": [
+          {
+            "path": "AGENTS.md",
+            "count": 2
+          }
+        ],
+        "duplicateBytes": 220,
+        "loadedBytes": 440,
+        "effectiveBytes": 220
+      },
+      "usage": {
+        "input": 348,
+        "output": 255,
+        "cacheRead": 3904,
+        "cacheWrite": 0,
+        "cost": 0.0026242400000000003,
+        "provider": "zai",
+        "model": "glm-5.2",
+        "elapsedMs": 13708
+      },
+      "agentEndBatches": 1,
+      "aborted": false,
+      "answerChars": 451,
+      "answer": "Per the project instructions in **AGENTS.md** (citing the required marker **FIXTURE-AGENTS-MARKER**):\n\n- **Canonical retry limit:** 7 attempts — stated in `AGENTS.md` and corroborated by `retryLimit()` in `src/limits.ts`, which returns `7`.\n- **Required marker:** `FIXTURE-AGENTS-MARKER` — must be cited whenever quoting these instructions.\n\nFrom **src/limits.ts**:\n\n- **MAX_BATCH_SIZE = 42**, defined in `src/limits.ts` (exported constant on line 2).",
+      "toolCalls": {
+        "ls": 1,
+        "read": 2
+      },
+      "readCounts": {
+        "AGENTS.md": 1,
+        "src/limits.ts": 1
+      },
+      "keywordCheck": {
+        "retryLimit7": true,
+        "marker": true,
+        "maxBatchSize42": true,
+        "limitsTs": true
+      },
+      "pair": 3,
+      "slot": 1
+    },
+    {
+      "label": "s1ab-p3-B",
+      "branch": "B",
+      "startedAt": "2026-10-26T18:40:02.205Z",
+      "endedAt": "2026-10-26T18:40:13.964Z",
+      "wallClockMs": 11760,
+      "loaderAudit": {
+        "branch": "B",
+        "agentsFileEntries": 1,
+        "uniquePaths": 1,
+        "duplicatePaths": [],
+        "duplicateBytes": 0,
+        "loadedBytes": 220,
+        "effectiveBytes": 220
+      },
+      "usage": {
+        "input": 529,
+        "output": 459,
+        "cacheRead": 5568,
+        "cacheWrite": 0,
+        "cost": 0.00420788,
+        "provider": "zai",
+        "model": "glm-5.2",
+        "elapsedMs": 11759
+      },
+      "agentEndBatches": 1,
+      "aborted": false,
+      "answerChars": 807,
+      "answer": "Per the project instructions:\n\n**Canonical retry limit** — `AGENTS.md` states: \"This project's canonical retry limit is 7 attempts.\" This matches the source: `retryLimit()` in `src/limits.ts` also returns `7`.\n\n**Required marker** — `FIXTURE-AGENTS-MARKER` (from `AGENTS.md`: \"Always cite the marker FIXATURE-AGENTS-MARKER…\" — exactly: \"Always cite the marker FIXTURE-AGENTS-MARKER when quoting these instructions.\") I cite that marker here as required when quoting these instructions.\n\n**From `src/limits.ts`:**\n- `MAX_BATCH_SIZE = 42` — defined in **`src/limits.ts`**, line 2 (`export const MAX_BATCH_SIZE = 42;`)\n\nAll values read directly from the files:\n- Retry limit: **7** (`AGENTS.md` and `src/limits.ts`)\n- Marker: **FIXTURE-AGENTS-MARKER** (`AGENTS.md`)\n- `MAX_BATCH_SIZE`: **42** (`src/limits.ts`)",
+      "toolCalls": {
+        "ls": 1,
+        "find": 2,
+        "read": 3
+      },
+      "readCounts": {
+        "AGENTS.md": 1,
+        "README.md": 1,
+        "src/limits.ts": 1
+      },
+      "keywordCheck": {
+        "retryLimit7": true,
+        "marker": true,
+        "maxBatchSize42": true,
+        "limitsTs": true
+      },
+      "pair": 3,
+      "slot": 2
+    },
+    {
+      "label": "s1ab-p4-B",
+      "branch": "B",
+      "startedAt": "2026-10-26T18:40:13.975Z",
+      "endedAt": "2026-10-26T18:40:24.999Z",
+      "wallClockMs": 11024,
+      "loaderAudit": {
+        "branch": "B",
+        "agentsFileEntries": 1,
+        "uniquePaths": 1,
+        "duplicatePaths": [],
+        "duplicateBytes": 0,
+        "loadedBytes": 220,
+        "effectiveBytes": 220
+      },
+      "usage": {
+        "input": 434,
+        "output": 408,
+        "cacheRead": 4032,
+        "cacheWrite": 0,
+        "cost": 0.00345112,
+        "provider": "zai",
+        "model": "glm-5.2",
+        "elapsedMs": 11023
+      },
+      "agentEndBatches": 1,
+      "aborted": false,
+      "answerChars": 709,
+      "answer": "Per this project's instructions (read directly, as directed — marker cited: **FIXTURE-AGENTS-MARKER**):\n\n**From `AGENTS.md`** (root instructions):\n- Canonical retry limit: **7 attempts**\n- Required marker: **FIXTURE-AGENTS-MARKER** (must be cited when quoting these instructions)\n\n**From `src/limits.ts`** (read directly):\n- `MAX_BATCH_SIZE = 42`\n- Defined in: **`src/limits.ts`** — the constant is declared there itself (`export const MAX_BATCH_SIZE = 42;`)\n- Corroborating detail: the same file also exports `retryLimit(): number { return 7; }`, consistent with the AGENTS.md value of 7.\n\nFor context, `README.md` describes this as a fixture project used to measure context deduplication — not product code.",
+      "toolCalls": {
+        "ls": 1,
+        "find": 1,
+        "read": 3
+      },
+      "readCounts": {
+        "src/limits.ts": 1,
+        "AGENTS.md": 1,
+        "README.md": 1
+      },
+      "keywordCheck": {
+        "retryLimit7": true,
+        "marker": true,
+        "maxBatchSize42": true,
+        "limitsTs": true
+      },
+      "pair": 4,
+      "slot": 1
+    },
+    {
+      "label": "s1ab-p4-A",
+      "branch": "A",
+      "startedAt": "2026-10-26T18:40:25.008Z",
+      "endedAt": "2026-10-26T18:40:37.296Z",
+      "wallClockMs": 12288,
+      "loaderAudit": {
+        "branch": "A",
+        "agentsFileEntries": 2,
+        "uniquePaths": 1,
+        "duplicatePaths": [
+          {
+            "path": "AGENTS.md",
+            "count": 2
+          }
+        ],
+        "duplicateBytes": 220,
+        "loadedBytes": 440,
+        "effectiveBytes": 220
+      },
+      "usage": {
+        "input": 382,
+        "output": 270,
+        "cacheRead": 3968,
+        "cacheWrite": 0,
+        "cost": 0.00275448,
+        "provider": "zai",
+        "model": "glm-5.2",
+        "elapsedMs": 12288
+      },
+      "agentEndBatches": 1,
+      "aborted": false,
+      "answerChars": 357,
+      "answer": "**From AGENTS.md** (project instructions), citing the marker **FIXTURE-AGENTS-MARKER**:\n- Canonical retry limit: **7 attempts**\n\n**From src/limits.ts**:\n- `MAX_BATCH_SIZE = 42`, defined in **`src/limits.ts`** (line 2: `export const MAX_BATCH_SIZE = 42;`)\n\nThe file also contains a `retryLimit()` function returning `7`, consistent with the instruction file.",
+      "toolCalls": {
+        "ls": 1,
+        "find": 1,
+        "read": 2
+      },
+      "readCounts": {
+        "AGENTS.md": 1,
+        "src/limits.ts": 1
+      },
+      "keywordCheck": {
+        "retryLimit7": true,
+        "marker": true,
+        "maxBatchSize42": true,
+        "limitsTs": true
+      },
+      "pair": 4,
+      "slot": 2
+    }
+  ],
+  "summary": {
+    "note": "derived from calls[]; small deltas are NOT significance claims — see the report",
+    "byBranch": {
+      "A": {
+        "input": {
+          "n": 4,
+          "mean": 677.75,
+          "median": 447.5,
+          "min": 348,
+          "max": 1468
+        },
+        "output": {
+          "n": 4,
+          "mean": 310.75,
+          "median": 273.5,
+          "min": 255,
+          "max": 441
+        },
+        "cacheRead": {
+          "n": 4,
+          "mean": 4080,
+          "median": 3936,
+          "min": 2880,
+          "max": 5568
+        },
+        "cacheWrite": {
+          "n": 4,
+          "mean": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "cost": {
+          "n": 4,
+          "mean": 0.00337695,
+          "median": 0.00338864,
+          "min": 0.0026242400000000003,
+          "max": 0.00410628
+        },
+        "elapsedMs": {
+          "n": 4,
+          "mean": 15020.5,
+          "median": 14590.5,
+          "min": 12288,
+          "max": 18613
+        },
+        "wallClockMs": {
+          "n": 4,
+          "mean": 15020.5,
+          "median": 14590.5,
+          "min": 12288,
+          "max": 18613
+        }
+      },
+      "B": {
+        "input": {
+          "n": 4,
+          "mean": 494.25,
+          "median": 501,
+          "min": 434,
+          "max": 541
+        },
+        "output": {
+          "n": 4,
+          "mean": 477,
+          "median": 476,
+          "min": 408,
+          "max": 548
+        },
+        "cacheRead": {
+          "n": 4,
+          "mean": 4784,
+          "median": 4768,
+          "min": 4032,
+          "max": 5568
+        },
+        "cacheWrite": {
+          "n": 4,
+          "mean": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "cost": {
+          "n": 4,
+          "mean": 0.00403459,
+          "median": 0.0042124,
+          "min": 0.00345112,
+          "max": 0.00426244
+        },
+        "elapsedMs": {
+          "n": 4,
+          "mean": 14441.25,
+          "median": 12593.5,
+          "min": 11023,
+          "max": 21555
+        },
+        "wallClockMs": {
+          "n": 4,
+          "mean": 14442.75,
+          "median": 12594.5,
+          "min": 11024,
+          "max": 21558
+        }
+      }
+    },
+    "pairedDeltas": [
+      {
+        "input": {
+          "a": 1468,
+          "b": 473,
+          "delta": -995
+        },
+        "output": {
+          "a": 277,
+          "b": 493,
+          "delta": 216
+        },
+        "cacheRead": {
+          "a": 2880,
+          "b": 5504,
+          "delta": 2624
+        },
+        "cacheWrite": {
+          "a": 0,
+          "b": 0,
+          "delta": 0
+        },
+        "cost": {
+          "a": 0.0040228,
+          "b": 0.00426244,
+          "delta": 0.00023964000000000017
+        },
+        "elapsedMs": {
+          "a": 15473,
+          "b": 21555,
+          "delta": 6082
+        },
+        "wallClockMs": {
+          "a": 15473,
+          "b": 21558,
+          "delta": 6085
+        }
+      },
+      {
+        "input": {
+          "a": 513,
+          "b": 541,
+          "delta": 28
+        },
+        "output": {
+          "a": 441,
+          "b": 548,
+          "delta": 107
+        },
+        "cacheRead": {
+          "a": 5568,
+          "b": 4032,
+          "delta": -1536
+        },
+        "cacheWrite": {
+          "a": 0,
+          "b": 0,
+          "delta": 0
+        },
+        "cost": {
+          "a": 0.00410628,
+          "b": 0.004216920000000001,
+          "delta": 0.00011064000000000039
+        },
+        "elapsedMs": {
+          "a": 18613,
+          "b": 13428,
+          "delta": -5185
+        },
+        "wallClockMs": {
+          "a": 18613,
+          "b": 13429,
+          "delta": -5184
+        }
+      },
+      {
+        "input": {
+          "a": 348,
+          "b": 529,
+          "delta": 181
+        },
+        "output": {
+          "a": 255,
+          "b": 459,
+          "delta": 204
+        },
+        "cacheRead": {
+          "a": 3904,
+          "b": 5568,
+          "delta": 1664
+        },
+        "cacheWrite": {
+          "a": 0,
+          "b": 0,
+          "delta": 0
+        },
+        "cost": {
+          "a": 0.0026242400000000003,
+          "b": 0.00420788,
+          "delta": 0.0015836399999999994
+        },
+        "elapsedMs": {
+          "a": 13708,
+          "b": 11759,
+          "delta": -1949
+        },
+        "wallClockMs": {
+          "a": 13708,
+          "b": 11760,
+          "delta": -1948
+        }
+      },
+      {
+        "input": {
+          "a": 382,
+          "b": 434,
+          "delta": 52
+        },
+        "output": {
+          "a": 270,
+          "b": 408,
+          "delta": 138
+        },
+        "cacheRead": {
+          "a": 3968,
+          "b": 4032,
+          "delta": 64
+        },
+        "cacheWrite": {
+          "a": 0,
+          "b": 0,
+          "delta": 0
+        },
+        "cost": {
+          "a": 0.00275448,
+          "b": 0.00345112,
+          "delta": 0.0006966399999999997
+        },
+        "elapsedMs": {
+          "a": 12288,
+          "b": 11023,
+          "delta": -1265
+        },
+        "wallClockMs": {
+          "a": 12288,
+          "b": 11024,
+          "delta": -1264
+        }
+      }
+    ]
+  },
+  "recordedAtEnd": "2026-10-26T18:40:37.311Z"
+}

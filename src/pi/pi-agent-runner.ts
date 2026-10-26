@@ -75,6 +75,16 @@ const NO_ANSWER =
  *
  * Exported so the S2 baseline can audit what the loader actually injects
  * (discovered vs routed context) without duplicating this construction.
+ *
+ * `noExtensions` is a child constraint, not an optimization: once the loader
+ * is reloaded (see buildLoadedResourceLoader), a loader without this flag
+ * activates every extension registered for the agent dir / project — in
+ * production the agent dir registers the pi-brain package, whose
+ * `./extensions` would give workflow-owned child sessions the workflow's own
+ * commands and extension tools (recursion the workflow never authorized).
+ * Children receive context files and router-filtered skills only; prompts and
+ * themes stay enabled because they never reach the child's system prompt or
+ * its tool allowlist.
  */
 export function buildResourceLoader(
   request: Pick<AgentRunRequest, "cwd" | "skills" | "contextFiles">,
@@ -84,6 +94,7 @@ export function buildResourceLoader(
   return new DefaultResourceLoader({
     cwd: request.cwd,
     agentDir: getAgentDir(),
+    noExtensions: true,
     skillsOverride: (base) => ({
       skills: wanted ? base.skills.filter((s) => wanted.includes(s.name)) : base.skills,
       diagnostics: base.diagnostics,
@@ -98,6 +109,25 @@ export function buildResourceLoader(
         }
       : {}),
   });
+}
+
+/**
+ * P1 fix (2026-10-26 review): `createAgentSession()` uses a caller-supplied
+ * resource loader AS IS — Pi SDK 0.84.2 reloads only a loader it constructed
+ * internally. An unreloaded `DefaultResourceLoader` reports zero agents-files,
+ * zero skills and zero extensions, so child sessions built from one ran with
+ * no injected context and no skills at all: the loader-level audits were true
+ * but measured a component the session never consumed. The loader must be
+ * LOADED before the session is created from it. Exported so the offline
+ * integration test (tests/pi-session-injection.test.ts) and the eval harness
+ * exercise the exact production entry point.
+ */
+export async function buildLoadedResourceLoader(
+  request: Pick<AgentRunRequest, "cwd" | "skills" | "contextFiles">,
+): Promise<DefaultResourceLoader> {
+  const loader = buildResourceLoader(request);
+  await loader.reload();
+  return loader;
 }
 
 /**
@@ -172,7 +202,10 @@ export class PiAgentRunner implements AgentRunner {
         cwd: request.cwd,
         sessionManager: SessionManager.inMemory(request.cwd),
         modelRuntime: this.#modelRuntime,
-        resourceLoader: buildResourceLoader(request),
+        // P1 fix: load the loader (context files + filtered skills, no
+        // extensions) BEFORE the session is created from it — the SDK does
+        // not reload a caller-supplied loader.
+        resourceLoader: await buildLoadedResourceLoader(request),
         model: await this.#resolveModel(request),
         thinkingLevel: request.model?.thinking,
         customTools,

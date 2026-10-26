@@ -1,0 +1,85 @@
+S1 benefit A/B experiment (CORRECTED rerun) provenance — generated 2026-10-26
+run recordedAtStart: 2026-10-26T22:08:20.180Z
+run recordedAtEnd:   2026-10-26T22:09:26.524Z
+base commit: cf5af8f3cf954dd5ef9d0a214acc0f8a34d57901 (S1 committed)
+working tree at run time: base commit + UNCOMMITTED review-P1 fix
+  - src/pi/pi-agent-runner.ts: buildResourceLoader gains noExtensions:true
+    (child constraint); new exported buildLoadedResourceLoader() reloads the
+    loader BEFORE the session is created from it; run() uses it
+  - tests/pi-session-injection.test.ts (new): offline integration test
+  - untracked eval tooling (run-ab-dedup.mjs, repro-loader-injection.mjs)
+branch: main
+node: v24.12.0
+harness: docs/evals/pi-usage/run-ab-dedup.mjs (corrected version)
+harness sha256: fe03db12cfc1b79599719db86ac6c4c806dcebaf15b17de4d08185de448d8f2e
+
+== why a corrected rerun was needed (review P1) ==
+The first A/B (kept as 2026-10-26-ab-dedup-invalid-*.*) gated a RELOADED
+loader but passed a DIFFERENT, unreloaded instance to createAgentSession;
+Pi SDK 0.84.2 reloads only a loader it constructs internally, so BOTH arms
+received the same system prompt with ZERO injected context and no skills.
+Reproduction: 2026-10-26-p1-repro.txt (path [1]: 0 copies, no skills, no
+<project_context>); failing integration test on pre-fix code:
+2026-10-26-p1-test-failing.txt. The "benefit not detectable" conclusion from
+that run was WITHDRAWN; this rerun repeats the measurement with the
+manipulation proven per call.
+
+== correction: gates now bind to the session, not to a parallel instance ==
+- ONE loader per call is built, reload()-ed, audited AND passed to
+  createAgentSession (the same instance).
+- After session creation, BEFORE session.prompt(), the ACTUAL system prompt
+  is gated: content copies of AGENTS.md (A: 2, B: 1), marker copies equal to
+  content copies, <project_instructions> block count equal to content copies,
+  same-branch prompt byte-identical across calls, cross-branch prompt
+  remainder (everything outside the rendered blocks) byte-identical, and the
+  A-B length delta exactly one rendered block with the injected relative
+  path (286 bytes = 220 content + 66 wrapper; the discovered copy renders
+  with its absolute path, the injected copy keeps the supplied relative
+  path). All gates passed on all 8 calls (per-call records in the raw JSON;
+  offline pre-flight: 2026-10-26-ab-dedup2-prompt-gate.json, mode gate-only,
+  session.prompt() never called).
+
+== branch definitions (the ONLY difference between A and B) ==
+A = pre-S1 append (commit fb66860), quoted verbatim:
+    agentsFilesOverride: (base) => ({ agentsFiles: [...base.agentsFiles, ...extra] })
+B = production buildResourceLoader() (S1 dedup) + the loader-load fix above
+Both branches share the harness's identical session construction
+(createAgentSession + SessionManager.inMemory + one shared ModelRuntime,
+production resolveTools read-only allowlist [read,grep,find,ls], skills: [],
+no skills selected, no custom tools, noExtensions) and the production usage
+fold (usageFromAgentEnds).
+
+== measured files manifest (sha256 <path>) ==
+d78e4abad4f8c7c5189cf6a4a85303615c3ee98c3aab465bd8bed6e7e938389c  src/context-dedup.ts
+1c1f55df6a409e15e2e9552c27116ec227136839d8cfed44c1486519aa3f8456  src/pi/pi-agent-runner.ts
+9cb521784335cd7cad102dcc5e81c8f480b98d116f8d1804aaf99edc673f157a  src/usage.ts
+treeFingerprint_sha256: 949a0765d8007182b6a659511a0bd45c5a92f793f9b2ae0d4757d2ec0a0ba980
+fingerprint scope: the loader/dedup/usage code the experiment exercises,
+INCLUDING the uncommitted P1 fix in src/pi/pi-agent-runner.ts; = sha256 of the
+manifest above
+reproduce: { printf 'src/context-dedup.ts\nsrc/pi/pi-agent-runner.ts\nsrc/usage.ts\n'; } | xargs shasum -a 256 | shasum -a 256
+
+== run inputs (same isolation contract as the S2 baseline) ==
+model: zai/glm-5.2 (pricing 1.4/4.4/0.26/0 USD per M input/output/cacheRead/cacheWrite)
+task: context-overlap only (the one task mechanically affected by S1)
+fixture: byte-identical to run-baseline.mjs OVERLAP_FIXTURE (AGENTS.md sha256
+f3e6a15f94b0c7d0f9cf693df7e953e4eac78b4a81520dfbe82154c955919dbd — matches
+the S2 definitive-baseline artifact)
+prompt: verbatim context-overlap prompt from run-baseline.mjs (recorded in the raw JSON)
+pairs: 4, order AB/BA/AB/BA (alternating); fresh in-memory session per call,
+one shared fixture directory, one shared ModelRuntime
+isolation: disposable HOME and Pi agent dir; independent COPY of
+models-store.json (symlink refused, exit 2); ambient ZAI_API_KEY only. The
+disposable HOME stayed empty; inside the disposable agent dir the SDK wrote
+only its own 2-byte auth.json ({}), an updated catalog into the COPY and a
+bin/ helper directory.
+Command:
+  EXP=<temp dir>; mkdir -p "$EXP/home" "$EXP/agent"
+  cp "$HOME/.pi/agent/models-store.json" "$EXP/agent/models-store.json"
+  HOME="$EXP/home" node docs/evals/pi-usage/run-ab-dedup.mjs "$PWD" "$EXP/agent" \
+    --model zai/glm-5.2 --pairs 4 --out "$EXP/ab-dedup2-raw.json"
+
+== post-run stability check ==
+manifest regenerated after the run over the same three files and matched the
+fingerprint above; the artifacts copied into runs/ are byte-identical to the
+harness outputs (cp, unedited).

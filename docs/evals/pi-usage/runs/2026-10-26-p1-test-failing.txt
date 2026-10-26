@@ -1,0 +1,29 @@
+✖ the runner's session receives routed context and selected skills (the P1) (27.007875ms)
+✔ an unloaded loader injects nothing — the trap this regression pins (9.987917ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1255.929833
+
+✖ failing tests:
+
+test at tests/pi-session-injection.test.ts:90:1
+✖ the runner's session receives routed context and selected skills (the P1) (27.007875ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  0 !== 1
+  
+      at TestContext.<anonymous> (file:///Users/andreafalcon/dev/agent-brains/tests/pi-session-injection.test.ts:99:10)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

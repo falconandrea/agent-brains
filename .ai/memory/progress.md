@@ -51,10 +51,33 @@
   pairs). No benefit is attributed to S1: tasks 1–3 load no agents-files and
   their deltas are exploration-path variance; the affected `context-overlap`
   sample moved within noise. Two review findings were fixed on 2026-10-26
-  (first-injection precedence and symlink + `..`, with regressions). Next is
-  review/commit S1, then measure a benefit
-  only with repetitions or a same-tree A/B, then consider S3, an explicit
-  optional read-only bulk-reader.
+  (first-injection precedence and symlink + `..`, with regressions). **S1 was
+  committed as `cf5af8f` (2026-10-26).** The first same-tree A/B benefit
+  measurement (2026-10-26) was **invalidated by review P1** — the harness
+  gated a reloaded loader but passed an unloaded instance to
+  `createAgentSession()`, exactly like `PiAgentRunner.run()`; with Pi SDK
+  0.84.2 both arms (and every pre-fix child session, including all
+  `/feature` runs) received **zero injected context and zero skills**, so its
+  "no benefit detectable" conclusion was withdrawn. **P1 fix implemented,
+  uncommitted for review:** `buildResourceLoader()` gains `noExtensions:
+  true` (child constraint; a loaded loader would otherwise activate the
+  agent-dir-registered pi-brain extension inside children) and the new
+  `buildLoadedResourceLoader()` reloads the loader before session creation;
+  `run()` uses it; `tests/pi-session-injection.test.ts` pins it offline
+  (context exactly once — S1 end-to-end in the real system prompt —, selected
+  skill in, unselected out, zero extensions; pre-fix failing output saved).
+  **Corrected A/B (valid): still no detectable benefit** — 4 pairs
+  alternating AB/BA on `cf5af8f` + the fix, per-call gates on the same loaded
+  loader passed to the session AND on the actual system prompt (A 2 copies of
+  the AGENTS.md content, B 1, remainder byte-identical, ±286-byte length
+  delta); 8/8 calls and answers correct; paired cost deltas −$0.0006 to
+  +$0.0008 (mixed signs), input-side means inside within-branch spreads; the
+  ~286-byte/~70-token reduction has no demonstrated benefit in these four
+  pairs. Measurement closed without expansion, without ruling out a small
+  effect; S3 gains no cost justification from S1. Remaining C4
+  follow-ups: review/commit the P1 fix (a behavior change — children now
+  actually receive routed context and router-selected skills), then one full
+  `/feature` run before/after reading totals from the persisted run log.
   Status and acceptance criteria live in
   [the adoption roadmap](../../docs/plans/pi-plugin-adoption-roadmap.md#s--local-context-and-read-cost-optimization);
   U16 evidence is in
@@ -99,6 +122,80 @@
 
 ## Done
 
+- 2026-10-26 (later, review P1) C4/S1 benefit measurement corrected: the
+  first A/B was **invalid** — the harness gated a reloaded loader but passed
+  a different, unloaded instance to `createAgentSession()`, and
+  `PiAgentRunner.run()` did the same; Pi SDK 0.84.2 reloads only a loader it
+  constructs internally, so **both arms received the same prompt with zero
+  injected context** (and, understood retroactively, so did every pre-fix
+  child session, `/feature` runs included: no context files, no skills ever
+  reached them). The "no benefit detectable" conclusion from that run is
+  **withdrawn**; its artifacts are kept unedited as
+  `docs/evals/pi-usage/runs/2026-10-26-ab-dedup-invalid-*`. Reproduced
+  offline (`repro-loader-injection.mjs` → `runs/2026-10-26-p1-repro.txt`:
+  0 copies / no skills / no `<project_context>`), integration test written
+  against the pre-fix code and failing `0 !== 1`
+  (`runs/2026-10-26-p1-test-failing.txt`), then fixed: `buildResourceLoader()`
+  gains `noExtensions: true` (child constraint; without it a loaded loader
+  would activate the agent-dir-registered pi-brain extension inside
+  children), new exported `buildLoadedResourceLoader()` reloads before
+  session creation, `run()` uses it, and
+  `tests/pi-session-injection.test.ts` passes (context exactly once — S1
+  end-to-end —, selected skill in, unselected out, zero extensions; suite
+  442/442, typecheck clean). Harness corrected: one loader per call is
+  built, reloaded, audited AND passed to the session; the actual system
+  prompt is gated before `session.prompt()` (A: exactly 2 copies of the
+  AGENTS.md content in 2 `<project_instructions>` blocks; B: exactly 1;
+  marker only inside copies; same-branch prompts byte-identical; cross-branch
+  remainders byte-identical; ±286-byte length delta — offline pre-flight
+  `--gate-only`, no provider call). **Corrected A/B rerun (4 pairs AB/BA/AB/BA,
+  `zai/glm-5.2`, isolated env, copied catalog): valid, still no detectable
+  benefit** — 8/8 calls and 8/8 answers correct; paired cost deltas −$0.0006
+  to +$0.0008 (mixed signs, p=0.625), input-side means A 3,177 vs B 3,141
+  tokens inside within-branch spreads (A 3,123–3,199, B 3,073–3,211); the
+  ~286-byte (~70-token) reduction has no demonstrated benefit in these four
+  pairs (~$0.00004/call heuristic vs ~$0.00157 observed cost range width,
+  about 40 times larger). Not expanded; a small effect is not ruled out.
+  S1 stands
+  on correctness (now verified into the real session prompt) and
+  deterministic precedence, not savings; S3 gains no cost argument. The P1
+  fix is left **uncommitted** with its evidence
+  (`runs/2026-10-26-ab-dedup2-*`, fingerprint `949a0765…` regenerated and
+  matched). Report, roadmap, runs README and this file updated; historical
+  artifacts untouched. No S3, no skill/profile change, no commit.
+- 2026-10-26 C4/S1 benefit measurement: **[superseded later the same day by
+  review P1 — see the entry above: this A/B compared two identical prompts
+  and its conclusion was withdrawn]** registered that S1 is **committed as
+  `cf5af8f`** ("fix(context): deduplicate discovered and injected child
+  context") and ran the controlled benefit experiment the single rerun could
+  not provide. Same-tree A/B via an experimental harness
+  (`docs/evals/pi-usage/run-ab-dedup.mjs`, no runtime option added): branch A
+  reproduces the pre-S1 append from `fb66860` inside the harness's own loader,
+  branch B calls the exported production `buildResourceLoader()`; both share
+  the identical session construction (read-only `read/grep/find/ls`, no
+  skills, one shared `ModelRuntime`, fresh in-memory session per call, one
+  shared byte-identical fixture). A deterministic gate audited the loader
+  before every call — A 2 entries / 440 loaded bytes / 220 duplicated, B 1 /
+  220 / 0, as required — and 4 pairs ran in alternating order AB/BA/AB/BA (8
+  real `zai/glm-5.2` calls, isolated HOME/agent dir, copied catalog, ambient
+  credentials only). Result: **no benefit detectable**. All 8 calls succeeded
+  (1 `agent_end` batch each, no retries) and all 8 answers graded correct;
+  SDK cost ties to published rates on every call and wall clock matches
+  `elapsedMs` within 3 ms. Within-branch ranges (e.g. A input 348–1,468 on an
+  identical prompt) exceed the removed 220 bytes by an order of magnitude;
+  the only all-pairs-consistent deltas run against a saving (B output +166
+  tokens mean, SDK cost +$0.00066 mean, higher in 4/4 pairs; sign test
+  p=0.125, not significant) — recorded as an observed pattern, not an effect.
+  Cache/order effects documented: the coldest call is the run's very first
+  (assigned to A), later calls show no monotonic cache trend. The experiment
+  was deliberately not expanded: "not detectable at this scale" is a valid
+  final answer. S1 therefore stands on correctness and deterministic
+  precedence, not savings, and S3 gains no cost argument from it. Raw
+  artifacts + provenance under `docs/evals/pi-usage/runs/2026-10-26-ab-dedup-*`;
+  analysis in the [S2 report, A/B section](../../docs/evals/pi-usage/S2-2026-10-24.md#s1-benefit-ab-experiment-2026-10-26-same-tree);
+  roadmap and this file updated, historical evidence untouched. No S3, no
+  skill/profile change, no commit created; `npm test` 440/440 and typecheck
+  clean before the run.
 - 2026-10-25 C4/S1: deduplicated discovered and injected child context,
   **left uncommitted for review** on top of S2 commit `fb66860`. A new Pi-free
   module (`src/context-dedup.ts`) canonicalizes paths with

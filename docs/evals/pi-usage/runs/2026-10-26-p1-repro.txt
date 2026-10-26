@@ -1,0 +1,15 @@
+[1] unreloaded loader (pre-fix run() behavior):
+    context marker copies: 0 (expected by S2 audit: 1)
+    selected skill present: false
+    unselected skill present: false
+    has project_context block: false
+[2] reloaded loader (the fix):
+    context marker copies: 1
+    selected skill present: true
+    unselected skill present: false
+    has project_context block: true
+[3] pre-S1 append loader, reloaded (A branch):
+    context marker copies: 2
+[4] repo cwd, no noExtensions guard:
+    extensions activated: []
+    skills discovered: 0

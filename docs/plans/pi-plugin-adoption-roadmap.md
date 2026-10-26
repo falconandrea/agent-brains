@@ -131,7 +131,33 @@ Analytics (`extra/skills/ga4-analytics/`) is excluded pending the user's decisio
    exploration-path variance and **no cost or latency benefit is attributed to
    S1** from this single run; benefit measurement needs repetitions or a
    same-tree A/B. Evidence: same report, post-S1 artifacts under
-   `docs/evals/pi-usage/runs/`. Next: review and commit S1.
+   `docs/evals/pi-usage/runs/`.
+   **S1 committed (2026-10-26, `cf5af8f`); benefit measurement (same day,
+   twice):** the first same-tree A/B was **invalidated by review P1** — the
+   harness gated a reloaded loader but passed an unloaded instance to
+   `createAgentSession()`, and the production runner did the same, so both
+   arms (and, retroactively understood, every pre-fix child session including
+   all `/feature` runs) received **zero injected context and zero skills**;
+   that run's "no benefit detectable" conclusion is withdrawn (artifacts kept
+   as `2026-10-26-ab-dedup-invalid-*`). **The P1 fix is implemented and left
+   uncommitted for review:** `buildResourceLoader()` gains `noExtensions:
+   true` (child constraint — a loaded loader without it would activate the
+   agent-dir-registered pi-brain extension inside children), and the new
+   exported `buildLoadedResourceLoader()` reloads the loader before the
+   session is created from it; `run()` uses it. Offline integration test
+   `tests/pi-session-injection.test.ts` pins the contract (context present
+   exactly once — S1 end-to-end —, selected skill present, unselected
+   excluded, zero extensions); its pre-fix failing output is saved. **The
+   corrected A/B (4 pairs, alternating AB/BA, gates on the same loaded
+   instance passed to the session AND on the actual system prompt: A 2 copies
+   of the AGENTS.md content, B 1, everything else byte-identical) is valid
+   and still finds no detectable benefit**: paired cost deltas −$0.0006 to
+   +$0.0008 (mixed signs, p=0.625 at n=4), input-side means within
+   within-branch spreads). No benefit was detected in these four pairs;
+   the sample does not rule out a small effect. S1 stands on correctness and
+   deterministic precedence, not
+   measured savings; **S3 gains no cost justification from S1**. Evidence:
+   [S2 report, A/B section](../evals/pi-usage/S2-2026-10-24.md#s1-benefit-ab-experiment-2026-10-26-same-tree).
 5. **C5 — Review the usefulness of the skill collection.** Run a bounded manual
    audit of triggers, permissions, overlap, distribution and actual incremental
    value with current models. Compare representative cases with and without
@@ -142,15 +168,23 @@ Analytics (`extra/skills/ga4-analytics/`) is excluded pending the user's decisio
    remain conditional material for this review or a real project need, not
    separate immediate projects. Analytics remains excluded.
 
-**Current next action:** C4 in progress — U16 (parent skill load) and S2
-(instrumentation + definitive direct-reads baseline) are complete; **S2 closed
-2026-10-25**. **S1 is implemented, verified and left uncommitted for review**
-(2026-10-25): the deterministic overlap audit is 1 entry / 0 duplicate bytes
-(2 entries / 220 duplicate bytes before), the 4-task protocol reran 4/4
-correct, and no benefit is claimed from that single run. After review and
-commit, measure a benefit only with repetitions or a same-tree A/B, then
-consider S3. C1 and C2 are complete (2026-10-22); C3 is complete (2026-10-23);
-C5 remains pending.
+**Current next action:** C4 in progress — U16 and S2 are complete (**S2 closed
+2026-10-25**); **S1 is committed as `cf5af8f` (2026-10-26)** and its benefit
+is measured (2026-10-26): the first A/B was invalidated by review **P1**
+(loader never loaded → both arms and every pre-fix child session received
+zero injected context/skills; conclusion withdrawn), the P1 fix
+(`buildLoadedResourceLoader` + `noExtensions` + integration test) is
+**implemented and uncommitted for review**, and the **corrected** same-tree
+A/B — 4 pairs, alternating order, per-call gates on the same loaded loader
+passed to the session and on the actual system prompt — found **no
+detectable cost or latency benefit in these four pairs** (no benefit claimed;
+experiment deliberately not expanded, without ruling out a small effect).
+Next: review and
+commit the P1 fix (a behavior change: `/feature` children now actually
+receive routed context and router-selected skills), then the `/feature`
+end-to-end comparison; S3 may only be considered on its own measured
+total-cost/latency/quality evidence, never on dedup savings. C1 and C2 are
+complete (2026-10-22); C3 is complete (2026-10-23); C5 remains pending.
 R1.1–R1.3 follow this sequence and still require
 an explicit trial request. W2/W3 and R2 retain their evidence-based deferral;
 C2 does not activate them.
@@ -536,13 +570,34 @@ task/file pairs, 12 distinct files), 3 reread pairs, 4/4 correct. Tasks 1–3
 LOAD NO agents-files on either tree, so those deltas are exploration-path
 variance; only `context-overlap` is mechanically affected, and its one sample
 moved within noise. **No benefit is attributed to S1**; correctness and
-absence of regression are established, benefit is not. Consider S3 only after
-reviewing S1 and measuring with repetitions or a same-tree A/B. Evidence:
+absence of regression are established, benefit is not. **S1 was committed
+2026-10-26 as `cf5af8f`.** The benefit was then measured twice: the first
+same-tree A/B was **invalidated by review P1** (the harness and
+`PiAgentRunner.run()` alike passed an UNRELOADED loader to
+`createAgentSession()` — Pi SDK 0.84.2 reloads only a loader it constructs
+itself — so both arms received the same prompt with zero injected context;
+conclusion withdrawn, artifacts kept as invalid). **The P1 fix is implemented
+and uncommitted for review**: `buildResourceLoader()` gains `noExtensions:
+true` (child constraint) and `buildLoadedResourceLoader()` reloads the loader
+before session creation; offline integration test
+`tests/pi-session-injection.test.ts` pins context-once (S1 end-to-end into
+the real system prompt), selected-skill-in/unselected-out and
+zero-extensions. Every pre-fix child session — including all `/feature` runs
+— ran with empty child context and no skills; that is a behavior change the
+fix introduces, recorded in the report. **The corrected A/B (4 pairs,
+alternating AB/BA; per-call gates on the same loaded loader passed to the
+session AND on the actual system prompt — A 2 copies of the AGENTS.md
+content, B 1, everything else byte-identical) is valid: no detectable
+benefit** (paired cost deltas mixed signs, input-side means inside
+within-branch spreads; 8/8 calls succeeded, 8/8 answers correct). The bounded
+experiment is closed as "no benefit detected in four pairs", without
+expansion and without ruling out a small effect; S3 must win its
+own comparison and gains no cost argument from S1. Evidence:
 [U16 report](../evals/pi-skill-load/U16-2026-10-24.md) (parent load) and
 [S2 report](../evals/pi-usage/S2-2026-10-24.md) (usage instrumentation,
-protocol, audit, definitive baseline and the S1 rerun; raw outputs under
-`docs/evals/pi-usage/runs/`). This roadmap owns task status; the research
-reports own supporting evidence and rationale.
+protocol, audit, definitive baseline, the S1 rerun, the P1 correction and
+both A/B runs; raw outputs under `docs/evals/pi-usage/runs/`). This roadmap
+owns task status; the research reports own supporting evidence and rationale.
 
 ### S1 Deduplicate discovered and injected context
 
@@ -571,8 +626,12 @@ reports own supporting evidence and rationale.
 scoped instructions and curated documents remain present. Loader-level
 duplication was reproduced and removed (2 entries / 220 duplicate bytes → 1
 entry / 0); the real 4-task rerun is 4/4 correct with no abort. **Met for
-correctness (2026-10-25); benefit remains unmeasured**, so no billed-session
-saving is claimed. The change is uncommitted pending review.
+correctness (2026-10-25; verified end-to-end into the real session prompt on
+2026-10-26 by `tests/pi-session-injection.test.ts`, after review P1 showed
+pre-fix sessions injected nothing); committed as `cf5af8f` (2026-10-26);
+benefit measured by the corrected A/B (2026-10-26) and not detectable** — a
+valid result, so no billed-session saving is claimed and the measurement was
+not expanded indefinitely.
 
 ### S2 Complete usage accounting and establish a baseline
 
@@ -657,11 +716,15 @@ A future session should:
 4. Change exactly one item to `IN PROGRESS`.
 5. Record evidence and the promote/reject decision here when the item ends.
 
-**Next action:** C4 — S1 context deduplication is implemented and left
-uncommitted for review; review and commit it, then measure whether a benefit
-exists with repetitions or a same-tree A/B. The 2026-10-25 4-task rerun and its
-artifacts predate the 2026-10-26 review fixes, so they are not reused for a
-benefit claim; the deterministic audit after the fixes is 1 entry / 0 duplicate
-bytes. S2 measurement preceded S1 and its protocol is the comparison
-instrument. R1.1
+**Next action:** C4 — S1 is committed (`cf5af8f`); review P1 invalidated the
+first benefit A/B (both arms injected nothing) and its fix —
+`buildLoadedResourceLoader()` + `noExtensions` + the offline integration
+test, which also verifies S1 end-to-end (exactly one copy in the real session
+prompt) — is **implemented and uncommitted for review**. The corrected A/B
+(2026-10-26) is valid: **no detectable benefit**; measurement closed without
+expansion. Review and commit the P1 fix (a behavior change: children now
+actually receive routed context and router-selected skills), then the
+`/feature` end-to-end comparison reading totals from the persisted run log;
+S3, if ever considered, must justify itself with its own total-cost, latency
+and quality evidence. R1.1
 (`pi-vcc`) is postponed behind C1–C5 and still requires an explicit trial request.

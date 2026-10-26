@@ -1,0 +1,88 @@
+{
+  "experiment": "S1 benefit A/B (C4): duplicated context (A, pre-S1 fb66860 append) vs deduplicated context (B, production buildResourceLoader)",
+  "recordedAtStart": "2026-10-26T18:38:27.166Z",
+  "model": "zai/glm-5.2",
+  "harness": "docs/evals/pi-usage/run-ab-dedup.mjs (experimental; no runtime option added)",
+  "sessionConstruction": "replicates PiAgentRunner.run() for a read-only role (no custom tools, no skills); branch B uses the exported production buildResourceLoader, branch A only replaces agentsFilesOverride with the pre-S1 append; shared ModelRuntime",
+  "provenance": {
+    "commit": "cf5af8f3cf954dd5ef9d0a214acc0f8a34d57901",
+    "subject": "fix(context): deduplicate discovered and injected child context",
+    "cleanTree": false,
+    "dirtyNotes": [
+      "?? docs/evals/pi-usage/run-ab-dedup.mjs"
+    ],
+    "node": "v24.12.0",
+    "projectDir": "/Users/andreafalcon/dev/agent-brains"
+  },
+  "config": {
+    "pairs": 4,
+    "orderPattern": "pair p odd: A then B; pair p even: B then A (alternating)",
+    "prompt": "Using this project's instructions, state the canonical retry limit and the required marker. Then read src/limits.ts and report MAX_BATCH_SIZE and the file that defines it. Name concrete files and values. Read the files directly; do not guess.",
+    "injectedContextFiles": [
+      {
+        "path": "AGENTS.md",
+        "sha256": "f3e6a15f94b0c7d0f9cf693df7e953e4eac78b4a81520dfbe82154c955919dbd"
+      }
+    ],
+    "fixture": {
+      "purpose": "context-overlap (S1 instrument), byte-identical to run-baseline.mjs",
+      "files": [
+        {
+          "path": "AGENTS.md",
+          "bytes": 220,
+          "sha256": "f3e6a15f94b0c7d0f9cf693df7e953e4eac78b4a81520dfbe82154c955919dbd"
+        },
+        {
+          "path": "src/limits.ts",
+          "bytes": 154,
+          "sha256": "8735579ddfff61869674f9c46e2e0c92818e075a6dd09c4a4fd049d2e822f26d"
+        },
+        {
+          "path": "README.md",
+          "bytes": 171,
+          "sha256": "e8574cac1ae6d9012534e8fde63aac368d7e45400ee17f9d8d9042ccf4b5ff81"
+        }
+      ]
+    },
+    "expectedAudit": {
+      "A": {
+        "agentsFileEntries": 2,
+        "duplicateBytes": 220,
+        "loadedBytes": 440
+      },
+      "B": {
+        "agentsFileEntries": 1,
+        "duplicateBytes": 0,
+        "loadedBytes": 220
+      }
+    },
+    "isolation": "disposable HOME and Pi agent dir; independent catalog copy (symlink refused); ambient credentials only; one shared fixture directory for every call; fresh in-memory session per call"
+  },
+  "calls": [],
+  "auditsOnly": {
+    "A": {
+      "branch": "A",
+      "agentsFileEntries": 2,
+      "uniquePaths": 1,
+      "duplicatePaths": [
+        {
+          "path": "AGENTS.md",
+          "count": 2
+        }
+      ],
+      "duplicateBytes": 220,
+      "loadedBytes": 440,
+      "effectiveBytes": 220
+    },
+    "B": {
+      "branch": "B",
+      "agentsFileEntries": 1,
+      "uniquePaths": 1,
+      "duplicatePaths": [],
+      "duplicateBytes": 0,
+      "loadedBytes": 220,
+      "effectiveBytes": 220
+    }
+  },
+  "recordedAtEnd": "2026-10-26T18:38:27.264Z"
+}

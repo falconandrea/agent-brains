@@ -1,0 +1,874 @@
+{
+  "experiment": "S1 benefit A/B (C4), CORRECTED after review P1: duplicated context (A, pre-S1 fb66860 append) vs deduplicated context (B, production buildResourceLoader); gates run on the SAME loaded loader instance passed to the session and on the ACTUAL system prompt before the call",
+  "recordedAtStart": "2026-10-26T22:08:20.180Z",
+  "model": "zai/glm-5.2",
+  "mode": "run",
+  "harness": "docs/evals/pi-usage/run-ab-dedup.mjs (experimental; no runtime option added)",
+  "sessionConstruction": "replicates PiAgentRunner.run() for a read-only role (no custom tools, no skills); the loader is LOADED (reload) before createAgentSession — the P1 fix contract; branch B uses the exported production buildResourceLoader, branch A only replaces agentsFilesOverride with the pre-S1 append; shared ModelRuntime",
+  "provenance": {
+    "commit": "cf5af8f3cf954dd5ef9d0a214acc0f8a34d57901",
+    "subject": "fix(context): deduplicate discovered and injected child context",
+    "cleanTree": false,
+    "dirtyNotes": [
+      "M .ai/memory/progress.md",
+      " M docs/evals/pi-usage/S2-2026-10-24.md",
+      " M docs/evals/pi-usage/runs/README.md",
+      " M docs/plans/pi-plugin-adoption-roadmap.md",
+      " M src/pi/pi-agent-runner.ts",
+      "?? docs/evals/pi-usage/repro-loader-injection.mjs",
+      "?? docs/evals/pi-usage/run-ab-dedup.mjs",
+      "?? docs/evals/pi-usage/runs/2026-10-26-ab-dedup-invalid-audit-gate.json",
+      "?? docs/evals/pi-usage/runs/2026-10-26-ab-dedup-invalid-provenance.txt",
+      "?? docs/evals/pi-usage/runs/2026-10-26-ab-dedup-invalid-raw.json",
+      "?? docs/evals/pi-usage/runs/2026-10-26-p1-repro.txt",
+      "?? docs/evals/pi-usage/runs/2026-10-26-p1-test-failing.txt",
+      "?? tests/pi-session-injection.test.ts",
+      "?? undefined/"
+    ],
+    "node": "v24.12.0",
+    "projectDir": "/Users/andreafalcon/dev/agent-brains"
+  },
+  "config": {
+    "pairs": 4,
+    "orderPattern": "pair p odd: A then B; pair p even: B then A (alternating)",
+    "prompt": "Using this project's instructions, state the canonical retry limit and the required marker. Then read src/limits.ts and report MAX_BATCH_SIZE and the file that defines it. Name concrete files and values. Read the files directly; do not guess.",
+    "injectedContextFiles": [
+      {
+        "path": "AGENTS.md",
+        "sha256": "f3e6a15f94b0c7d0f9cf693df7e953e4eac78b4a81520dfbe82154c955919dbd"
+      }
+    ],
+    "fixture": {
+      "purpose": "context-overlap (S1 instrument), byte-identical to run-baseline.mjs",
+      "files": [
+        {
+          "path": "AGENTS.md",
+          "bytes": 220,
+          "sha256": "f3e6a15f94b0c7d0f9cf693df7e953e4eac78b4a81520dfbe82154c955919dbd"
+        },
+        {
+          "path": "src/limits.ts",
+          "bytes": 154,
+          "sha256": "8735579ddfff61869674f9c46e2e0c92818e075a6dd09c4a4fd049d2e822f26d"
+        },
+        {
+          "path": "README.md",
+          "bytes": 171,
+          "sha256": "e8574cac1ae6d9012534e8fde63aac368d7e45400ee17f9d8d9042ccf4b5ff81"
+        }
+      ]
+    },
+    "expectedAudit": {
+      "A": {
+        "agentsFileEntries": 2,
+        "duplicateBytes": 220,
+        "loadedBytes": 440
+      },
+      "B": {
+        "agentsFileEntries": 1,
+        "duplicateBytes": 0,
+        "loadedBytes": 220
+      }
+    },
+    "expectedPromptCopies": {
+      "A": 2,
+      "B": 1
+    },
+    "expectedAbPromptLengthDelta": 286,
+    "isolation": "disposable HOME and Pi agent dir; independent catalog copy (symlink refused); ambient credentials only; one shared fixture directory for every call; fresh in-memory session per call"
+  },
+  "calls": [
+    {
+      "label": "s1ab-p1-A",
+      "branch": "A",
+      "startedAt": "2026-10-26T22:08:20.294Z",
+      "endedAt": "2026-10-26T22:08:28.923Z",
+      "wallClockMs": 8629,
+      "loaderAudit": {
+        "branch": "A",
+        "agentsFileEntries": 2,
+        "uniquePaths": 1,
+        "duplicatePaths": [
+          {
+            "path": "AGENTS.md",
+            "count": 2
+          }
+        ],
+        "duplicateBytes": 220,
+        "loadedBytes": 440,
+        "effectiveBytes": 220
+      },
+      "promptGate": {
+        "branch": "A",
+        "contentCopies": 2,
+        "markerCopies": 2,
+        "instructionsBlocks": 2,
+        "blockPaths": [
+          "/var/folders/r5/by0v62354pzfdyck52y2vb300000gn/T/pi-s1ab-overlap-T2VI43/AGENTS.md",
+          "AGENTS.md"
+        ],
+        "promptLength": 2693,
+        "promptSha256": "133ad20b79fd1bf984b680babf7b0236cd3e924506bfd4ad52a35e2fd2981421",
+        "remainderSha256": "39fb8ac074132d99e72513be5913f4e25c1657e03d1f700fbf4693b3f8382e9c",
+        "sameBranchDeterministic": null,
+        "crossBranchRemainderEqual": null,
+        "crossBranchLengthDelta": null
+      },
+      "usage": {
+        "input": 895,
+        "output": 385,
+        "cacheRead": 2304,
+        "cacheWrite": 0,
+        "cost": 0.0035460400000000003,
+        "provider": "zai",
+        "model": "glm-5.2",
+        "elapsedMs": 8628
+      },
+      "agentEndBatches": 1,
+      "aborted": false,
+      "answerChars": 617,
+      "answer": "Results from reading `src/limits.ts` directly:\n\n- **MAX_BATCH_SIZE = 42**, defined in `src/limits.ts` (line 2: `export const MAX_BATCH_SIZE = 42;`)\n- The same file also defines `retryLimit()` returning **7** (line 4), which is consistent with the canonical retry limit of 7 attempts stated in the project instructions cited via FIXTURE-AGENTS-MARKER.\n\nConcrete summary:\n| Item | Value | File |\n|---|---|---|\n| Canonical retry limit | 7 attempts | `AGENTS.md` (and confirmed by `retryLimit()` in `src/limits.ts`) |\n| Required marker | `FIXTURE-AGENTS-MARKER` | `AGENTS.md` |\n| `MAX_BATCH_SIZE` | 42 | `src/limits.ts` |",
+      "toolCalls": {
+        "read": 1
+      },
+      "readCounts": {
+        "src/limits.ts": 1
+      },
+      "keywordCheck": {
+        "retryLimit7": true,
+        "marker": true,
+        "maxBatchSize42": true,
+        "limitsTs": true
+      },
+      "pair": 1,
+      "slot": 1
+    },
+    {
+      "label": "s1ab-p1-B",
+      "branch": "B",
+      "startedAt": "2026-10-26T22:08:28.930Z",
+      "endedAt": "2026-10-26T22:08:35.679Z",
+      "wallClockMs": 6749,
+      "loaderAudit": {
+        "branch": "B",
+        "agentsFileEntries": 1,
+        "uniquePaths": 1,
+        "duplicatePaths": [],
+        "duplicateBytes": 0,
+        "loadedBytes": 220,
+        "effectiveBytes": 220
+      },
+      "promptGate": {
+        "branch": "B",
+        "contentCopies": 1,
+        "markerCopies": 1,
+        "instructionsBlocks": 1,
+        "blockPaths": [
+          "/var/folders/r5/by0v62354pzfdyck52y2vb300000gn/T/pi-s1ab-overlap-T2VI43/AGENTS.md"
+        ],
+        "promptLength": 2407,
+        "promptSha256": "44ad39fada3695eddd09bbbd816541e814b37b3ead798a1516cd090294dfd9dd",
+        "remainderSha256": "39fb8ac074132d99e72513be5913f4e25c1657e03d1f700fbf4693b3f8382e9c",
+        "sameBranchDeterministic": null,
+        "crossBranchRemainderEqual": true,
+        "crossBranchLengthDelta": -286
+      },
+      "usage": {
+        "input": 455,
+        "output": 370,
+        "cacheRead": 2688,
+        "cacheWrite": 0,
+        "cost": 0.0029638800000000003,
+        "provider": "zai",
+        "model": "glm-5.2",
+        "elapsedMs": 6749
+      },
+      "agentEndBatches": 1,
+      "aborted": false,
+      "answerChars": 428,
+      "answer": "Results from the direct read:\n\n**From the project instructions** (citing FIXTURE-AGENTS-MARKER):\n- Canonical retry limit: **7 attempts**\n\n**From `src/limits.ts`:**\n- `MAX_BATCH_SIZE` = **42**, defined in the file `src/limits.ts` itself (exported as `export const MAX_BATCH_SIZE = 42;` at module scope)\n- The file also exports a `retryLimit()` function returning **7**, consistent with the project's stated canonical retry limit.",
+      "toolCalls": {
+        "read": 1
+      },
+      "readCounts": {
+        "src/limits.ts": 1
+      },
+      "keywordCheck": {
+        "retryLimit7": true,
+        "marker": true,
+        "maxBatchSize42": true,
+        "limitsTs": true
+      },
+      "pair": 1,
+      "slot": 2
+    },
+    {
+      "label": "s1ab-p2-B",
+      "branch": "B",
+      "startedAt": "2026-10-26T22:08:35.681Z",
+      "endedAt": "2026-10-26T22:08:46.418Z",
+      "wallClockMs": 10737,
+      "loaderAudit": {
+        "branch": "B",
+        "agentsFileEntries": 1,
+        "uniquePaths": 1,
+        "duplicatePaths": [],
+        "duplicateBytes": 0,
+        "loadedBytes": 220,
+        "effectiveBytes": 220
+      },
+      "promptGate": {
+        "branch": "B",
+        "contentCopies": 1,
+        "markerCopies": 1,
+        "instructionsBlocks": 1,
+        "blockPaths": [
+          "/var/folders/r5/by0v62354pzfdyck52y2vb300000gn/T/pi-s1ab-overlap-T2VI43/AGENTS.md"
+        ],
+        "promptLength": 2407,
+        "promptSha256": "44ad39fada3695eddd09bbbd816541e814b37b3ead798a1516cd090294dfd9dd",
+        "remainderSha256": "39fb8ac074132d99e72513be5913f4e25c1657e03d1f700fbf4693b3f8382e9c",
+        "sameBranchDeterministic": true,
+        "crossBranchRemainderEqual": true,
+        "crossBranchLengthDelta": -286
+      },
+      "usage": {
+        "input": 395,
+        "output": 490,
+        "cacheRead": 2816,
+        "cacheWrite": 0,
+        "cost": 0.00344116,
+        "provider": "zai",
+        "model": "glm-5.2",
+        "elapsedMs": 10737
+      },
+      "agentEndBatches": 1,
+      "aborted": false,
+      "answerChars": 568,
+      "answer": "**From `src/limits.ts`** (the only file defining it, read directly):\n\n- **`MAX_BATCH_SIZE = 42`** — exported constant, defined in `src/limits.ts`\n- The file also exports `retryLimit(): number` returning **7**, consistent with the canonical retry limit of 7 attempts stated in the project instructions (FIXTURE-AGENTS-MARKER).\n\n**Summary:**\n| Item | Value | File |\n|---|---|---|\n| Canonical retry limit | 7 attempts | AGENTS.md (per instructions) |\n| Required marker | `FIXTURE-AGENTS-MARKER` | AGENTS.md (per instructions) |\n| `MAX_BATCH_SIZE` | 42 | `src/limits.ts` |",
+      "toolCalls": {
+        "read": 1,
+        "find": 1
+      },
+      "readCounts": {
+        "src/limits.ts": 1
+      },
+      "keywordCheck": {
+        "retryLimit7": true,
+        "marker": true,
+        "maxBatchSize42": true,
+        "limitsTs": true
+      },
+      "pair": 2,
+      "slot": 1
+    },
+    {
+      "label": "s1ab-p2-A",
+      "branch": "A",
+      "startedAt": "2026-10-26T22:08:46.423Z",
+      "endedAt": "2026-10-26T22:08:52.548Z",
+      "wallClockMs": 6125,
+      "loaderAudit": {
+        "branch": "A",
+        "agentsFileEntries": 2,
+        "uniquePaths": 1,
+        "duplicatePaths": [
+          {
+            "path": "AGENTS.md",
+            "count": 2
+          }
+        ],
+        "duplicateBytes": 220,
+        "loadedBytes": 440,
+        "effectiveBytes": 220
+      },
+      "promptGate": {
+        "branch": "A",
+        "contentCopies": 2,
+        "markerCopies": 2,
+        "instructionsBlocks": 2,
+        "blockPaths": [
+          "/var/folders/r5/by0v62354pzfdyck52y2vb300000gn/T/pi-s1ab-overlap-T2VI43/AGENTS.md",
+          "AGENTS.md"
+        ],
+        "promptLength": 2693,
+        "promptSha256": "133ad20b79fd1bf984b680babf7b0236cd3e924506bfd4ad52a35e2fd2981421",
+        "remainderSha256": "39fb8ac074132d99e72513be5913f4e25c1657e03d1f700fbf4693b3f8382e9c",
+        "sameBranchDeterministic": true,
+        "crossBranchRemainderEqual": true,
+        "crossBranchLengthDelta": 286
+      },
+      "usage": {
+        "input": 246,
+        "output": 358,
+        "cacheRead": 2944,
+        "cacheWrite": 0,
+        "cost": 0.00268504,
+        "provider": "zai",
+        "model": "glm-5.2",
+        "elapsedMs": 6125
+      },
+      "agentEndBatches": 1,
+      "aborted": false,
+      "answerChars": 565,
+      "answer": "Results from the direct read:\n\n**Project instructions (AGENTS.md, marker `FIXTURE-AGENTS-MARKER`):**\n- Canonical retry limit: **7 attempts**\n\n**From `src/limits.ts`:**\n- `MAX_BATCH_SIZE = 42` — defined in **`src/limits.ts`**\n- The file also exports `retryLimit()`, which returns **7**, consistent with the canonical retry limit stated in the instructions\n\nConcrete summary:\n| Item | Value | Source file |\n|---|---|---|\n| Retry limit | 7 | `AGENTS.md` / `src/limits.ts` |\n| Marker | `FIXTURE-AGENTS-MARKER` | `AGENTS.md` |\n| `MAX_BATCH_SIZE` | 42 | `src/limits.ts` |",
+      "toolCalls": {
+        "read": 1
+      },
+      "readCounts": {
+        "src/limits.ts": 1
+      },
+      "keywordCheck": {
+        "retryLimit7": true,
+        "marker": true,
+        "maxBatchSize42": true,
+        "limitsTs": true
+      },
+      "pair": 2,
+      "slot": 2
+    },
+    {
+      "label": "s1ab-p3-A",
+      "branch": "A",
+      "startedAt": "2026-10-26T22:08:52.554Z",
+      "endedAt": "2026-10-26T22:09:03.928Z",
+      "wallClockMs": 11374,
+      "loaderAudit": {
+        "branch": "A",
+        "agentsFileEntries": 2,
+        "uniquePaths": 1,
+        "duplicatePaths": [
+          {
+            "path": "AGENTS.md",
+            "count": 2
+          }
+        ],
+        "duplicateBytes": 220,
+        "loadedBytes": 440,
+        "effectiveBytes": 220
+      },
+      "promptGate": {
+        "branch": "A",
+        "contentCopies": 2,
+        "markerCopies": 2,
+        "instructionsBlocks": 2,
+        "blockPaths": [
+          "/var/folders/r5/by0v62354pzfdyck52y2vb300000gn/T/pi-s1ab-overlap-T2VI43/AGENTS.md",
+          "AGENTS.md"
+        ],
+        "promptLength": 2693,
+        "promptSha256": "133ad20b79fd1bf984b680babf7b0236cd3e924506bfd4ad52a35e2fd2981421",
+        "remainderSha256": "39fb8ac074132d99e72513be5913f4e25c1657e03d1f700fbf4693b3f8382e9c",
+        "sameBranchDeterministic": true,
+        "crossBranchRemainderEqual": true,
+        "crossBranchLengthDelta": 286
+      },
+      "usage": {
+        "input": 253,
+        "output": 317,
+        "cacheRead": 2944,
+        "cacheWrite": 0,
+        "cost": 0.0025144399999999997,
+        "provider": "zai",
+        "model": "glm-5.2",
+        "elapsedMs": 11374
+      },
+      "agentEndBatches": 1,
+      "aborted": false,
+      "answerChars": 440,
+      "answer": "Results from direct reads:\n\n**Project instructions** (AGENTS.md, marker: FIXTURE-AGENTS-MARKER):\n- Canonical retry limit: **7 attempts**\n\n**File: `src/limits.ts`**\n- `MAX_BATCH_SIZE` = **42**, defined on line 2 of `src/limits.ts`\n- The file also exports `retryLimit()` returning **7** — consistent with the canonical retry limit of 7 stated in the project instructions.\n\nBoth values come from directly reading the files, not from inference.",
+      "toolCalls": {
+        "read": 1
+      },
+      "readCounts": {
+        "src/limits.ts": 1
+      },
+      "keywordCheck": {
+        "retryLimit7": true,
+        "marker": true,
+        "maxBatchSize42": true,
+        "limitsTs": true
+      },
+      "pair": 3,
+      "slot": 1
+    },
+    {
+      "label": "s1ab-p3-B",
+      "branch": "B",
+      "startedAt": "2026-10-26T22:09:03.934Z",
+      "endedAt": "2026-10-26T22:09:10.259Z",
+      "wallClockMs": 6325,
+      "loaderAudit": {
+        "branch": "B",
+        "agentsFileEntries": 1,
+        "uniquePaths": 1,
+        "duplicatePaths": [],
+        "duplicateBytes": 0,
+        "loadedBytes": 220,
+        "effectiveBytes": 220
+      },
+      "promptGate": {
+        "branch": "B",
+        "contentCopies": 1,
+        "markerCopies": 1,
+        "instructionsBlocks": 1,
+        "blockPaths": [
+          "/var/folders/r5/by0v62354pzfdyck52y2vb300000gn/T/pi-s1ab-overlap-T2VI43/AGENTS.md"
+        ],
+        "promptLength": 2407,
+        "promptSha256": "44ad39fada3695eddd09bbbd816541e814b37b3ead798a1516cd090294dfd9dd",
+        "remainderSha256": "39fb8ac074132d99e72513be5913f4e25c1657e03d1f700fbf4693b3f8382e9c",
+        "sameBranchDeterministic": true,
+        "crossBranchRemainderEqual": true,
+        "crossBranchLengthDelta": -286
+      },
+      "usage": {
+        "input": 258,
+        "output": 340,
+        "cacheRead": 2880,
+        "cacheWrite": 0,
+        "cost": 0.0026060000000000002,
+        "provider": "zai",
+        "model": "glm-5.2",
+        "elapsedMs": 6325
+      },
+      "agentEndBatches": 1,
+      "aborted": false,
+      "answerChars": 429,
+      "answer": "**From `AGENTS.md`** (citing marker `FIXTURE-AGENTS-MARKER`):\n- Canonical retry limit: **7 attempts**\n- Required marker when quoting instructions: **FIXTURE-AGENTS-MARKER**\n\n**From `src/limits.ts`** (read directly):\n- `MAX_BATCH_SIZE = 42`\n- Defined in: **`src/limits.ts`**\n\nBonus consistency note: the `retryLimit()` function in `src/limits.ts` returns `7`, matching the canonical retry limit stated in the project instructions.",
+      "toolCalls": {
+        "read": 2
+      },
+      "readCounts": {
+        "AGENTS.md": 1,
+        "src/limits.ts": 1
+      },
+      "keywordCheck": {
+        "retryLimit7": true,
+        "marker": true,
+        "maxBatchSize42": true,
+        "limitsTs": true
+      },
+      "pair": 3,
+      "slot": 2
+    },
+    {
+      "label": "s1ab-p4-B",
+      "branch": "B",
+      "startedAt": "2026-10-26T22:09:10.265Z",
+      "endedAt": "2026-10-26T22:09:16.470Z",
+      "wallClockMs": 6205,
+      "loaderAudit": {
+        "branch": "B",
+        "agentsFileEntries": 1,
+        "uniquePaths": 1,
+        "duplicatePaths": [],
+        "duplicateBytes": 0,
+        "loadedBytes": 220,
+        "effectiveBytes": 220
+      },
+      "promptGate": {
+        "branch": "B",
+        "contentCopies": 1,
+        "markerCopies": 1,
+        "instructionsBlocks": 1,
+        "blockPaths": [
+          "/var/folders/r5/by0v62354pzfdyck52y2vb300000gn/T/pi-s1ab-overlap-T2VI43/AGENTS.md"
+        ],
+        "promptLength": 2407,
+        "promptSha256": "44ad39fada3695eddd09bbbd816541e814b37b3ead798a1516cd090294dfd9dd",
+        "remainderSha256": "39fb8ac074132d99e72513be5913f4e25c1657e03d1f700fbf4693b3f8382e9c",
+        "sameBranchDeterministic": true,
+        "crossBranchRemainderEqual": true,
+        "crossBranchLengthDelta": -286
+      },
+      "usage": {
+        "input": 193,
+        "output": 312,
+        "cacheRead": 2880,
+        "cacheWrite": 0,
+        "cost": 0.0023918000000000003,
+        "provider": "zai",
+        "model": "glm-5.2",
+        "elapsedMs": 6205
+      },
+      "agentEndBatches": 1,
+      "aborted": false,
+      "answerChars": 453,
+      "answer": "Here are the concrete answers:\n\n**Project instructions (AGENTS.md):**\n- Canonical retry limit: **7 attempts** (quoted with marker: FIXTURE-AGENTS-MARKER)\n\n**Source file read directly (`src/limits.ts`):**\n- `MAX_BATCH_SIZE` = **42**\n- Defined in: **src/limits.ts**, on line 2 (`export const MAX_BATCH_SIZE = 42;`)\n\nConsistent cross-check: the same file's `retryLimit()` function also returns `7`, matching the project instructions' canonical retry limit.",
+      "toolCalls": {
+        "read": 1
+      },
+      "readCounts": {
+        "src/limits.ts": 1
+      },
+      "keywordCheck": {
+        "retryLimit7": true,
+        "marker": true,
+        "maxBatchSize42": true,
+        "limitsTs": true
+      },
+      "pair": 4,
+      "slot": 1
+    },
+    {
+      "label": "s1ab-p4-A",
+      "branch": "A",
+      "startedAt": "2026-10-26T22:09:16.474Z",
+      "endedAt": "2026-10-26T22:09:26.516Z",
+      "wallClockMs": 10042,
+      "loaderAudit": {
+        "branch": "A",
+        "agentsFileEntries": 2,
+        "uniquePaths": 1,
+        "duplicatePaths": [
+          {
+            "path": "AGENTS.md",
+            "count": 2
+          }
+        ],
+        "duplicateBytes": 220,
+        "loadedBytes": 440,
+        "effectiveBytes": 220
+      },
+      "promptGate": {
+        "branch": "A",
+        "contentCopies": 2,
+        "markerCopies": 2,
+        "instructionsBlocks": 2,
+        "blockPaths": [
+          "/var/folders/r5/by0v62354pzfdyck52y2vb300000gn/T/pi-s1ab-overlap-T2VI43/AGENTS.md",
+          "AGENTS.md"
+        ],
+        "promptLength": 2693,
+        "promptSha256": "133ad20b79fd1bf984b680babf7b0236cd3e924506bfd4ad52a35e2fd2981421",
+        "remainderSha256": "39fb8ac074132d99e72513be5913f4e25c1657e03d1f700fbf4693b3f8382e9c",
+        "sameBranchDeterministic": true,
+        "crossBranchRemainderEqual": true,
+        "crossBranchLengthDelta": 286
+      },
+      "usage": {
+        "input": 115,
+        "output": 235,
+        "cacheRead": 3008,
+        "cacheWrite": 0,
+        "cost": 0.00197708,
+        "provider": "zai",
+        "model": "glm-5.2",
+        "elapsedMs": 10042
+      },
+      "agentEndBatches": 1,
+      "aborted": false,
+      "answerChars": 418,
+      "answer": "**From the project instructions** (per FIXTURE-AGENTS-MARKER citation requirement):\n- Canonical retry limit: **7 attempts**\n- Required marker: **FIXTURE-AGENTS-MARKER**\n\n**From src/limits.ts** (read directly):\n- `MAX_BATCH_SIZE = 42`, defined in **`src/limits.ts`** (line 2: `export const MAX_BATCH_SIZE = 42;`)\n- The file also contains `retryLimit()` returning **7**, consistent with the stated canonical retry limit.",
+      "toolCalls": {
+        "read": 1
+      },
+      "readCounts": {
+        "src/limits.ts": 1
+      },
+      "keywordCheck": {
+        "retryLimit7": true,
+        "marker": true,
+        "maxBatchSize42": true,
+        "limitsTs": true
+      },
+      "pair": 4,
+      "slot": 2
+    }
+  ],
+  "promptEvidence": {
+    "note": "first system prompt observed per branch; gates verified contentCopies and cross-branch remainder equality on every call",
+    "A": {
+      "branch": "A",
+      "contentCopies": 2,
+      "markerCopies": 2,
+      "instructionsBlocks": 2,
+      "blockPaths": [
+        "/var/folders/r5/by0v62354pzfdyck52y2vb300000gn/T/pi-s1ab-overlap-T2VI43/AGENTS.md",
+        "AGENTS.md"
+      ],
+      "promptLength": 2693,
+      "promptSha256": "133ad20b79fd1bf984b680babf7b0236cd3e924506bfd4ad52a35e2fd2981421",
+      "remainderSha256": "39fb8ac074132d99e72513be5913f4e25c1657e03d1f700fbf4693b3f8382e9c",
+      "sameBranchDeterministic": null,
+      "crossBranchRemainderEqual": null,
+      "crossBranchLengthDelta": null,
+      "text": "You are an expert coding assistant operating inside pi, a coding agent harness. You help users by reading files, executing commands, editing code, and writing new files.\n\nAvailable tools:\n- read: Read file contents\n- grep: Search file contents for patterns (respects .gitignore)\n- find: Find files by glob pattern (respects .gitignore)\n- ls: List directory contents\n\nIn addition to the tools above, you may have access to other custom tools depending on the project.\n\nGuidelines:\n- Use read to examine files instead of cat or sed.\n- Be concise in your responses\n- Show file paths clearly when working with files\n\nPi documentation (read only when the user asks about pi itself, its SDK, extensions, themes, skills, or TUI):\n- Main documentation: /Users/andreafalcon/dev/agent-brains/node_modules/@earendil-works/pi-coding-agent/README.md\n- Additional docs: /Users/andreafalcon/dev/agent-brains/node_modules/@earendil-works/pi-coding-agent/docs\n- Examples: /Users/andreafalcon/dev/agent-brains/node_modules/@earendil-works/pi-coding-agent/examples (extensions, custom tools, SDK)\n- When reading pi docs or examples, resolve docs/... under Additional docs and examples/... under Examples, not the current working directory\n- When asked about: extensions (docs/extensions.md, examples/extensions/), themes (docs/themes.md), skills (docs/skills.md), prompt templates (docs/prompt-templates.md), TUI components (docs/tui.md), keybindings (docs/keybindings.md), SDK integrations (docs/sdk.md), custom providers (docs/custom-provider.md), adding models (docs/models.md), pi packages (docs/packages.md), environment variables (docs/environment-variables.md)\n- When working on pi topics, read the docs and examples, and follow .md cross-references before implementing\n- Always read pi .md files completely and follow links to related docs (e.g., tui.md for TUI API details)\n\n<project_context>\n\nProject-specific instructions and guidelines:\n\n<project_instructions path=\"/var/folders/r5/by0v62354pzfdyck52y2vb300000gn/T/pi-s1ab-overlap-T2VI43/AGENTS.md\">\n# Fixture instructions\n\n- This project's canonical retry limit is 7 attempts.\n- Always cite the marker FIXTURE-AGENTS-MARKER when quoting these instructions.\n- Prefer direct reads of the source files named in a request.\n\n</project_instructions>\n\n<project_instructions path=\"AGENTS.md\">\n# Fixture instructions\n\n- This project's canonical retry limit is 7 attempts.\n- Always cite the marker FIXTURE-AGENTS-MARKER when quoting these instructions.\n- Prefer direct reads of the source files named in a request.\n\n</project_instructions>\n\n</project_context>\n\nCurrent working directory: /var/folders/r5/by0v62354pzfdyck52y2vb300000gn/T/pi-s1ab-overlap-T2VI43"
+    },
+    "B": {
+      "branch": "B",
+      "contentCopies": 1,
+      "markerCopies": 1,
+      "instructionsBlocks": 1,
+      "blockPaths": [
+        "/var/folders/r5/by0v62354pzfdyck52y2vb300000gn/T/pi-s1ab-overlap-T2VI43/AGENTS.md"
+      ],
+      "promptLength": 2407,
+      "promptSha256": "44ad39fada3695eddd09bbbd816541e814b37b3ead798a1516cd090294dfd9dd",
+      "remainderSha256": "39fb8ac074132d99e72513be5913f4e25c1657e03d1f700fbf4693b3f8382e9c",
+      "sameBranchDeterministic": null,
+      "crossBranchRemainderEqual": true,
+      "crossBranchLengthDelta": -286,
+      "text": "You are an expert coding assistant operating inside pi, a coding agent harness. You help users by reading files, executing commands, editing code, and writing new files.\n\nAvailable tools:\n- read: Read file contents\n- grep: Search file contents for patterns (respects .gitignore)\n- find: Find files by glob pattern (respects .gitignore)\n- ls: List directory contents\n\nIn addition to the tools above, you may have access to other custom tools depending on the project.\n\nGuidelines:\n- Use read to examine files instead of cat or sed.\n- Be concise in your responses\n- Show file paths clearly when working with files\n\nPi documentation (read only when the user asks about pi itself, its SDK, extensions, themes, skills, or TUI):\n- Main documentation: /Users/andreafalcon/dev/agent-brains/node_modules/@earendil-works/pi-coding-agent/README.md\n- Additional docs: /Users/andreafalcon/dev/agent-brains/node_modules/@earendil-works/pi-coding-agent/docs\n- Examples: /Users/andreafalcon/dev/agent-brains/node_modules/@earendil-works/pi-coding-agent/examples (extensions, custom tools, SDK)\n- When reading pi docs or examples, resolve docs/... under Additional docs and examples/... under Examples, not the current working directory\n- When asked about: extensions (docs/extensions.md, examples/extensions/), themes (docs/themes.md), skills (docs/skills.md), prompt templates (docs/prompt-templates.md), TUI components (docs/tui.md), keybindings (docs/keybindings.md), SDK integrations (docs/sdk.md), custom providers (docs/custom-provider.md), adding models (docs/models.md), pi packages (docs/packages.md), environment variables (docs/environment-variables.md)\n- When working on pi topics, read the docs and examples, and follow .md cross-references before implementing\n- Always read pi .md files completely and follow links to related docs (e.g., tui.md for TUI API details)\n\n<project_context>\n\nProject-specific instructions and guidelines:\n\n<project_instructions path=\"/var/folders/r5/by0v62354pzfdyck52y2vb300000gn/T/pi-s1ab-overlap-T2VI43/AGENTS.md\">\n# Fixture instructions\n\n- This project's canonical retry limit is 7 attempts.\n- Always cite the marker FIXTURE-AGENTS-MARKER when quoting these instructions.\n- Prefer direct reads of the source files named in a request.\n\n</project_instructions>\n\n</project_context>\n\nCurrent working directory: /var/folders/r5/by0v62354pzfdyck52y2vb300000gn/T/pi-s1ab-overlap-T2VI43"
+    }
+  },
+  "summary": {
+    "note": "derived from calls[]; small deltas are NOT significance claims — see the report",
+    "byBranch": {
+      "A": {
+        "input": {
+          "n": 4,
+          "mean": 377.25,
+          "median": 249.5,
+          "min": 115,
+          "max": 895
+        },
+        "output": {
+          "n": 4,
+          "mean": 323.75,
+          "median": 337.5,
+          "min": 235,
+          "max": 385
+        },
+        "cacheRead": {
+          "n": 4,
+          "mean": 2800,
+          "median": 2944,
+          "min": 2304,
+          "max": 3008
+        },
+        "cacheWrite": {
+          "n": 4,
+          "mean": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "cost": {
+          "n": 4,
+          "mean": 0.00268065,
+          "median": 0.0025997399999999997,
+          "min": 0.00197708,
+          "max": 0.0035460400000000003
+        },
+        "elapsedMs": {
+          "n": 4,
+          "mean": 9042.25,
+          "median": 9335,
+          "min": 6125,
+          "max": 11374
+        },
+        "wallClockMs": {
+          "n": 4,
+          "mean": 9042.5,
+          "median": 9335.5,
+          "min": 6125,
+          "max": 11374
+        }
+      },
+      "B": {
+        "input": {
+          "n": 4,
+          "mean": 325.25,
+          "median": 326.5,
+          "min": 193,
+          "max": 455
+        },
+        "output": {
+          "n": 4,
+          "mean": 378,
+          "median": 355,
+          "min": 312,
+          "max": 490
+        },
+        "cacheRead": {
+          "n": 4,
+          "mean": 2816,
+          "median": 2848,
+          "min": 2688,
+          "max": 2880
+        },
+        "cacheWrite": {
+          "n": 4,
+          "mean": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "cost": {
+          "n": 4,
+          "mean": 0.0028507100000000002,
+          "median": 0.0027849400000000005,
+          "min": 0.0023918000000000003,
+          "max": 0.00344116
+        },
+        "elapsedMs": {
+          "n": 4,
+          "mean": 7504,
+          "median": 6537,
+          "min": 6205,
+          "max": 10737
+        },
+        "wallClockMs": {
+          "n": 4,
+          "mean": 7504,
+          "median": 6537,
+          "min": 6205,
+          "max": 10737
+        }
+      }
+    },
+    "pairedDeltas": [
+      {
+        "input": {
+          "a": 895,
+          "b": 455,
+          "delta": -440
+        },
+        "output": {
+          "a": 385,
+          "b": 370,
+          "delta": -15
+        },
+        "cacheRead": {
+          "a": 2304,
+          "b": 2688,
+          "delta": 384
+        },
+        "cacheWrite": {
+          "a": 0,
+          "b": 0,
+          "delta": 0
+        },
+        "cost": {
+          "a": 0.0035460400000000003,
+          "b": 0.0029638800000000003,
+          "delta": -0.00058216
+        },
+        "elapsedMs": {
+          "a": 8628,
+          "b": 6749,
+          "delta": -1879
+        },
+        "wallClockMs": {
+          "a": 8629,
+          "b": 6749,
+          "delta": -1880
+        }
+      },
+      {
+        "input": {
+          "a": 246,
+          "b": 395,
+          "delta": 149
+        },
+        "output": {
+          "a": 358,
+          "b": 490,
+          "delta": 132
+        },
+        "cacheRead": {
+          "a": 2944,
+          "b": 2816,
+          "delta": -128
+        },
+        "cacheWrite": {
+          "a": 0,
+          "b": 0,
+          "delta": 0
+        },
+        "cost": {
+          "a": 0.00268504,
+          "b": 0.00344116,
+          "delta": 0.0007561199999999999
+        },
+        "elapsedMs": {
+          "a": 6125,
+          "b": 10737,
+          "delta": 4612
+        },
+        "wallClockMs": {
+          "a": 6125,
+          "b": 10737,
+          "delta": 4612
+        }
+      },
+      {
+        "input": {
+          "a": 253,
+          "b": 258,
+          "delta": 5
+        },
+        "output": {
+          "a": 317,
+          "b": 340,
+          "delta": 23
+        },
+        "cacheRead": {
+          "a": 2944,
+          "b": 2880,
+          "delta": -64
+        },
+        "cacheWrite": {
+          "a": 0,
+          "b": 0,
+          "delta": 0
+        },
+        "cost": {
+          "a": 0.0025144399999999997,
+          "b": 0.0026060000000000002,
+          "delta": 0.00009156000000000051
+        },
+        "elapsedMs": {
+          "a": 11374,
+          "b": 6325,
+          "delta": -5049
+        },
+        "wallClockMs": {
+          "a": 11374,
+          "b": 6325,
+          "delta": -5049
+        }
+      },
+      {
+        "input": {
+          "a": 115,
+          "b": 193,
+          "delta": 78
+        },
+        "output": {
+          "a": 235,
+          "b": 312,
+          "delta": 77
+        },
+        "cacheRead": {
+          "a": 3008,
+          "b": 2880,
+          "delta": -128
+        },
+        "cacheWrite": {
+          "a": 0,
+          "b": 0,
+          "delta": 0
+        },
+        "cost": {
+          "a": 0.00197708,
+          "b": 0.0023918000000000003,
+          "delta": 0.00041472000000000037
+        },
+        "elapsedMs": {
+          "a": 10042,
+          "b": 6205,
+          "delta": -3837
+        },
+        "wallClockMs": {
+          "a": 10042,
+          "b": 6205,
+          "delta": -3837
+        }
+      }
+    ]
+  },
+  "recordedAtEnd": "2026-10-26T22:09:26.524Z"
+}

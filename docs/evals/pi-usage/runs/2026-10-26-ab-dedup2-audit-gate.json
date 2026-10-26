@@ -1,0 +1,104 @@
+{
+  "experiment": "S1 benefit A/B (C4), CORRECTED after review P1: duplicated context (A, pre-S1 fb66860 append) vs deduplicated context (B, production buildResourceLoader); gates run on the SAME loaded loader instance passed to the session and on the ACTUAL system prompt before the call",
+  "recordedAtStart": "2026-10-26T22:06:33.444Z",
+  "model": "zai/glm-5.2",
+  "mode": "audit-only",
+  "harness": "docs/evals/pi-usage/run-ab-dedup.mjs (experimental; no runtime option added)",
+  "sessionConstruction": "replicates PiAgentRunner.run() for a read-only role (no custom tools, no skills); the loader is LOADED (reload) before createAgentSession — the P1 fix contract; branch B uses the exported production buildResourceLoader, branch A only replaces agentsFilesOverride with the pre-S1 append; shared ModelRuntime",
+  "provenance": {
+    "commit": "cf5af8f3cf954dd5ef9d0a214acc0f8a34d57901",
+    "subject": "fix(context): deduplicate discovered and injected child context",
+    "cleanTree": false,
+    "dirtyNotes": [
+      "M .ai/memory/progress.md",
+      " M docs/evals/pi-usage/S2-2026-10-24.md",
+      " M docs/evals/pi-usage/runs/README.md",
+      " M docs/plans/pi-plugin-adoption-roadmap.md",
+      " M src/pi/pi-agent-runner.ts",
+      "?? docs/evals/pi-usage/repro-loader-injection.mjs",
+      "?? docs/evals/pi-usage/run-ab-dedup.mjs",
+      "?? docs/evals/pi-usage/runs/2026-10-26-ab-dedup-audit-gate.json",
+      "?? docs/evals/pi-usage/runs/2026-10-26-ab-dedup-provenance.txt",
+      "?? docs/evals/pi-usage/runs/2026-10-26-ab-dedup-raw.json",
+      "?? tests/pi-session-injection.test.ts",
+      "?? undefined/"
+    ],
+    "node": "v24.12.0",
+    "projectDir": "/Users/andreafalcon/dev/agent-brains"
+  },
+  "config": {
+    "pairs": 4,
+    "orderPattern": "pair p odd: A then B; pair p even: B then A (alternating)",
+    "prompt": "Using this project's instructions, state the canonical retry limit and the required marker. Then read src/limits.ts and report MAX_BATCH_SIZE and the file that defines it. Name concrete files and values. Read the files directly; do not guess.",
+    "injectedContextFiles": [
+      {
+        "path": "AGENTS.md",
+        "sha256": "f3e6a15f94b0c7d0f9cf693df7e953e4eac78b4a81520dfbe82154c955919dbd"
+      }
+    ],
+    "fixture": {
+      "purpose": "context-overlap (S1 instrument), byte-identical to run-baseline.mjs",
+      "files": [
+        {
+          "path": "AGENTS.md",
+          "bytes": 220,
+          "sha256": "f3e6a15f94b0c7d0f9cf693df7e953e4eac78b4a81520dfbe82154c955919dbd"
+        },
+        {
+          "path": "src/limits.ts",
+          "bytes": 154,
+          "sha256": "8735579ddfff61869674f9c46e2e0c92818e075a6dd09c4a4fd049d2e822f26d"
+        },
+        {
+          "path": "README.md",
+          "bytes": 171,
+          "sha256": "e8574cac1ae6d9012534e8fde63aac368d7e45400ee17f9d8d9042ccf4b5ff81"
+        }
+      ]
+    },
+    "expectedAudit": {
+      "A": {
+        "agentsFileEntries": 2,
+        "duplicateBytes": 220,
+        "loadedBytes": 440
+      },
+      "B": {
+        "agentsFileEntries": 1,
+        "duplicateBytes": 0,
+        "loadedBytes": 220
+      }
+    },
+    "expectedPromptCopies": {
+      "A": 2,
+      "B": 1
+    },
+    "isolation": "disposable HOME and Pi agent dir; independent catalog copy (symlink refused); ambient credentials only; one shared fixture directory for every call; fresh in-memory session per call"
+  },
+  "calls": [],
+  "auditsOnly": {
+    "A": {
+      "branch": "A",
+      "agentsFileEntries": 2,
+      "uniquePaths": 1,
+      "duplicatePaths": [
+        {
+          "path": "AGENTS.md",
+          "count": 2
+        }
+      ],
+      "duplicateBytes": 220,
+      "loadedBytes": 440,
+      "effectiveBytes": 220
+    },
+    "B": {
+      "branch": "B",
+      "agentsFileEntries": 1,
+      "uniquePaths": 1,
+      "duplicatePaths": [],
+      "duplicateBytes": 0,
+      "loadedBytes": 220,
+      "effectiveBytes": 220
+    }
+  },
+  "recordedAtEnd": "2026-10-26T22:06:33.528Z"
+}

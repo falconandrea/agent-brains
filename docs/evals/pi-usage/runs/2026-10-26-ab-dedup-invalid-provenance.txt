@@ -1,0 +1,73 @@
+*** INVALIDATED 2026-10-26 (review P1) — DO NOT USE FOR S1 EVALUATION ***
+This A/B run is INVALID: the harness gated a RELOADED loader instance but
+passed a DIFFERENT, UNRELOADED instance to createAgentSession — and Pi SDK
+0.84.2 does not reload a caller-supplied loader. Both branches received the
+SAME system prompt with ZERO injected context (evidence:
+2026-10-26-p1-repro.txt, path [1]). The "benefit not detectable" conclusion
+drawn from it is WITHDRAWN. Kept unedited below for provenance only; the
+corrected experiment is 2026-10-26-ab-dedup2-*.
+
+S1 benefit A/B experiment provenance (generated 2026-10-26, after the run)
+run recordedAtStart: 2026-10-26T18:38:39.202Z
+run recordedAtEnd:   2026-10-26T18:40:37.311Z
+base commit: cf5af8f3cf954dd5ef9d0a214acc0f8a34d57901 (S1 committed: "fix(context): deduplicate discovered and injected child context")
+branch: main
+node: v24.12.0
+harness: docs/evals/pi-usage/run-ab-dedup.mjs (experimental; NO runtime option added)
+harness sha256: 0b3a87649eb907116392f85bf90fc850a6432e5aa031623c7d8bf0bae1cd3c5b
+pre-flight audit gate: 2026-10-26-ab-dedup-audit-gate.json (A: 2 entries/440 loaded/220 dup; B: 1/220/0)
+raw output: 2026-10-26-ab-dedup-raw.json (8 calls, verbatim answers, unedited)
+
+== working tree at run time ==
+git status --porcelain: only the untracked harness file itself
+(?? docs/evals/pi-usage/run-ab-dedup.mjs); every src/ file measured below is
+exactly commit cf5af8f. No skill, profile, plugin or runtime file was changed.
+
+== branch definitions (the ONLY difference between A and B) ==
+A = pre-S1 append (commit fb66860), quoted verbatim:
+    agentsFilesOverride: (base) => ({ agentsFiles: [...base.agentsFiles, ...extra] })
+B = production buildResourceLoader() exported from src/pi/pi-agent-runner.ts
+    (commit cf5af8f, includes src/context-dedup.ts dedup)
+Both branches share the harness's identical session construction
+(createAgentSession + SessionManager.inMemory + one shared ModelRuntime,
+production resolveTools read-only allowlist [read,grep,find,ls], no skills,
+no custom tools) and the production usage fold (usageFromAgentEnds).
+Mechanical gate before EVERY call: A must audit 2 entries/440 loaded bytes
+(220 duplicated), B must audit 1 entry/220 loaded bytes (0 duplicated);
+mismatch aborts before any token is spent (exit 3). All 8 calls passed.
+
+== measured files manifest (sha256 <path>) ==
+d78e4abad4f8c7c5189cf6a4a85303615c3ee98c3aab465bd8bed6e7e938389c  src/context-dedup.ts
+f1647cea38b7773a506bd139c929a40433b305ad11c8a9554c9cd949530c7282  src/pi/pi-agent-runner.ts
+9cb521784335cd7cad102dcc5e81c8f480b98d116f8d1804aaf99edc673f157a  src/usage.ts
+treeFingerprint_sha256: f1110a62b00cfe0591ef2610136c599335c0bf212c6c86eb78e725aae8601cf8
+fingerprint scope: the loader/dedup/usage code the experiment exercises
+(src/context-dedup.ts, src/pi/pi-agent-runner.ts, src/usage.ts) as committed
+in cf5af8f; = sha256 of the manifest above
+reproduce: { printf 'src/context-dedup.ts\nsrc/pi/pi-agent-runner.ts\nsrc/usage.ts\n'; } | xargs shasum -a 256 | shasum -a 256
+
+== run inputs (same isolation contract as the S2 baseline) ==
+model: zai/glm-5.2 (pricing 1.4/4.4/0.26/0 USD per M input/output/cacheRead/cacheWrite)
+task: context-overlap only (the one task mechanically affected by S1)
+fixture: byte-identical to run-baseline.mjs OVERLAP_FIXTURE (sha256
+f3e6a15f94b0c7d0f9cf693df7e953e4eac78b4a81520dfbe82154c955919dbd for
+AGENTS.md — matches the S2 definitive-baseline artifact)
+prompt: verbatim context-overlap prompt from run-baseline.mjs (recorded in the raw JSON)
+pairs: 4, order AB/BA/AB/BA (alternating); fresh in-memory session per call,
+one shared fixture directory, one shared ModelRuntime
+isolation: disposable HOME and Pi agent dir; independent COPY of
+models-store.json (symlink refused, exit 2); ambient ZAI_API_KEY only. The
+disposable HOME stayed empty; inside the disposable agent dir the SDK wrote
+only its own 2-byte auth.json ({}, no credentials), an updated catalog into
+the COPY (291.7K -> 298.7K — the write the no-symlink rule exists for; the
+personal store was not touched) and a bin/ helper directory.
+Command:
+  EXP=<temp dir>; mkdir -p "$EXP/home" "$EXP/agent"
+  cp "$HOME/.pi/agent/models-store.json" "$EXP/agent/models-store.json"
+  HOME="$EXP/home" node docs/evals/pi-usage/run-ab-dedup.mjs "$PWD" "$EXP/agent" \
+    --model zai/glm-5.2 --pairs 4 --out "$EXP/ab-dedup-raw.json"
+
+== post-run stability check ==
+manifest regenerated after the run over the same three files and matched the
+fingerprint above; the three artifacts copied into runs/ are byte-identical to
+the harness outputs (cp, unedited).
