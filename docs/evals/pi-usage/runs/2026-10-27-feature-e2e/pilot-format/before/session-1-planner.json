@@ -1,0 +1,281 @@
+{
+  "role": "planner",
+  "prompt": "You are the PLANNER for a feature in a nodejs project.\n\nFeature request from the user:\nAdd an optional maxDelayMs parameter to retryDelay(attempt, baseMs = 100). Omitting it must preserve existing results exactly. When supplied it must be a finite nonnegative number; otherwise throw RangeError. Return Math.min(the existing exponential delay, maxDelayMs), including a zero cap. Preserve the existing attempt and baseMs validation and error types. Add focused node:test tests and document the API in README.md. No dependencies, no other API changes, no commit or push. This is a disposable evaluation fixture; keep scope to this contract and use the existing npm test command.\n\nYour job:\n1. Inspect the repository for anything relevant. If a fact is discoverable in\n   the code, look it up — never ask the user about it.\n2. Collect EVERY product/design decision that materially changes behaviour,\n   scope, architecture or compatibility — but NEVER re-ask what the user's\n   request or the repo's plan documents already decided. Ask them ALL in ONE\n   ask_user_batch call, in order of impact: at most six decisions, each with\n   a short question, 2-3 concrete options and your recommendation. The user\n   answers the whole numbered list in a single free-form message. You may\n   make ONE exceptional second ask_user_batch call if — and only if — the\n   answers open a genuinely blocking new ambiguity; otherwise stop asking.\n   NEVER fall back to question-by-question follow-ups: any decision that is\n   unclear, partial or unanswered after the batch becomes an assumption you\n   must list in the PRD's Assumptions section, where the user approves or\n   vetoes it at the gate.\n3. Every decision you did NOT ask about is an assumption you are making:\n   you will have to list it in the PRD (see below), so prefer asking when\n   the wrong assumption would mean rework.\n4. When you have enough information, output the plan.\n\nYou are read-only: do not modify any file. The artifacts are written in\nEnglish — including the TITLE, whatever language the request is in.\nConversations with the user — including every ask_user_batch question — are in the\nSAME LANGUAGE as the feature request above.\nOutput the plan as markdown with exactly three top-level sections, in this\norder — and nothing else (no conversational preamble, no transcript of the\nquestions you asked):\n\n## TITLE\nA short English title for the feature, at most 6 words. It names the\ndirectory and artifacts, so make it specific and stable across reruns.\n\n## PRD\nConcise: problem, user stories (as a <role>, I want <action> so that\n<benefit>), scope, out of scope, acceptance criteria (testable statements,\none line each — the reviewer checks the diff against these), alternatives\nconsidered (2-3 lines each, why the chosen one wins), assumptions,\narchitecture/components, data flow, error handling, testing strategy.\nFor risky behavior, acceptance criteria name initial state/input, triggering\nevent and observable result; include rejection or preservation invariants where\nmaterial. Reuse existing contract boundaries and adequate tests. Keep simple\nchanges concise rather than requiring a fixed happy/error scenario quota.\n\"Assumptions\" lists every decision made without asking the user, one line\neach — the user approves or vetoes these at the gate. If and only if the\nfeature has user-facing UI, add a \"UI/UX Notes\" section; otherwise omit it.\n\n## TASKS\nEvery task MUST be a canonical Markdown list entry in this exact shape:\n\n- T1 — concrete description. Files: `path/a`, `path/b`.\n- T2 — concrete description. Files: `path/c`.\n\nUse granular, ordered, stable IDs (T1, T2, ...). IDs must be unique and must\nappear immediately after the list marker. No vague TODO placeholders.\n\nThe orchestrator writes them to .ai/features/<slug>/ under the project root,\nwhere <slug> is derived from your TITLE.",
+  "skills": [
+    "solution-capture",
+    "codebase-design",
+    "domain-modeling",
+    "prototype",
+    "karpathy-guidelines",
+    "research",
+    "to-spec",
+    "verification-before-completion",
+    "product-thinking",
+    "resolving-merge-conflicts",
+    "writing-for-agents",
+    "nodejs-backend-patterns",
+    "nodejs-best-practices"
+  ],
+  "contextFiles": [
+    {
+      "path": "AGENTS.md",
+      "content": "# Fixture instructions\n\nC4-FEATURE-CONTEXT-MARKER\n\nKeep implementation dependency-free. Use node:test. Never commit or push.\n"
+    }
+  ],
+  "systemPrompt": "You are an expert coding assistant operating inside pi, a coding agent harness. You help users by reading files, executing commands, editing code, and writing new files.\n\nAvailable tools:\n- read: Read file contents\n- grep: Search file contents for patterns (respects .gitignore)\n- find: Find files by glob pattern (respects .gitignore)\n- ls: List directory contents\n\nIn addition to the tools above, you may have access to other custom tools depending on the project.\n\nGuidelines:\n- Use read to examine files instead of cat or sed.\n- Be concise in your responses\n- Show file paths clearly when working with files\n\nPi documentation (read only when the user asks about pi itself, its SDK, extensions, themes, skills, or TUI):\n- Main documentation: /Users/andreafalcon/dev/agent-brains/node_modules/@earendil-works/pi-coding-agent/README.md\n- Additional docs: /Users/andreafalcon/dev/agent-brains/node_modules/@earendil-works/pi-coding-agent/docs\n- Examples: /Users/andreafalcon/dev/agent-brains/node_modules/@earendil-works/pi-coding-agent/examples (extensions, custom tools, SDK)\n- When reading pi docs or examples, resolve docs/... under Additional docs and examples/... under Examples, not the current working directory\n- When asked about: extensions (docs/extensions.md, examples/extensions/), themes (docs/themes.md), skills (docs/skills.md), prompt templates (docs/prompt-templates.md), TUI components (docs/tui.md), keybindings (docs/keybindings.md), SDK integrations (docs/sdk.md), custom providers (docs/custom-provider.md), adding models (docs/models.md), pi packages (docs/packages.md), environment variables (docs/environment-variables.md)\n- When working on pi topics, read the docs and examples, and follow .md cross-references before implementing\n- Always read pi .md files completely and follow links to related docs (e.g., tui.md for TUI API details)\nCurrent working directory: /private/tmp/pi-c4-feature-ujmo5dr_/before/fixture",
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "You are the PLANNER for a feature in a nodejs project.\n\nFeature request from the user:\nAdd an optional maxDelayMs parameter to retryDelay(attempt, baseMs = 100). Omitting it must preserve existing results exactly. When supplied it must be a finite nonnegative number; otherwise throw RangeError. Return Math.min(the existing exponential delay, maxDelayMs), including a zero cap. Preserve the existing attempt and baseMs validation and error types. Add focused node:test tests and document the API in README.md. No dependencies, no other API changes, no commit or push. This is a disposable evaluation fixture; keep scope to this contract and use the existing npm test command.\n\nYour job:\n1. Inspect the repository for anything relevant. If a fact is discoverable in\n   the code, look it up — never ask the user about it.\n2. Collect EVERY product/design decision that materially changes behaviour,\n   scope, architecture or compatibility — but NEVER re-ask what the user's\n   request or the repo's plan documents already decided. Ask them ALL in ONE\n   ask_user_batch call, in order of impact: at most six decisions, each with\n   a short question, 2-3 concrete options and your recommendation. The user\n   answers the whole numbered list in a single free-form message. You may\n   make ONE exceptional second ask_user_batch call if — and only if — the\n   answers open a genuinely blocking new ambiguity; otherwise stop asking.\n   NEVER fall back to question-by-question follow-ups: any decision that is\n   unclear, partial or unanswered after the batch becomes an assumption you\n   must list in the PRD's Assumptions section, where the user approves or\n   vetoes it at the gate.\n3. Every decision you did NOT ask about is an assumption you are making:\n   you will have to list it in the PRD (see below), so prefer asking when\n   the wrong assumption would mean rework.\n4. When you have enough information, output the plan.\n\nYou are read-only: do not modify any file. The artifacts are written in\nEnglish — including the TITLE, whatever language the request is in.\nConversations with the user — including every ask_user_batch question — are in the\nSAME LANGUAGE as the feature request above.\nOutput the plan as markdown with exactly three top-level sections, in this\norder — and nothing else (no conversational preamble, no transcript of the\nquestions you asked):\n\n## TITLE\nA short English title for the feature, at most 6 words. It names the\ndirectory and artifacts, so make it specific and stable across reruns.\n\n## PRD\nConcise: problem, user stories (as a <role>, I want <action> so that\n<benefit>), scope, out of scope, acceptance criteria (testable statements,\none line each — the reviewer checks the diff against these), alternatives\nconsidered (2-3 lines each, why the chosen one wins), assumptions,\narchitecture/components, data flow, error handling, testing strategy.\nFor risky behavior, acceptance criteria name initial state/input, triggering\nevent and observable result; include rejection or preservation invariants where\nmaterial. Reuse existing contract boundaries and adequate tests. Keep simple\nchanges concise rather than requiring a fixed happy/error scenario quota.\n\"Assumptions\" lists every decision made without asking the user, one line\neach — the user approves or vetoes these at the gate. If and only if the\nfeature has user-facing UI, add a \"UI/UX Notes\" section; otherwise omit it.\n\n## TASKS\nEvery task MUST be a canonical Markdown list entry in this exact shape:\n\n- T1 — concrete description. Files: `path/a`, `path/b`.\n- T2 — concrete description. Files: `path/c`.\n\nUse granular, ordered, stable IDs (T1, T2, ...). IDs must be unique and must\nappear immediately after the list marker. No vague TODO placeholders.\n\nThe orchestrator writes them to .ai/features/<slug>/ under the project root,\nwhere <slug> is derived from your TITLE."
+        }
+      ],
+      "timestamp": 1793126103179
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "Let me inspect the repository to understand its structure, the retryDelay function, existing tests, README, and package.json.",
+          "thinkingSignature": "reasoning_content"
+        },
+        {
+          "type": "toolCall",
+          "id": "call_a529dfd951094d1e8e593785",
+          "name": "ls",
+          "arguments": {}
+        },
+        {
+          "type": "toolCall",
+          "id": "call_dbbd404ed15946f0ac188936",
+          "name": "find",
+          "arguments": {
+            "pattern": "**/*.{js,ts,json,md}"
+          }
+        }
+      ],
+      "api": "openai-completions",
+      "provider": "zai",
+      "model": "glm-5.2",
+      "usage": {
+        "input": 1409,
+        "output": 47,
+        "cacheRead": 704,
+        "cacheWrite": 0,
+        "reasoning": 24,
+        "totalTokens": 2160,
+        "cost": {
+          "input": 0.0019725999999999997,
+          "output": 0.0002068,
+          "cacheRead": 0.00018304,
+          "cacheWrite": 0,
+          "total": 0.00236244
+        }
+      },
+      "stopReason": "toolUse",
+      "timestamp": 1793126103277,
+      "responseId": "20261028023503da83542999544b74",
+      "responseModel": "glm-5.3",
+      "rawStopReason": "tool_calls"
+    },
+    {
+      "role": "toolResult",
+      "toolCallId": "call_a529dfd951094d1e8e593785",
+      "toolName": "ls",
+      "content": [
+        {
+          "type": "text",
+          "text": ".git/\n.gitignore\n.pi/\nAGENTS.md\npackage.json\nREADME.md\nsrc/\ntest/"
+        }
+      ],
+      "isError": false,
+      "timestamp": 1793126111297
+    },
+    {
+      "role": "toolResult",
+      "toolCallId": "call_dbbd404ed15946f0ac188936",
+      "toolName": "find",
+      "content": [
+        {
+          "type": "text",
+          "text": "AGENTS.md\nREADME.md\npackage.json\nsrc/retry.js\ntest/retry.test.js"
+        }
+      ],
+      "isError": false,
+      "timestamp": 1793126111298
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "toolCall",
+          "id": "call_f35f81c59ff04f06984bc943",
+          "name": "read",
+          "arguments": {
+            "path": "src/retry.js"
+          }
+        },
+        {
+          "type": "toolCall",
+          "id": "call_820ee7cea4e94abe8ebe8e38",
+          "name": "read",
+          "arguments": {
+            "path": "test/retry.test.js"
+          }
+        },
+        {
+          "type": "toolCall",
+          "id": "call_5b14299002574a7facd976c7",
+          "name": "read",
+          "arguments": {
+            "path": "package.json"
+          }
+        },
+        {
+          "type": "toolCall",
+          "id": "call_10085837675b49f28916b1ec",
+          "name": "read",
+          "arguments": {
+            "path": "README.md"
+          }
+        },
+        {
+          "type": "toolCall",
+          "id": "call_adb97e9967e544028e0ef977",
+          "name": "read",
+          "arguments": {
+            "path": "AGENTS.md"
+          }
+        }
+      ],
+      "api": "openai-completions",
+      "provider": "zai",
+      "model": "glm-5.2",
+      "usage": {
+        "input": 95,
+        "output": 58,
+        "cacheRead": 2112,
+        "cacheWrite": 0,
+        "reasoning": 0,
+        "totalTokens": 2265,
+        "cost": {
+          "input": 0.000133,
+          "output": 0.0002552,
+          "cacheRead": 0.00054912,
+          "cacheWrite": 0,
+          "total": 0.00093732
+        }
+      },
+      "stopReason": "toolUse",
+      "timestamp": 1793126111301,
+      "responseId": "202610280235134c79f5c87bd049e0",
+      "responseModel": "glm-5.3",
+      "rawStopReason": "tool_calls"
+    },
+    {
+      "role": "toolResult",
+      "toolCallId": "call_f35f81c59ff04f06984bc943",
+      "toolName": "read",
+      "content": [
+        {
+          "type": "text",
+          "text": "export function retryDelay(attempt, baseMs = 100) {\n  if (!Number.isInteger(attempt) || attempt < 0) throw new RangeError('invalid attempt');\n  if (!Number.isFinite(baseMs) || baseMs < 0) throw new RangeError('invalid baseMs');\n  return baseMs * 2 ** attempt;\n}\n"
+        }
+      ],
+      "isError": false,
+      "timestamp": 1793126118647
+    },
+    {
+      "role": "toolResult",
+      "toolCallId": "call_820ee7cea4e94abe8ebe8e38",
+      "toolName": "read",
+      "content": [
+        {
+          "type": "text",
+          "text": "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { retryDelay } from '../src/retry.js';\ntest('existing delays', () => { assert.equal(retryDelay(0), 100); assert.equal(retryDelay(3, 25), 200); });\ntest('validation', () => { assert.throws(() => retryDelay(-1), RangeError); assert.throws(() => retryDelay(0, NaN), RangeError); });\n"
+        }
+      ],
+      "isError": false,
+      "timestamp": 1793126118647
+    },
+    {
+      "role": "toolResult",
+      "toolCallId": "call_5b14299002574a7facd976c7",
+      "toolName": "read",
+      "content": [
+        {
+          "type": "text",
+          "text": "{\n  \"name\": \"retry-fixture\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": {\n    \"test\": \"node --test\"\n  }\n}\n"
+        }
+      ],
+      "isError": false,
+      "timestamp": 1793126118647
+    },
+    {
+      "role": "toolResult",
+      "toolCallId": "call_10085837675b49f28916b1ec",
+      "toolName": "read",
+      "content": [
+        {
+          "type": "text",
+          "text": "# Retry fixture\n\n`retryDelay(attempt, baseMs = 100)` returns `baseMs * 2 ** attempt`.\nAttempt must be a nonnegative integer; baseMs a finite nonnegative number.\nInvalid arguments throw RangeError. Run `npm test`.\n"
+        }
+      ],
+      "isError": false,
+      "timestamp": 1793126118647
+    },
+    {
+      "role": "toolResult",
+      "toolCallId": "call_adb97e9967e544028e0ef977",
+      "toolName": "read",
+      "content": [
+        {
+          "type": "text",
+          "text": "# Fixture instructions\n\nC4-FEATURE-CONTEXT-MARKER\n\nKeep implementation dependency-free. Use node:test. Never commit or push.\n"
+        }
+      ],
+      "isError": false,
+      "timestamp": 1793126118647
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "The feature request is extremely well-specified:\n\n- Add optional `maxDelayMs` parameter to `retryDelay(attempt, baseMs = 100)`.\n- Omitting it must preserve existing results exactly.\n- When supplied: finite nonnegative number, else throw RangeError.\n- Return `Math.min(existing exponential delay, maxDelayMs)`, including zero cap.\n- Preserve existing attempt/baseMs validation and error types.\n- Add focused node:test tests, document API in README.md.\n- No dependencies, no other API changes, no commit/push.\n- Use existing npm test command.\n\nThe spec is essentially complete. Design decisions that might matter:\n\n1. Should maxDelayMs default to `undefined` or `Infinity`? The request says \"optional\" — omission must preserve results exactly. Using `undefined` default and skipping validation when undefined is the natural approach. Infinity as default would also work but the request says \"When supplied it must be a finite nonnegative number; otherwise throw RangeError\" — Infinity is not finite, so passing Infinity explicitly should throw. So the parameter must distinguish omitted (undefined) from Infinity.\n\n2. Order of validation: attempt/baseMs validated before maxDelayMs? Preserve existing validation — presumably validate attempt, then baseMs, then maxDelayMs. Should maxDelayMs be validated even if it's the only invalid argument? Yes.\n\n3. Should maxDelayMs be validated even when the computed delay is below the cap? Yes — validation is independent of the result.\n\n4. What error message? Existing messages: 'invalid attempt', 'invalid baseMs'. So 'invalid maxDelayMs' would be consistent.\n\nThese are all pretty trivial and derivable from the contract. The instruction says to ask about decisions that materially change behavior/scope but never re-ask what the request already decided. The request decided nearly everything. Decisions not decided by the request:\n\n- Error message wording for maxDelayMs (minor — assumption: 'invalid maxDelayMs').\n- Validation order (assumption: attempt, then baseMs, then maxDelayMs — preserves existing behavior since existing validation runs first regardless).\n- Whether maxDelayMs is validated when attempt/baseMs are invalid (i.e., which error throws first). Existing behavior: attempt first. Preserving that is implied.\n\nIs there anything worth asking? Per instructions: \"Collect EVERY product/design decision that materially changes behaviour, scope, architecture or compatibility — but NEVER re-ask what the user's request or the repo's plan documents already decided.\" The contract is fully specified. There's essentially nothing materially ambiguous. Asking would be re-asking decided things. So I should skip ask_user_batch (it's optional — \"make at most six decisions... ask them\" but if nothing materially changes behavior beyond what's decided, the right move is to list assumptions).\n\nHmm, but the instruction says to collect every decision that materially changes behavior and ask them ALL in one batch. Are there any genuinely ambiguous points?\n\n- Default value of maxDelayMs when omitted: the request says omitting must preserve existing results exactly. Both `undefined` (skip check, skip min) and `Infinity` default would preserve results, but `Infinity` default would conflict with \"when supplied it must be a finite nonnegative number\" — actually if the default is Infinity, then Infinity is \"supplied\" by default, which is contradictory. The clean interpretation: treat `undefined` as omitted; don't apply cap. Alternative: default to Infinity and Math.min — behaviorally identical for results, and passing Infinity explicitly... hmm. If we implement `maxDelayMs = Infinity` default, then `retryDelay(0)` returns min(100, Infinity) = 100 — fine. But then someone passing Infinity explicitly gets no error unless we special-case. The contract says supplied values must be finite. So: parameter default `undefined`, validate only if not undefined, return `Math.min(delay, maxDelayMs)` when provided. Or equivalently default Infinity without validation of Infinity. Behaviorally: `retryDelay(0, 100, Infinity)` should throw RangeError under the strict reading (\"When supplied it must be a finite nonnegative number\"). That's the only divergence. I'll make it an assumption: Infinity/NaN/negative supplied → RangeError.\n\nThis is minor enough to be an assumption. Honestly there's nothing that would cause rework if assumed wrong — everything follows from the contract. I'll skip asking and list assumptions.\n\nActually, wait — should I really skip ask_user_batch entirely? The instruction: \"Collect EVERY product/design decision that materially changes behaviour, scope, architecture or compatibility — but NEVER re-ask what the user's request or the repo's plan documents already decided. Ask them ALL in ONE ask_user_batch call\". If the collection yields zero decisions, there's nothing to ask. Asking fabricated questions would violate \"never re-ask what's decided\". The correct behavior is to note that all material decisions are already decided by the request and proceed to the plan with assumptions listed.\n\nLet me write the plan.\n\nTitle: \"retryDelay maxDelayMs cap\" — at most 6 words. \"Cap retryDelay with maxDelayMs\" — good.\n\nPRD sections: problem, user stories, scope, out of scope, acceptance criteria, alternatives considered, assumptions, architecture/components, data flow, error handling, testing strategy. No UI.\n\nAssumptions:\n- Omission is represented by `undefined`; only then is validation skipped. Explicitly passing `Infinity`, `NaN`, `-1`, or a non-number (e.g. '500') throws RangeError('invalid maxDelayMs').\n- Validation order: attempt → baseMs → maxDelayMs (first failure wins), preserving existing error precedence.\n- maxDelayMs is validated even when the computed delay is below the cap.\n- Error message mirrors existing style: 'invalid maxDelayMs'.\n- Default value of `undefined` (not `Infinity`) so explicit `Infinity` is rejected as non-finite.\n- README updated in the same minimal style, no JSDoc required (or maybe add JSDoc? Keep minimal — assumption: README-only documentation, no new JSDoc block needed; actually adding a brief JSDoc is harmless but scope says document API in README — assumption: README only).\n- Node ESM, node:test, `npm test` (`node --test` picks up test/ automatically).\n\nAcceptance criteria (testable, one line each):\n1. `retryDelay(attempt)` and `retryDelay(attempt, baseMs)` return exactly `baseMs * 2 ** attempt` when maxDelayMs omitted (backward compatible).\n2. `retryDelay(attempt, baseMs, maxDelayMs)` returns `Math.min(baseMs * 2 ** attempt, maxDelayMs)`.\n3. `retryDelay(2, 100, 0)` returns 0 (zero cap honored).\n4. Supplying maxDelayMs that is `NaN`, `Infinity`, `-Infinity`, negative, or non-number throws RangeError.\n5. Existing validation preserved: non-integer or negative attempt throws RangeError('invalid attempt'); non-finite or negative baseMs throws RangeError('invalid baseMs').\n6. Attempt/baseMs validation takes precedence over maxDelayMs validation (order preserved).\n7. README documents maxDelayMs semantics including the zero cap and RangeError.\n8. `npm test` passes with no new dependencies; package.json scripts unchanged.\n\nTasks:\n- T1 — Extend `retryDelay` in src/retry.js with optional third parameter `maxDelayMs`: when `undefined`, behavior unchanged; otherwise validate finite nonnegative number (RangeError 'invalid maxDelayMs') after existing attempt/baseMs checks and return `Math.min(baseMs * 2 ** attempt, maxDelayMs)`. Files: `src/retry.js`.\n- T2 — Add focused node:test cases in test/retry.test.js covering: cap applied, cap above delay (no effect), zero cap, omitted param equivalence, invalid maxDelayMs variants (NaN, ±Infinity, negative, non-number), validation order. Files: `test/retry.test.js`.\n- T3 — Update README.md API documentation for maxDelayMs: semantics, validation, zero cap, RangeError. Files: `README.md`.\n- T4 — Run `npm test` and verify all tests pass, no dependency changes, files not committed/pushed. Files: `package.json` (verification only).\n\nWait — T4 files: it says Files: `path`. Verification task may reference no files or the test files. I'll include `package.json` since npm test script is there. Fine.\n\nShould I double-check whether there's anything else in .pi/ directory? Probably harness config, not relevant. Let me quickly check .pi for anything relevant... The instructions say inspect repo for anything relevant. AGENTS.md says keep dependency-free, node:test, never commit/push — already read. .pi might have settings but unlikely relevant. I could peek quickly. Not necessary but cheap.\n\nI'm confident. Output plan now. Language: feature request is English, output in English.",
+          "thinkingSignature": "reasoning_content"
+        },
+        {
+          "type": "text",
+          "text": "All relevant facts are discoverable and the contract is fully specified — no material decisions remain open, so no clarifying batch is needed.\n\n## Cap retryDelay With maxDelayMs\n\n## PRD\n\n**Problem**\n`retryDelay(attempt, baseMs = 100)` returns `baseMs * 2 ** attempt`, which grows unboundedly with `attempt`. Callers have no way to bound the backoff delay, so a large attempt count can produce impractically huge delays.\n\n**User stories**\n- As a library consumer, I want to pass an optional `maxDelayMs` cap to `retryDelay` so that computed delays never exceed a bound I choose.\n- As an existing user, I want omitting `maxDelayMs` to keep returning exactly the current values so my code and tests are unaffected by the upgrade.\n- As a defensive caller, I want invalid `maxDelayMs` values (NaN, ±Infinity, negative, non-number) rejected with `RangeError` so misconfiguration fails fast instead of silently producing wrong delays.\n\n**Scope**\n- Add optional third parameter `maxDelayMs` to `retryDelay` in `src/retry.js`.\n- Validation: when supplied, must be a finite nonnegative number, else `RangeError`. Omitted (`undefined`) → no validation, no cap.\n- Return `Math.min(baseMs * 2 ** attempt, maxDelayMs)`, including a zero cap (result `0`).\n- Preserve existing `attempt` and `baseMs` validation, messages, and error types exactly.\n- Focused `node:test` tests in `test/retry.test.js`; README API documentation.\n\n**Out of scope**\n- Any other API changes (jitter, custom backoff strategies, async sleeping).\n- New dependencies; changes to `package.json` (existing `npm test` / `node --test` is reused).\n- Committing or pushing.\n\n**Acceptance criteria**\n- `retryDelay(attempt)` and `retryDelay(attempt, baseMs)` return exactly `baseMs * 2 ** attempt` when `maxDelayMs` is omitted — byte-for-byte backward compatible results.\n- When supplied and valid, `retryDelay(attempt, baseMs, maxDelayMs)` returns `Math.min(baseMs * 2 ** attempt, maxDelayMs)`.\n- `retryDelay(2, 100, 0)` returns `0` (zero cap honored, not an error).\n- Supplying `NaN`, `Infinity`, `-Infinity`, a negative number, or a non-number (e.g. `'500'`) as `maxDelayMs` throws `RangeError`.\n- Existing validation preserved: non-integer or negative `attempt` throws `RangeError('invalid attempt')`; non-finite or negative `baseMs` throws `RangeError('invalid baseMs')`.\n- Validation precedence unchanged: `attempt` is checked first, then `baseMs`, then `maxDelayMs` (first failure wins), so previously-throwing inputs still throw the same error for `attempt`/`baseMs` even if `maxDelayMs` is also invalid.\n- `maxDelayMs` is validated even when the computed exponential delay is already below the cap.\n- `README.md` documents `maxDelayMs`: default omission behavior, capping (incl. zero cap), and `RangeError` on invalid values.\n- `npm test` passes; no new dependencies; no files committed or pushed.\n\n**Alternatives considered**\n- Default `maxDelayMs = Infinity` and always apply `Math.min` — behaviorally identical when omitted, but then an explicitly-supplied `Infinity` could not be distinguished from \"omitted\" and would evade the finite-value validation the contract requires. Rejected.\n- Clamp instead of validate (silently coerce invalid values) — violates the explicit RangeError contract and hides caller bugs. Rejected.\n- Separate `retryDelayCapped` function — a second public API contradicts \"no other API changes\"; a third parameter is the requested shape. Rejected.\n\n**Assumptions**\n- Omission is represented by `undefined`; only then is validation skipped. Explicitly passing `Infinity` (or any non-finite/negative/non-number) throws `RangeError`.\n- New error message mirrors the existing style: `'invalid maxDelayMs'`.\n- Parameter declaration is `maxDelayMs` with no default (`undefined`), placed after `baseMs`.\n- Documentation goes in `README.md` only, matching its current minimal style; no JSDoc block added.\n- No changes to existing tests' assertions; new cases are additive in the existing file.\n\n**Architecture/components**\n- `src/retry.js` — single exported function; add the third parameter, append a validation branch after the existing two, and apply the `Math.min` cap at return.\n- `test/retry.test.js` — additive `node:test` cases for cap behavior and validation.\n- `README.md` — one-paragraph API update.\n\n**Data flow**\nInputs (`attempt`, `baseMs`, optional `maxDelayMs`) → sequential validation (`attempt` → `baseMs` → `maxDelayMs` if supplied) → compute `baseMs * 2 ** attempt` → return `Math.min(delay, maxDelayMs)` when cap supplied, else `delay`.\n\n**Error handling**\n- `RangeError('invalid attempt')` — non-integer or negative `attempt` (unchanged).\n- `RangeError('invalid baseMs')` — non-finite or negative `baseMs` (unchanged).\n- `RangeError('invalid maxDelayMs')` — supplied value not a finite nonnegative number.\n\n**Testing strategy**\nAdditive `node:test` cases using `assert.equal` / `assert.throws(..., RangeError)`: cap applied, cap above delay (unchanged result), zero cap, omitted-parameter equivalence with existing outputs, each invalid `maxDelayMs` variant, and validation precedence (e.g. `retryDelay(-1, 100, NaN)` throws for `attempt`). Run via existing `npm test`.\n\n## TASKS\n- T1 — Extend `retryDelay` in `src/retry.js` with optional third parameter `maxDelayMs` (no default; `undefined` = omitted, results unchanged); when supplied validate finite nonnegative number after the existing `attempt`/`baseMs` checks, throwing `RangeError('invalid maxDelayMs')` on violation, and return `Math.min(baseMs * 2 ** attempt, maxDelayMs)`. Files: `src/retry.js`.\n- T2 — Add focused `node:test` cases in `test/retry.test.js` covering: cap applied (`Math.min`), cap larger than delay (identical result), zero cap returns `0`, omitted `maxDelayMs` returns exactly current values, invalid `maxDelayMs` (`NaN`, `Infinity`, `-Infinity`, negative, non-number) throws `RangeError`, and `attempt`/`baseMs` validation precedence preserved. Files: `test/retry.test.js`.\n- T3 — Update `README.md` to document the `maxDelayMs` parameter: omission preserves existing results, capping via `Math.min` including zero cap, and `RangeError` for invalid supplied values. Files: `README.md`.\n- T4 — Run `npm test`, verify all tests pass with no new dependencies, no `package.json` script changes, and nothing committed or pushed. Files: `package.json`."
+        }
+      ],
+      "api": "openai-completions",
+      "provider": "zai",
+      "model": "glm-5.2",
+      "usage": {
+        "input": 396,
+        "output": 3406,
+        "cacheRead": 2176,
+        "cacheWrite": 0,
+        "reasoning": 1861,
+        "totalTokens": 5978,
+        "cost": {
+          "input": 0.0005543999999999999,
+          "output": 0.0149864,
+          "cacheRead": 0.00056576,
+          "cacheWrite": 0,
+          "total": 0.01610656
+        }
+      },
+      "stopReason": "stop",
+      "timestamp": 1793126118649,
+      "responseId": "20261028023518655276b2793a48df",
+      "responseModel": "glm-5.3",
+      "rawStopReason": "stop"
+    }
+  ]
+}

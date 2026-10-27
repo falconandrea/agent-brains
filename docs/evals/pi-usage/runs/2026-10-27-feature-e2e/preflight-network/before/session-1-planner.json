@@ -1,0 +1,62 @@
+{
+  "role": "planner",
+  "prompt": "You are the PLANNER for a feature in a nodejs project.\n\nFeature request from the user:\nAdd an optional maxDelayMs parameter to retryDelay(attempt, baseMs = 100). Omitting it must preserve existing results exactly. When supplied it must be a finite nonnegative number; otherwise throw RangeError. Return Math.min(the existing exponential delay, maxDelayMs), including a zero cap. Preserve the existing attempt and baseMs validation and error types. Add focused node:test tests and document the API in README.md. No dependencies, no other API changes, no commit or push. This is a disposable evaluation fixture; keep scope to this contract and use the existing npm test command.\n\nYour job:\n1. Inspect the repository for anything relevant. If a fact is discoverable in\n   the code, look it up — never ask the user about it.\n2. Collect EVERY product/design decision that materially changes behaviour,\n   scope, architecture or compatibility — but NEVER re-ask what the user's\n   request or the repo's plan documents already decided. Ask them ALL in ONE\n   ask_user_batch call, in order of impact: at most six decisions, each with\n   a short question, 2-3 concrete options and your recommendation. The user\n   answers the whole numbered list in a single free-form message. You may\n   make ONE exceptional second ask_user_batch call if — and only if — the\n   answers open a genuinely blocking new ambiguity; otherwise stop asking.\n   NEVER fall back to question-by-question follow-ups: any decision that is\n   unclear, partial or unanswered after the batch becomes an assumption you\n   must list in the PRD's Assumptions section, where the user approves or\n   vetoes it at the gate.\n3. Every decision you did NOT ask about is an assumption you are making:\n   you will have to list it in the PRD (see below), so prefer asking when\n   the wrong assumption would mean rework.\n4. When you have enough information, output the plan.\n\nYou are read-only: do not modify any file. The artifacts are written in\nEnglish — including the TITLE, whatever language the request is in.\nConversations with the user — including every ask_user_batch question — are in the\nSAME LANGUAGE as the feature request above.\nOutput the plan as markdown with exactly three top-level sections, in this\norder — and nothing else (no conversational preamble, no transcript of the\nquestions you asked):\n\n## TITLE\nA short English title for the feature, at most 6 words. It names the\ndirectory and artifacts, so make it specific and stable across reruns.\n\n## PRD\nConcise: problem, user stories (as a <role>, I want <action> so that\n<benefit>), scope, out of scope, acceptance criteria (testable statements,\none line each — the reviewer checks the diff against these), alternatives\nconsidered (2-3 lines each, why the chosen one wins), assumptions,\narchitecture/components, data flow, error handling, testing strategy.\nFor risky behavior, acceptance criteria name initial state/input, triggering\nevent and observable result; include rejection or preservation invariants where\nmaterial. Reuse existing contract boundaries and adequate tests. Keep simple\nchanges concise rather than requiring a fixed happy/error scenario quota.\n\"Assumptions\" lists every decision made without asking the user, one line\neach — the user approves or vetoes these at the gate. If and only if the\nfeature has user-facing UI, add a \"UI/UX Notes\" section; otherwise omit it.\n\n## TASKS\nEvery task MUST be a canonical Markdown list entry in this exact shape:\n\n- T1 — concrete description. Files: `path/a`, `path/b`.\n- T2 — concrete description. Files: `path/c`.\n\nUse granular, ordered, stable IDs (T1, T2, ...). IDs must be unique and must\nappear immediately after the list marker. No vague TODO placeholders.\n\nThe orchestrator writes them to .ai/features/<slug>/ under the project root,\nwhere <slug> is derived from your TITLE.",
+  "skills": [
+    "solution-capture",
+    "codebase-design",
+    "domain-modeling",
+    "prototype",
+    "karpathy-guidelines",
+    "research",
+    "to-spec",
+    "verification-before-completion",
+    "product-thinking",
+    "resolving-merge-conflicts",
+    "writing-for-agents",
+    "nodejs-backend-patterns",
+    "nodejs-best-practices"
+  ],
+  "contextFiles": [
+    {
+      "path": "AGENTS.md",
+      "content": "# Fixture instructions\n\nC4-FEATURE-CONTEXT-MARKER\n\nKeep implementation dependency-free. Use node:test. Never commit or push.\n"
+    }
+  ],
+  "systemPrompt": "You are an expert coding assistant operating inside pi, a coding agent harness. You help users by reading files, executing commands, editing code, and writing new files.\n\nAvailable tools:\n- read: Read file contents\n- grep: Search file contents for patterns (respects .gitignore)\n- find: Find files by glob pattern (respects .gitignore)\n- ls: List directory contents\n\nIn addition to the tools above, you may have access to other custom tools depending on the project.\n\nGuidelines:\n- Use read to examine files instead of cat or sed.\n- Be concise in your responses\n- Show file paths clearly when working with files\n\nPi documentation (read only when the user asks about pi itself, its SDK, extensions, themes, skills, or TUI):\n- Main documentation: /Users/andreafalcon/dev/agent-brains/node_modules/@earendil-works/pi-coding-agent/README.md\n- Additional docs: /Users/andreafalcon/dev/agent-brains/node_modules/@earendil-works/pi-coding-agent/docs\n- Examples: /Users/andreafalcon/dev/agent-brains/node_modules/@earendil-works/pi-coding-agent/examples (extensions, custom tools, SDK)\n- When reading pi docs or examples, resolve docs/... under Additional docs and examples/... under Examples, not the current working directory\n- When asked about: extensions (docs/extensions.md, examples/extensions/), themes (docs/themes.md), skills (docs/skills.md), prompt templates (docs/prompt-templates.md), TUI components (docs/tui.md), keybindings (docs/keybindings.md), SDK integrations (docs/sdk.md), custom providers (docs/custom-provider.md), adding models (docs/models.md), pi packages (docs/packages.md), environment variables (docs/environment-variables.md)\n- When working on pi topics, read the docs and examples, and follow .md cross-references before implementing\n- Always read pi .md files completely and follow links to related docs (e.g., tui.md for TUI API details)\nCurrent working directory: /private/tmp/pi-c4-feature-4r7leibu/before/fixture",
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "You are the PLANNER for a feature in a nodejs project.\n\nFeature request from the user:\nAdd an optional maxDelayMs parameter to retryDelay(attempt, baseMs = 100). Omitting it must preserve existing results exactly. When supplied it must be a finite nonnegative number; otherwise throw RangeError. Return Math.min(the existing exponential delay, maxDelayMs), including a zero cap. Preserve the existing attempt and baseMs validation and error types. Add focused node:test tests and document the API in README.md. No dependencies, no other API changes, no commit or push. This is a disposable evaluation fixture; keep scope to this contract and use the existing npm test command.\n\nYour job:\n1. Inspect the repository for anything relevant. If a fact is discoverable in\n   the code, look it up — never ask the user about it.\n2. Collect EVERY product/design decision that materially changes behaviour,\n   scope, architecture or compatibility — but NEVER re-ask what the user's\n   request or the repo's plan documents already decided. Ask them ALL in ONE\n   ask_user_batch call, in order of impact: at most six decisions, each with\n   a short question, 2-3 concrete options and your recommendation. The user\n   answers the whole numbered list in a single free-form message. You may\n   make ONE exceptional second ask_user_batch call if — and only if — the\n   answers open a genuinely blocking new ambiguity; otherwise stop asking.\n   NEVER fall back to question-by-question follow-ups: any decision that is\n   unclear, partial or unanswered after the batch becomes an assumption you\n   must list in the PRD's Assumptions section, where the user approves or\n   vetoes it at the gate.\n3. Every decision you did NOT ask about is an assumption you are making:\n   you will have to list it in the PRD (see below), so prefer asking when\n   the wrong assumption would mean rework.\n4. When you have enough information, output the plan.\n\nYou are read-only: do not modify any file. The artifacts are written in\nEnglish — including the TITLE, whatever language the request is in.\nConversations with the user — including every ask_user_batch question — are in the\nSAME LANGUAGE as the feature request above.\nOutput the plan as markdown with exactly three top-level sections, in this\norder — and nothing else (no conversational preamble, no transcript of the\nquestions you asked):\n\n## TITLE\nA short English title for the feature, at most 6 words. It names the\ndirectory and artifacts, so make it specific and stable across reruns.\n\n## PRD\nConcise: problem, user stories (as a <role>, I want <action> so that\n<benefit>), scope, out of scope, acceptance criteria (testable statements,\none line each — the reviewer checks the diff against these), alternatives\nconsidered (2-3 lines each, why the chosen one wins), assumptions,\narchitecture/components, data flow, error handling, testing strategy.\nFor risky behavior, acceptance criteria name initial state/input, triggering\nevent and observable result; include rejection or preservation invariants where\nmaterial. Reuse existing contract boundaries and adequate tests. Keep simple\nchanges concise rather than requiring a fixed happy/error scenario quota.\n\"Assumptions\" lists every decision made without asking the user, one line\neach — the user approves or vetoes these at the gate. If and only if the\nfeature has user-facing UI, add a \"UI/UX Notes\" section; otherwise omit it.\n\n## TASKS\nEvery task MUST be a canonical Markdown list entry in this exact shape:\n\n- T1 — concrete description. Files: `path/a`, `path/b`.\n- T2 — concrete description. Files: `path/c`.\n\nUse granular, ordered, stable IDs (T1, T2, ...). IDs must be unique and must\nappear immediately after the list marker. No vague TODO placeholders.\n\nThe orchestrator writes them to .ai/features/<slug>/ under the project root,\nwhere <slug> is derived from your TITLE."
+        }
+      ],
+      "timestamp": 1793125503545
+    },
+    {
+      "role": "assistant",
+      "content": [],
+      "api": "openai-completions",
+      "provider": "zai",
+      "model": "glm-5.2",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "error",
+      "timestamp": 1793125517698,
+      "errorMessage": "Connection error."
+    }
+  ]
+}

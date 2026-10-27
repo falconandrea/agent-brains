@@ -1,0 +1,49 @@
+diff --git a/README.md b/README.md
+index 5c97cac..79f4456 100644
+--- a/README.md
++++ b/README.md
+@@ -1,5 +1,8 @@
+ # Retry fixture
+ 
+-`retryDelay(attempt, baseMs = 100)` returns `baseMs * 2 ** attempt`.
++`retryDelay(attempt, baseMs = 100, maxDelayMs)` returns `baseMs * 2 ** attempt`,
++clamped by `Math.min` to `maxDelayMs` when it is supplied (a cap of `0` returns `0`).
+ Attempt must be a nonnegative integer; baseMs a finite nonnegative number.
+-Invalid arguments throw RangeError. Run `npm test`.
++When supplied, maxDelayMs must also be a finite nonnegative number.
++Omitting maxDelayMs (or passing it explicitly as `undefined`) applies no cap and
++preserves the uncapped result. Invalid arguments throw RangeError. Run `npm test`.
+diff --git a/src/retry.js b/src/retry.js
+index 61ed734..59d55eb 100644
+--- a/src/retry.js
++++ b/src/retry.js
+@@ -1,5 +1,8 @@
+-export function retryDelay(attempt, baseMs = 100) {
++export function retryDelay(attempt, baseMs = 100, maxDelayMs) {
+   if (!Number.isInteger(attempt) || attempt < 0) throw new RangeError('invalid attempt');
+   if (!Number.isFinite(baseMs) || baseMs < 0) throw new RangeError('invalid baseMs');
+-  return baseMs * 2 ** attempt;
++  const delay = baseMs * 2 ** attempt;
++  if (maxDelayMs === undefined) return delay;
++  if (!Number.isFinite(maxDelayMs) || maxDelayMs < 0) throw new RangeError('invalid maxDelayMs');
++  return Math.min(delay, maxDelayMs);
+ }
+diff --git a/test/retry.test.js b/test/retry.test.js
+index 0b0855e..42d4c98 100644
+--- a/test/retry.test.js
++++ b/test/retry.test.js
+@@ -3,3 +3,14 @@ import assert from 'node:assert/strict';
+ import { retryDelay } from '../src/retry.js';
+ test('existing delays', () => { assert.equal(retryDelay(0), 100); assert.equal(retryDelay(3, 25), 200); });
+ test('validation', () => { assert.throws(() => retryDelay(-1), RangeError); assert.throws(() => retryDelay(0, NaN), RangeError); });
++test('maxDelayMs clamps the delay', () => { assert.equal(retryDelay(4, 100, 500), 500); assert.equal(retryDelay(1, 100, 1000), 200); });
++test('maxDelayMs of zero is honored', () => { assert.equal(retryDelay(2, 100, 0), 0); });
++test('maxDelayMs undefined behaves as omitted', () => { assert.equal(retryDelay(2, 100, undefined), 400); assert.equal(retryDelay(2, undefined, undefined), 400); });
++test('maxDelayMs validation', () => {
++  assert.throws(() => retryDelay(0, 100, -1), { name: 'RangeError', message: 'invalid maxDelayMs' });
++  assert.throws(() => retryDelay(0, 100, NaN), { name: 'RangeError', message: 'invalid maxDelayMs' });
++  assert.throws(() => retryDelay(0, 100, Infinity), { name: 'RangeError', message: 'invalid maxDelayMs' });
++  assert.throws(() => retryDelay(0, 100, '50'), { name: 'RangeError', message: 'invalid maxDelayMs' });
++  assert.throws(() => retryDelay(-1, 100, -1), { name: 'RangeError', message: 'invalid attempt' });
++  assert.throws(() => retryDelay(0, NaN, -1), { name: 'RangeError', message: 'invalid baseMs' });
++});

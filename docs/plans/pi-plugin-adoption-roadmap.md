@@ -2,7 +2,7 @@
 
 **Created:** 2026-09-08
 
-**Status:** R0 complete. The agreed consolidation sequence below takes priority over R1 extension trials (updated 2026-10-22).
+**Status:** R0 and C1–C4 complete; C4 has an explicitly inconclusive full-workflow comparison. C5 is next. The consolidation sequence below takes priority over R1 extension trials (updated 2026-10-27).
 
 **Source of truth for execution status:** this document
 
@@ -98,6 +98,14 @@ Analytics (`extra/skills/ga4-analytics/`) is excluded pending the user's decisio
    duplication are separate measurements. Then implement S1 deduplication and
    compare against the baseline. Only then consider S3, using total quality,
    latency and available cost, never parent-token reduction alone.
+   **Closed after reconciliation (2026-10-27):** parent measurement, usage
+   instrumentation, S1 correctness, corrected benefit A/B and the current
+   runtime's full-workflow smoke are complete. The original full old/new
+   workflow comparison is **unmet and explicitly retired** after two bounded
+   old-runtime planner-format failures; it is not marked passed. No savings
+   or skill-efficacy gain is established, and S3/profile filtering remain
+   deferred. Decision and criterion-by-criterion disposition:
+   [C4 reconciliation](../evals/pi-usage/FEATURE-E2E-2026-10-27.md#c4-reconciliation-decision).
    **U16 complete (2026-10-24):** in an isolated Pi 0.84.2 install, a parent
    session discovered 64 skills and rendered 59 (five
    `disable-model-invocation` exclusions), with 17,706 bytes of visible
@@ -120,7 +128,7 @@ Analytics (`extra/skills/ga4-analytics/`) is excluded pending the user's decisio
    against the keys, including the `context-overlap` marker. The earlier 3-task
    zai run and OpenRouter runs are supporting evidence only. Evidence:
    [S2 report](../evals/pi-usage/S2-2026-10-24.md).
-   **S1 implemented (2026-10-25, uncommitted for review):** discovered and
+   **S1 implementation snapshot (2026-10-25, before commit `cf5af8f`):** discovered and
    injected context files now merge by canonical absolute path in a Pi-free
    module, with explicit-injection-over-discovery precedence and a visible
    stderr warning on same-path content conflicts. The deterministic audit goes
@@ -139,8 +147,8 @@ Analytics (`extra/skills/ga4-analytics/`) is excluded pending the user's decisio
    arms (and, retroactively understood, every pre-fix child session including
    all `/feature` runs) received **zero injected context and zero skills**;
    that run's "no benefit detectable" conclusion is withdrawn (artifacts kept
-   as `2026-10-26-ab-dedup-invalid-*`). **The P1 fix is implemented and left
-   uncommitted for review:** `buildResourceLoader()` gains `noExtensions:
+   as `2026-10-26-ab-dedup-invalid-*`). **The P1 fix is committed as
+   `5ae95a8` (2026-10-26):** `buildResourceLoader()` gains `noExtensions:
    true` (child constraint — a loaded loader without it would activate the
    agent-dir-registered pi-brain extension inside children), and the new
    exported `buildLoadedResourceLoader()` reloads the loader before the
@@ -168,23 +176,38 @@ Analytics (`extra/skills/ga4-analytics/`) is excluded pending the user's decisio
    remain conditional material for this review or a real project need, not
    separate immediate projects. Analytics remains excluded.
 
-**Current next action:** C4 in progress — U16 and S2 are complete (**S2 closed
+**C4 closure evidence:** U16 and S2 are complete (**S2 closed
 2026-10-25**); **S1 is committed as `cf5af8f` (2026-10-26)** and its benefit
 is measured (2026-10-26): the first A/B was invalidated by review **P1**
 (loader never loaded → both arms and every pre-fix child session received
 zero injected context/skills; conclusion withdrawn), the P1 fix
 (`buildLoadedResourceLoader` + `noExtensions` + integration test) is
-**implemented and uncommitted for review**, and the **corrected** same-tree
+**committed as `5ae95a8` (2026-10-26)**, and the **corrected** same-tree
 A/B — 4 pairs, alternating order, per-call gates on the same loaded loader
 passed to the session and on the actual system prompt — found **no
 detectable cost or latency benefit in these four pairs** (no benefit claimed;
 experiment deliberately not expanded, without ruling out a small effect).
-Next: review and
-commit the P1 fix (a behavior change: `/feature` children now actually
-receive routed context and router-selected skills), then the `/feature`
-end-to-end comparison; S3 may only be considered on its own measured
+The `/feature` end-to-end follow-up ran **2026-10-27** on
+identical disposable fixtures. It spans S1 and P1 (children now actually
+receive routed context and router-selected skills), so it cannot isolate
+deduplication savings. Two baseline attempts failed closed on planner format;
+the current runtime's second attempt **completed after explicit user approval**:
+developer, deterministic verification and independent review passed in one
+round, zero review issues, independent tests 6/6. All three roles received
+one context copy and only selected skills. SDK cost $0.06930588; agent time
+183.244 s (workflow wall time includes approval waiting). The full before/after
+criterion is unmet and explicitly retired from this bounded assessment after
+the two baseline failures. **C4 is closed with an inconclusive full-workflow
+comparison**, not a passed comparison. No further provider runs planned;
+no savings or skill-efficacy claim. Evidence and reconciliation:
+[feature E2E report](../evals/pi-usage/FEATURE-E2E-2026-10-27.md).
+S3 may only be considered on its own measured
 total-cost/latency/quality evidence, never on dedup savings. C1 and C2 are
-complete (2026-10-22); C3 is complete (2026-10-23); C5 remains pending.
+complete (2026-10-22); C3 is complete (2026-10-23).
+**Current next action: C5**, pending — begin with a bounded manual inventory
+of triggers, permissions, overlap and distribution, then define representative
+with/without cases before any model experiment. The C4 trace is evidence of
+skill availability, not use or efficacy. No skill deletion is authorized.
 R1.1–R1.3 follow this sequence and still require
 an explicit trial request. W2/W3 and R2 retain their evidence-based deferral;
 C2 does not activate them.
@@ -561,8 +584,8 @@ audit of the discovered-plus-injected duplication S1 removes. **S2 closed
 "before": 78,420 input / 11,197 output / 242,880 cacheRead / $0.222204 SDK
 cost / 179.9 s, 20 reads (18 task/file pairs, 14 distinct files), 2 intra-task
 rereads, 4/4 answers correct
-against the keys (including the `context-overlap` marker). **S1 is implemented
-on top of S2 commit `fb66860` and left uncommitted for review.** The same audit
+against the keys (including the `context-overlap` marker). **S1 was implemented
+on top of S2 commit `fb66860`, initially left uncommitted for review.** The same audit
 now reports 1 entry / 0 duplicate bytes / 220 loaded bytes, and the same
 4-task protocol reran on the post-S1 tree (`2a72af34…`): 63,551 input / 11,038
 output / 256,192 cacheRead / $0.204149 SDK cost / 175.3 s, 22 reads (17
@@ -576,8 +599,8 @@ same-tree A/B was **invalidated by review P1** (the harness and
 `PiAgentRunner.run()` alike passed an UNRELOADED loader to
 `createAgentSession()` — Pi SDK 0.84.2 reloads only a loader it constructs
 itself — so both arms received the same prompt with zero injected context;
-conclusion withdrawn, artifacts kept as invalid). **The P1 fix is implemented
-and uncommitted for review**: `buildResourceLoader()` gains `noExtensions:
+conclusion withdrawn, artifacts kept as invalid). **The P1 fix is committed
+as `5ae95a8` (2026-10-26)**: `buildResourceLoader()` gains `noExtensions:
 true` (child constraint) and `buildLoadedResourceLoader()` reloads the loader
 before session creation; offline integration test
 `tests/pi-session-injection.test.ts` pins context-once (S1 end-to-end into
@@ -720,11 +743,16 @@ A future session should:
 first benefit A/B (both arms injected nothing) and its fix —
 `buildLoadedResourceLoader()` + `noExtensions` + the offline integration
 test, which also verifies S1 end-to-end (exactly one copy in the real session
-prompt) — is **implemented and uncommitted for review**. The corrected A/B
+prompt) — is **committed as `5ae95a8` (2026-10-26)**. The corrected A/B
 (2026-10-26) is valid: **no detectable benefit**; measurement closed without
-expansion. Review and commit the P1 fix (a behavior change: children now
-actually receive routed context and router-selected skills), then the
-`/feature` end-to-end comparison reading totals from the persisted run log;
+expansion. The `/feature` end-to-end comparison reading totals from the
+persisted run log has a **completed current-runtime smoke (2026-10-27)**,
+but the old runtime failed planner validation twice. The full before/after
+criterion is explicitly unmet and retired; C4 is closed as a bounded
+assessment with an inconclusive comparison. **Next: C5's bounded manual
+skill inventory**, not another provider run or S3. Evidence and limitations:
+[feature E2E report](../evals/pi-usage/FEATURE-E2E-2026-10-27.md).
+The comparison spans S1 and P1 rather than isolating S1 savings;
 S3, if ever considered, must justify itself with its own total-cost, latency
 and quality evidence. R1.1
 (`pi-vcc`) is postponed behind C1–C5 and still requires an explicit trial request.

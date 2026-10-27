@@ -2,6 +2,17 @@
 
 ## Open items
 
+- **Next: C5**, pending — bounded manual review of skill triggers,
+  permissions, overlap and distribution, then define representative
+  with/without cases before any model experiment. C4 is closed as a bounded
+  assessment with an inconclusive full-workflow comparison: the original
+  full before/after criterion is unmet and explicitly retired after two
+  failed old-runtime plans, not marked passed. No savings or skill-efficacy
+  gain claimed; no S3/profile-filtering promotion, skill deletion or further
+  provider runs. Evidence and decision:
+  [C4 reconciliation](../../docs/evals/pi-usage/FEATURE-E2E-2026-10-27.md#c4-reconciliation-decision).
+  No pending approval or live workflow.
+
 - C3 instruction changes are complete; behavioral validation C3-V remains
   pending on the next explicitly requested real security review. Criteria and
   evidence ownership live in the [roadmap](../../docs/plans/pi-plugin-adoption-roadmap.md#agreed-consolidation-sequence-2026-10-22).
@@ -13,8 +24,8 @@
   [roadmap](../../docs/plans/pi-plugin-adoption-roadmap.md#cross-harness-workflow-migration-m).
   Includes per-project `.ai` alignment and the C1/C2 preservation constraints.
   Documentation only: global installation, skill rename and consumer migration
-  have not started; next action is C4 (U16 and S2 complete; the definitive S2
-  baseline was recorded 2026-10-25, and S1 is implemented and pending review).
+  have not started; next action is C5 (C4 closed after bounded reconciliation;
+  S1 and P1 are committed, full-workflow comparison inconclusive).
   Detailed completion status belongs
   to the migration plan, priority and coordination to the roadmap.
 
@@ -24,8 +35,8 @@
   C3 feasible Cloudflare ideas in existing security-reviewer → C4 context/cost
   baseline then optimization → C5 skill usefulness review. No OS sandbox or
   full Cloudflare installation is planned. Analytics is excluded. C1/C2/C3 are
-  complete; C4 is in progress (U16 and S2 complete; S2 closed 2026-10-25 with
-  the definitive zai baseline; S1 implemented 2026-10-25 and pending review)
+  complete; C4 is closed after bounded reconciliation (U16/S2/S1/P1 complete;
+  full-workflow comparison inconclusive, unmet criterion explicitly retired)
   and C5 is pending. R1
   plugin trials follow this sequence.
 
@@ -36,59 +47,17 @@
   Consumer copies have not been updated in this task. Provenance, decisions and
   the upstream README PR recipe are in
   [the adaptation note](../../docs/research/alfonso-skills-adaptation.md).
-- Spotify-inspired context/read-cost workstream is in progress under C4:
-  U16 parent-load measurement is complete (2026-10-24); S2 usage
-  instrumentation, the direct-reads protocol and the definitive zai baseline
-  are complete (2026-10-25), including a deterministic audit showing the root
-  `AGENTS.md` entering the child twice (2 entries, 1 canonical path, 220
-  duplicated bytes). The 4-task baseline recorded 78,420 input / 11,197 output
-  / 242,880 cacheRead / $0.222204 SDK cost / 179.9 s, with 20 reads (18
-  task/file pairs, 14 distinct files), 2 intra-task rereads and 4/4 answers
-  correct. **S1 is implemented (2026-10-25, uncommitted for review):** the
-  audit is now 1 entry / 0 duplicate bytes, and the same protocol reran 4/4
-  correct (63,551 input / 11,038 output / 256,192 cacheRead / $0.204149 SDK
-  cost / 175.3 s; 22 reads, 17 task/file pairs, 12 distinct files, 3 reread
-  pairs). No benefit is attributed to S1: tasks 1–3 load no agents-files and
-  their deltas are exploration-path variance; the affected `context-overlap`
-  sample moved within noise. Two review findings were fixed on 2026-10-26
-  (first-injection precedence and symlink + `..`, with regressions). **S1 was
-  committed as `cf5af8f` (2026-10-26).** The first same-tree A/B benefit
-  measurement (2026-10-26) was **invalidated by review P1** — the harness
-  gated a reloaded loader but passed an unloaded instance to
-  `createAgentSession()`, exactly like `PiAgentRunner.run()`; with Pi SDK
-  0.84.2 both arms (and every pre-fix child session, including all
-  `/feature` runs) received **zero injected context and zero skills**, so its
-  "no benefit detectable" conclusion was withdrawn. **P1 fix implemented,
-  uncommitted for review:** `buildResourceLoader()` gains `noExtensions:
-  true` (child constraint; a loaded loader would otherwise activate the
-  agent-dir-registered pi-brain extension inside children) and the new
-  `buildLoadedResourceLoader()` reloads the loader before session creation;
-  `run()` uses it; `tests/pi-session-injection.test.ts` pins it offline
-  (context exactly once — S1 end-to-end in the real system prompt —, selected
-  skill in, unselected out, zero extensions; pre-fix failing output saved).
-  **Corrected A/B (valid): still no detectable benefit** — 4 pairs
-  alternating AB/BA on `cf5af8f` + the fix, per-call gates on the same loaded
-  loader passed to the session AND on the actual system prompt (A 2 copies of
-  the AGENTS.md content, B 1, remainder byte-identical, ±286-byte length
-  delta); 8/8 calls and answers correct; paired cost deltas −$0.0006 to
-  +$0.0008 (mixed signs), input-side means inside within-branch spreads; the
-  ~286-byte/~70-token reduction has no demonstrated benefit in these four
-  pairs. Measurement closed without expansion, without ruling out a small
-  effect; S3 gains no cost justification from S1. Remaining C4
-  follow-ups: review/commit the P1 fix (a behavior change — children now
-  actually receive routed context and router-selected skills), then one full
-  `/feature` run before/after reading totals from the persisted run log.
-  Status and acceptance criteria live in
-  [the adoption roadmap](../../docs/plans/pi-plugin-adoption-roadmap.md#s--local-context-and-read-cost-optimization);
-  U16 evidence is in
-  [the U16 report](../../docs/evals/pi-skill-load/U16-2026-10-24.md), S2
-  instrumentation and baseline evidence in
-  [the S2 report](../../docs/evals/pi-usage/S2-2026-10-24.md), supporting
-  rationale in [the assessment](../../docs/research/spotify-shunt-assessment.md).
-  Both the S1 audit and the post-S1 comparison reused the S2 protocol.
-  Automatic hooks,
-  code-writing workers and Jev remain deferred; no Portal installation is
-  planned.
+- Spotify-inspired context/read-cost workstream: C4 closed after bounded
+  reconciliation; U16/S2/S1/P1 complete. Corrected S1 A/B detected no benefit;
+  full old/new workflow comparison remains inconclusive and its unmet
+  criterion is explicitly retired. Evidence is owned by the
+  [roadmap](../../docs/plans/pi-plugin-adoption-roadmap.md),
+  [U16 report](../../docs/evals/pi-skill-load/U16-2026-10-24.md),
+  [S2 report](../../docs/evals/pi-usage/S2-2026-10-24.md) and
+  [C4 reconciliation](../../docs/evals/pi-usage/FEATURE-E2E-2026-10-27.md#c4-reconciliation-decision).
+  S3, automatic hooks, code-writing workers and Jev remain deferred; no
+  Portal installation is planned. Historical measurements remain in Done
+  and the raw reports.
 - `test-review` remains an explicit experimental extra. Initial pilot and isolated
   mutation evidence are in `docs/evals/test-review/README.md`. Three samples
   recorded so far: the initial T1–T3 historical pilot (B) and two fresh-feature
@@ -121,6 +90,31 @@
   `changes_requested` policy option B is implemented (U15).
 
 ## Done
+
+- 2026-10-27 C4 evidence compacted before commit: retained raw sessions,
+  original persisted logs, configuration, approval and test evidence; removed
+  repeated fixture trees, duplicate event arrays and regenerable audit copies.
+  Shared initial manifest + final patch reconstruct the fixture; reconstruction
+  passes 6/6 tests, and the offline verifier derives prompt checks directly
+  from raw sessions. The 28 retained source files matched the original
+  collection byte-for-byte; originals are also backed up outside the repo.
+  Layout and replay instructions are in the
+  [evidence README](../../docs/evals/pi-usage/runs/2026-10-27-feature-e2e/README.md).
+
+- 2026-10-27 C4 reconciled and closed as a bounded assessment after the
+  user's instruction to proceed. S1 `cf5af8f` and P1 `5ae95a8` stand on
+  correctness. Current-runtime fixture completed after explicit plan
+  approval: one developer pass, verification passed, independent review
+  approved without findings; 6/6 independent tests pass and the same tests
+  fail on original code. All three role prompts contain context once and
+  only selected skills. Persisted usage reconciles: SDK cost $0.06930588,
+  agent time 183.244 s; workflow wall includes human waiting. Two old-runtime
+  plans failed validation, so the original full before/after criterion is
+  unmet and explicitly retired, not passed. No savings or skill-efficacy
+  claim; S3 stays deferred. Offline evidence verification passes; initial
+  repository checks were 442/442 and typecheck clean on `5af90cb`.
+  Decision, limits and residual observations:
+  [feature E2E report](../../docs/evals/pi-usage/FEATURE-E2E-2026-10-27.md).
 
 - 2026-10-26 (later, review P1) C4/S1 benefit measurement corrected: the
   first A/B was **invalid** — the harness gated a reloaded loader but passed

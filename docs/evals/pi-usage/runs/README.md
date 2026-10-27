@@ -5,6 +5,12 @@ latter two are one-call diagnostics beside this directory). The analysis, tables
 and limitations live in [../S2-2026-10-24.md](../S2-2026-10-24.md); this file
 only records provenance. Do not edit these files — rerun the scripts instead.
 
+The `2026-10-27-feature-e2e/` directory contains the C4 workflow follow-up,
+including rejected plans and network preflight evidence. Its protocol,
+approval status and limitations are in
+[FEATURE-E2E-2026-10-27.md](../FEATURE-E2E-2026-10-27.md). These partial
+workflow runs do not replace the direct-read or corrected A/B baselines.
+
 | File | Produced by | Model | What it is |
 |---|---|---|---|
 | `2026-10-26-ab-dedup2-raw.json` | `run-ab-dedup.mjs` (corrected) | `zai/glm-5.2` | **Valid S1 benefit A/B, same tree (`cf5af8f` + uncommitted P1 fix)**: 4 pairs alternating AB/BA, 8 real calls; per-call gates on the SAME loaded loader passed to the session (A 2 entries/440 bytes/220 duplicated; B 1/220/0) AND on the actual system prompt (copies/blocks/remainder/length-delta); usage, tool traces, verbatim answers, keyword checks, derived summary. Recorded 2026-10-26T22:08:20Z→22:09:26Z. |

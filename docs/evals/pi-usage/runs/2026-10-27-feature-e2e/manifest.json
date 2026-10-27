@@ -1,0 +1,33 @@
+{
+  "revisions": {
+    "before": "fb66860",
+    "after": "5af90cb7575593649a50a54dfe925c36fbcdbfe0"
+  },
+  "fixture": {
+    ".gitignore": "node_modules/\n",
+    "AGENTS.md": "# Fixture instructions\n\nC4-FEATURE-CONTEXT-MARKER\n\nKeep implementation dependency-free. Use node:test. Never commit or push.\n",
+    "package.json": "{\n  \"name\": \"retry-fixture\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": {\n    \"test\": \"node --test\"\n  }\n}\n",
+    "src/retry.js": "export function retryDelay(attempt, baseMs = 100) {\n  if (!Number.isInteger(attempt) || attempt < 0) throw new RangeError('invalid attempt');\n  if (!Number.isFinite(baseMs) || baseMs < 0) throw new RangeError('invalid baseMs');\n  return baseMs * 2 ** attempt;\n}\n",
+    "test/retry.test.js": "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { retryDelay } from '../src/retry.js';\ntest('existing delays', () => { assert.equal(retryDelay(0), 100); assert.equal(retryDelay(3, 25), 200); });\ntest('validation', () => { assert.throws(() => retryDelay(-1), RangeError); assert.throws(() => retryDelay(0, NaN), RangeError); });\n",
+    "README.md": "# Retry fixture\n\n`retryDelay(attempt, baseMs = 100)` returns `baseMs * 2 ** attempt`.\nAttempt must be a nonnegative integer; baseMs a finite nonnegative number.\nInvalid arguments throw RangeError. Run `npm test`.\n"
+  },
+  "fixtureSha256": {
+    ".gitignore": "4d56952b0fb13bf8f9b6c13a6d4c34a075bac3af447636a1df4335d7576e2f97",
+    "AGENTS.md": "bfa8fc9a307d30f2a5e5e33aeb8ac9b08d910841b049ae00f6db3abc0e8c3539",
+    "package.json": "7299e4ff19bb37e57b1a9fd6b6dd649bcf5c70cc063c66c1a78b8319fdddee74",
+    "src/retry.js": "b9a25f1e1c8245dde1f08410b7fda471b53846aef1e9abbb089b2d57da322a49",
+    "test/retry.test.js": "6b159c6a2f7214961fab6e6c389348639b29f7a12d27d439b335ad3d38cd40c8",
+    "README.md": "ef1c7aab1e46b3ab8ec44c8e0fdbcfa40cc6bfb7153c010e4673fa584fed20f6"
+  },
+  "instrumentation": "One observation before session.dispose(): save request, actual systemPrompt and session.messages through globalThis.__piEvalCapture. No session behavior changed.",
+  "before": {
+    "runnerOriginalSha256": "56050d3df975ad6755d336c5362adbe3e98f94789bd9c78ee2a6d43e41d3750e",
+    "runnerInstrumentedSha256": "2735941989fd3ba9c066422c053497adf96ae5048fd3207e774877a7ef461076",
+    "fixtureCommit": "4543a488f24ad91e4cbd5d88be58cb40813db86c"
+  },
+  "after": {
+    "runnerOriginalSha256": "1c1f55df6a409e15e2e9552c27116ec227136839d8cfed44c1486519aa3f8456",
+    "runnerInstrumentedSha256": "59b55a6275e76b0a45ef75af6157f20e613bf412f61d170fb6998c069640c79d",
+    "fixtureCommit": "4543a488f24ad91e4cbd5d88be58cb40813db86c"
+  }
+}

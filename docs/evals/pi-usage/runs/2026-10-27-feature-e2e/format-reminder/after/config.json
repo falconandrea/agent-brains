@@ -1,0 +1,44 @@
+{
+  "description": "Add an optional maxDelayMs parameter to retryDelay(attempt, baseMs = 100). Omitting it must preserve existing results exactly. When supplied it must be a finite nonnegative number; otherwise throw RangeError. Return Math.min(the existing exponential delay, maxDelayMs), including a zero cap. Preserve the existing attempt and baseMs validation and error types. Add focused node:test tests and document the API in README.md. No dependencies, no other API changes, no commit or push. This is a disposable evaluation fixture; keep scope to this contract and use the existing npm test command. Planner output format is mandatory: use the literal headings ## TITLE, ## PRD, ## TASKS, in that order. Put the feature title on the line AFTER ## TITLE; never replace ## TITLE with the title itself. No preamble.",
+  "config": {
+    "roles": {
+      "planner": {
+        "provider": "zai",
+        "model": "glm-5.2",
+        "thinking": "medium"
+      },
+      "developer": {
+        "provider": "zai",
+        "model": "glm-5.2",
+        "thinking": "medium"
+      },
+      "reviewer": {
+        "provider": "zai",
+        "model": "glm-4.7",
+        "thinking": "medium",
+        "readOnly": true
+      },
+      "security-reviewer": {
+        "enabled": false,
+        "readOnly": true
+      }
+    },
+    "skillRoots": [],
+    "maxReviewRounds": 1,
+    "maxVerifyRetries": 1,
+    "verify": [
+      "npm test"
+    ],
+    "verifyTimeoutMs": 600000,
+    "verbosity": "normal",
+    "autoCommit": false,
+    "notifications": {
+      "bell": true,
+      "os": false
+    },
+    "stack": "nodejs"
+  },
+  "runtime": "/private/tmp/pi-c4-feature-9jrvi1l5/after/runtime",
+  "cwd": "/private/tmp/pi-c4-feature-9jrvi1l5/after/fixture",
+  "node": "v24.12.0"
+}

@@ -1,0 +1,8 @@
+{"runId":"c4-e2e-before","role":"planner","type":"tool","detail":"ls"}
+{"runId":"c4-e2e-before","role":"planner","type":"tool","detail":"find","args":{"pattern":"**/*.{js,ts,json,md}"}}
+{"runId":"c4-e2e-before","role":"planner","type":"tool","detail":"read","args":{"path":"src/retry.js"}}
+{"runId":"c4-e2e-before","role":"planner","type":"tool","detail":"read","args":{"path":"test/retry.test.js"}}
+{"runId":"c4-e2e-before","role":"planner","type":"tool","detail":"read","args":{"path":"package.json"}}
+{"runId":"c4-e2e-before","role":"planner","type":"tool","detail":"read","args":{"path":"README.md"}}
+{"runId":"c4-e2e-before","role":"planner","type":"tool","detail":"read","args":{"path":"AGENTS.md"}}
+{"runId":"c4-e2e-before","role":"planner","type":"agent_end"}
