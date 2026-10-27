@@ -11,6 +11,55 @@ Use that document—not this idea archive—as the source of truth for execution
 status. The supporting evidence remains in the
 [plugin and context assessment](../research/pi-plugins-and-context-structure-assessment.md).
 
+## Recovery ideas from Pi Durable (2026-10-27)
+
+**Status:** future exploration; no integration decision, implementation or
+recovery spike. Discussion grounded in local revision `5ae95a8`, the
+[official announcement](https://earendil.com/posts/pi-durable/) and
+[tool recovery implementation](https://github.com/earendil-works/pi/blob/main/packages/durable/src/harness/tool.ts).
+Upstream links track moving sources; recheck their behavior before implementation.
+
+Do not add Pi Durable as a dependency yet. Its potential benefit is persistent
+agent execution, not a replacement for our phase decisions, review loop,
+approvals or repository lock. Those controls remain necessary with a durable
+runtime; their existence does not establish that Durable is redundant.
+
+Ideas to investigate, roughly in priority order:
+
+1. **Persistent child sessions.** Associate developer/reviewer transcripts with
+   run and phase, and investigate reopening ordinary Pi sessions on resume.
+   Compare this smaller option before introducing another runtime. SDK behavior
+   for interrupted tool calls and persistence guarantees still needs validation.
+2. **Recovery checkpoints versus diagnostics.** `RunLog` currently writes
+   best-effort events that also drive resume. Define which records must persist
+   before the next action, what guarantees they need, and how a write failure
+   affects execution. Durable storage alone does not atomically commit filesystem
+   changes or external effects alongside workflow state.
+3. **Explicit reconciliation on resume.** Distinguish intended, confirmed and
+   possibly partially completed operations. Inspect actual repository/service
+   state before repeating uncertain work. Existing edits usually remain on disk;
+   lost decision context and ambiguous effects are the central recovery problem.
+4. **Operation recovery contracts.** Define whether an operation can be repeated,
+   how to check its result, and when human intervention is required. Durable's
+   `safe`/`unsafe` policy is inspiration, not a complete safety guarantee:
+   suppressing automatic replay does not prevent the model from requesting the
+   same operation again. External effects may need idempotency keys or explicit
+   reconciliation; do not assume exactly-once execution.
+5. **Controlled interruption trials.** Exercise failures at known boundaries,
+   especially after an effect succeeds but before its result is recorded.
+6. **Alternative persistent `AgentRunner` backend.** Keep Durable as a candidate
+   if concrete recovery needs justify it. Keep workflow policy outside the
+   adapter and define ownership of retries, cancellation and recovery across
+   both layers before integration.
+
+Before building checkpoints or adopting a runtime, define the desired recovery
+behavior for an interrupted developer. A possible isolated comparison uses a
+temporary repository and equivalent tools/permissions across: current phase
+resume, ordinary persistent Pi child sessions, and a small Durable harness.
+Measure recovered context, repeated work, ambiguous or duplicated effects,
+final-state correctness, token cost and implementation complexity. Successful
+restart alone is insufficient evidence. No such experiment has been run.
+
 ## Housekeeping: translate Italian artifacts to English
 
 **Status:** DONE 2026-08-23 (commit `5eb67ee`) — the workflow improvement plan
