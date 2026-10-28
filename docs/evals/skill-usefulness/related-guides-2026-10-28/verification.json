@@ -1,0 +1,80 @@
+[
+  {
+    "label": "1",
+    "check": "astro",
+    "cmd": "rtk proxy node node_modules/astro/astro.js check",
+    "result": {
+      "chunk_id": "82fe22",
+      "wall_time_seconds": 0.000002667,
+      "session_id": 99575,
+      "original_token_count": 100,
+      "output": "23:31:28 [@astrojs/node] Enabling sessions with filesystem storage\n23:31:28 [vite] Re-optimizing dependencies because vite config has changed\n23:31:29 [content] Syncing content\n23:31:29 [content] Synced content\n23:31:29 [types] Generated 1.69s\n23:31:30 [check] Getting diagnostics for Astro files in /private/tmp/c5-related-guides-hut1m1wd/1...\nResult (66 files): \n- 0 errors\n- 0 warnings\n- 0 hints\n\n",
+      "exit_code": 0
+    }
+  },
+  {
+    "label": "1",
+    "check": "eslint",
+    "cmd": "rtk proxy node node_modules/eslint/bin/eslint.js src/components/RelatedGuides.astro src/layouts/PostDetails.astro src/components/GoogleTagManager.astro src/pages/api/like.ts",
+    "result": {
+      "chunk_id": "271f18",
+      "wall_time_seconds": 0.000004958,
+      "session_id": 44566,
+      "original_token_count": 0,
+      "output": "",
+      "exit_code": 0
+    }
+  },
+  {
+    "label": "1",
+    "check": "prettier",
+    "cmd": "rtk proxy node node_modules/prettier/bin/prettier.cjs --check src/components/RelatedGuides.astro src/layouts/PostDetails.astro src/components/GoogleTagManager.astro src/pages/api/like.ts",
+    "result": {
+      "chunk_id": "b79889",
+      "wall_time_seconds": 0.000958459,
+      "session_id": 50157,
+      "original_token_count": 11,
+      "output": "Checking formatting...\nAll matched files use Prettier code style!\n",
+      "exit_code": 0
+    }
+  },
+  {
+    "label": "2",
+    "check": "astro",
+    "cmd": "rtk proxy node node_modules/astro/astro.js check",
+    "result": {
+      "chunk_id": "15b273",
+      "wall_time_seconds": 0.000938708,
+      "session_id": 55617,
+      "original_token_count": 100,
+      "output": "23:31:28 [@astrojs/node] Enabling sessions with filesystem storage\n23:31:28 [vite] Re-optimizing dependencies because vite config has changed\n23:31:29 [content] Syncing content\n23:31:30 [content] Synced content\n23:31:30 [types] Generated 1.74s\n23:31:30 [check] Getting diagnostics for Astro files in /private/tmp/c5-related-guides-hut1m1wd/2...\nResult (66 files): \n- 0 errors\n- 0 warnings\n- 0 hints\n\n",
+      "exit_code": 0
+    }
+  },
+  {
+    "label": "2",
+    "check": "eslint",
+    "cmd": "rtk proxy node node_modules/eslint/bin/eslint.js src/components/RelatedGuides.astro src/layouts/PostDetails.astro src/components/GoogleTagManager.astro src/pages/api/like.ts",
+    "result": {
+      "chunk_id": "9bcfb8",
+      "wall_time_seconds": 0.000002917,
+      "session_id": 72662,
+      "original_token_count": 0,
+      "output": "",
+      "exit_code": 0
+    }
+  },
+  {
+    "label": "2",
+    "check": "prettier",
+    "cmd": "rtk proxy node node_modules/prettier/bin/prettier.cjs --check src/components/RelatedGuides.astro src/layouts/PostDetails.astro src/components/GoogleTagManager.astro src/pages/api/like.ts",
+    "result": {
+      "chunk_id": "c62429",
+      "wall_time_seconds": 0.000005625,
+      "session_id": 5863,
+      "original_token_count": 11,
+      "output": "Checking formatting...\nAll matched files use Prettier code style!\n",
+      "exit_code": 0
+    }
+  }
+]

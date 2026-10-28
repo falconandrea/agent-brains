@@ -2,22 +2,11 @@
 
 ## Open items
 
-- **C5 in progress (2026-10-28)** — 64 canonical/four extra inventory,
-  reproducible local checks and R/U1/N fixtures complete. Checks confirm
-  simplify/reviewer mismatch, explicit stack workflows falling back to craft,
-  full distribution mismatch (64/61) and missing Node dependency. Four authorized
-  zai/glm-5.2 Node entry-point screen calls (AB/BA): all candidates 10/10,
-  no incremental correctness benefit on this easy case; unequal cache warmth
-  prevents causal savings claims. Initial network failure retained separately.
-  [Follow-up, evidence and proposed corrections](../../docs/evals/skill-usefulness/FOLLOWUP-2026-10-28.md).
-  Approved correction batch implemented: simplify and explicit stack workflows
-  are operational/main-session only; full manifest is 64/64; unavailable Node
-  dependency replaced by project test guidance. Three regressions observed
-  red/green; final suite 446/446, typecheck clean, Node skill validator passes.
-  Fake-runtime /feature completes on all three frameworks with specialists and
-  role permissions preserved. No consumer migration or new provider run.
-  Next: U1 or harder reference-sensitive Node case; no automatic model expansion.
-  C4 remains closed/inconclusive; no S3 promotion or live workflow.
+- **Next: M1** — portable skills and planning/implementation/review boundaries
+  under the [migration plan](../../docs/plans/cross-harness-workflow-migration.md).
+  C5 is closed as a bounded assessment; no broad efficacy or savings claim.
+  M1 implementation, global installation and consumer migration have not started.
+  Preserve C1/C2/C3 behavior, Pi /feature and existing resume artifacts.
 
 - C3 instruction changes are complete; behavioral validation C3-V remains
   pending on the next explicitly requested real security review. Criteria and
@@ -30,8 +19,8 @@
   [roadmap](../../docs/plans/pi-plugin-adoption-roadmap.md#cross-harness-workflow-migration-m).
   Includes per-project `.ai` alignment and the C1/C2 preservation constraints.
   Documentation only: global installation, skill rename and consumer migration
-  have not started; next action is C5 (C4 closed after bounded reconciliation;
-  S1 and P1 are committed, full-workflow comparison inconclusive).
+  have not started; next action is M1 (C4/C5 closed with their documented
+  limits; no broad savings or skill-efficacy conclusion).
   Detailed completion status belongs
   to the migration plan, priority and coordination to the roadmap.
 
@@ -43,8 +32,8 @@
   full Cloudflare installation is planned. Analytics is excluded. C1/C2/C3 are
   complete; C4 is closed after bounded reconciliation (U16/S2/S1/P1 complete;
   full-workflow comparison inconclusive, unmet criterion explicitly retired)
-  and C5 is pending. R1
-  plugin trials follow this sequence.
+  and C5 is closed as a bounded assessment. M1 is next; R1
+  plugin trials still require an explicit request.
 
 - New `agent-readiness` and `html-report` skills are registered in common/full;
   existing curated consumers need their next profile refresh to discover them.
@@ -96,6 +85,18 @@
   `changes_requested` policy option B is implemented (U15).
 
 ## Done
+
+- 2026-10-28 **C5 closed by user decision**: 64 canonical/four extra inventory,
+  concrete corrections in `27b9be7`, bounded Node/U1 screens and two real
+  Appunti UI proposals. Keep skills and specialist design coverage; no merger,
+  deletion, broad efficacy or causal savings claim. User feedback "forse la 1"
+  was a tentative preference for expanded guidance on the real UI task, not
+  production adoption. Missing cases remain explicitly unmeasured.
+  [Closure and limits](../../docs/evals/skill-usefulness/C5-CLOSURE-2026-10-28.md).
+  [Appunti implementation handoff](../../docs/evals/skill-usefulness/related-guides-2026-10-28/IMPLEMENTATION-HANDOFF.md)
+  prepared for the other project agent; current changes there must be preserved
+  and disposable tracking/like stubs must not be copied. No original-project
+  writes, new model runs or migration implementation in this closure.
 
 - 2026-10-27 C4 evidence compacted before commit: retained raw sessions,
   original persisted logs, configuration, approval and test evidence; removed

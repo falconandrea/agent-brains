@@ -1,0 +1,37 @@
+--- a/src/components/GoogleTagManager.astro
++++ b/src/components/GoogleTagManager.astro
+@@ -1,13 +1 @@
+-<!-- Google Tag Manager -->
+-<script is:inline>
+-  (function (w, d, s, l, i) {
+-    w[l] = w[l] || [];
+-    w[l].push({ "gtm.start": new Date().getTime(), event: "gtm.js" });
+-    const f = d.getElementsByTagName(s)[0];
+-    const j = d.createElement(s);
+-    const dl = l != "dataLayer" ? "&l=" + l : "";
+-    j.async = true;
+-    j.src = "https://www.googletagmanager.com/gtm.js?id=" + i + dl;
+-    f.parentNode.insertBefore(j, f);
+-  })(window, document, "script", "dataLayer", "GTM-KB5K7VL7");
+-</script>
++<!-- Tracking disabled in this isolated, disposable comparison preview. -->
+--- a/src/pages/api/like.ts
++++ b/src/pages/api/like.ts
+@@ -1,11 +1,8 @@
+ import type { APIRoute } from "astro";
+-import { createLikeApi } from "@/server/like-api";
+-import { supabaseLikeRepository } from "@/server/supabase-like-repository";
+-
+ export const prerender = false;
+-
+-const likeApi = createLikeApi(supabaseLikeRepository);
+-
+-export const GET: APIRoute = ({ request }) => likeApi.get(request);
+-
+-export const POST: APIRoute = ({ request }) => likeApi.post(request);
++const previewReply: APIRoute = () =>
++  new Response(JSON.stringify({ count: 0, liked: false }), {
++    headers: { "Content-Type": "application/json" },
++  });
++export const GET = previewReply;
++export const POST = previewReply;

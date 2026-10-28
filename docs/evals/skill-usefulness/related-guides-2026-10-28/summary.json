@@ -1,0 +1,46 @@
+{
+  "calls": [
+    {
+      "label": "1",
+      "sdkCost": 0.034017839999999994,
+      "input": 21584,
+      "cacheRead": 384,
+      "output": 841,
+      "elapsedMs": 10765
+    },
+    {
+      "label": "2",
+      "sdkCost": 0.0035328399999999998,
+      "input": 13,
+      "cacheRead": 7104,
+      "output": 379,
+      "elapsedMs": 4445
+    }
+  ],
+  "browserContexts": 8,
+  "newSectionGeometryFailures": 0,
+  "baselineMobileWidth": 515,
+  "mobileViewport": 390,
+  "sourceBaseline": "8659d7b7e03b5ede4bb82352bad83073eb5d1174",
+  "sourceCurrentHead": "cb79d11e309ac439471934277c7e4b6170e4d663",
+  "sourceCleanAtFinalCheck": true,
+  "originalWrittenByExperiment": false,
+  "concurrentCommittedFiles": [
+    ".ai/memory/lessons.md",
+    ".ai/memory/progress.md",
+    "src/components/Header.astro",
+    "src/styles/typography.css"
+  ],
+  "humanPreference": {
+    "preferredLabel": "1",
+    "strength": "tentative",
+    "verbatim": "forse la 1",
+    "adoptionApproved": false
+  },
+  "sourceEditsInCopiesPerLabel": [
+    "src/components/GoogleTagManager.astro",
+    "src/components/RelatedGuides.astro",
+    "src/layouts/PostDetails.astro",
+    "src/pages/api/like.ts"
+  ]
+}

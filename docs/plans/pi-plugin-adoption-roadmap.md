@@ -2,7 +2,7 @@
 
 **Created:** 2026-09-08
 
-**Status:** R0 and C1–C4 complete; C4 has an explicitly inconclusive full-workflow comparison. C5 is next. The consolidation sequence below takes priority over R1 extension trials (updated 2026-10-27).
+**Status:** R0 and C1–C5 closed; C4 retains an inconclusive full-workflow comparison and C5 is a bounded assessment, not full-collection efficacy validation. Next selected work: M1. External extension trials still require an explicit request (updated 2026-10-28).
 
 **Source of truth for execution status:** this document
 
@@ -204,24 +204,22 @@ no savings or skill-efficacy claim. Evidence and reconciliation:
 S3 may only be considered on its own measured
 total-cost/latency/quality evidence, never on dedup savings. C1 and C2 are
 complete (2026-10-22); C3 is complete (2026-10-23).
-**Current next action: C5**, in progress (2026-10-28). The bounded manual
-inventory covers 64 canonical skills and four active extras; priority
-trigger/permission/overlap/distribution findings and representative with/without
-cases are recorded in the [C5 report](../evals/skill-usefulness/C5-2026-10-28.md).
-R/U1/N fixtures and local checks are ready. Four user-authorized Node
-entry-point calls found no correctness difference on the easy fixture (all
-10/10); cache warmth prevents causal cost claims. See the
-[follow-up](../evals/skill-usefulness/FOLLOWUP-2026-10-28.md) for evidence and
-approved role/distribution/dependency corrections, now implemented: operational
-cleanup/stack workflows, 64/64 full catalog and project-owned Node test guidance.
-Three regressions observed red/green; 446/446 tests, typecheck clean and skill
-validation passed. Fake-runtime /feature integration passes on all three stacks.
-Next U1 or a harder reference-sensitive Node case. No broad efficacy
-conclusion or skill deletion. The C4 trace is evidence of
-skill availability, not use or efficacy. No skill deletion is authorized.
-R1.1–R1.3 follow this sequence and still require
-an explicit trial request. W2/W3 and R2 retain their evidence-based deferral;
-C2 does not activate them.
+**C5 closed (2026-10-28)** as a user-approved bounded assessment.
+Inventory, local corrections (`27b9be7`), four Node calls, four U1 calls and two
+real-project UI proposals are reconciled in the
+[closure decision](../evals/skill-usefulness/C5-CLOSURE-2026-10-28.md).
+Keep the collection and specialist design coverage; no skill deletion/merger,
+blanket profile reduction, causal savings or broad efficacy claim. User feedback
+was a tentative preference for expanded-guidance Version 1 on the real UI task.
+Unexecuted interview/tooling/reference/trigger cases remain explicitly unmeasured.
+C3-V remains pending the next requested real security review.
+
+**Current next action: M1** — portable skill references and explicit
+planning/implementation/review boundaries, preserving C1/C2/C3, Pi `/feature`
+and resume compatibility. The migration plan below owns implementation detail;
+M1 implementation and global machine/consumer migration have not started.
+R1 trials remain available only on explicit request; W2/W3/R2/S3 retain their
+existing deferral. Appunti prototype adoption is a separate project handoff.
 
 Supporting evidence: [TDD assessment](../research/tdd-agent-loop-assessment.md),
 [QA suite assessment](../research/claude-code-skills-assessment.md).
@@ -231,7 +229,8 @@ Supporting evidence: [TDD assessment](../research/tdd-agent-loop-assessment.md),
 **Status:** planned, implementation not started (recorded 2026-10-22).
 At recording time the next action was C3; C3 completed 2026-10-23, U16 completed
 2026-10-24, and S2 instrumentation/protocol completed 2026-10-24 with the
-definitive baseline recorded 2026-10-25; C4 continues with S1. Recording M does not start a migration,
+definitive baseline recorded 2026-10-25. C4 and C5 are now closed; M1 is the
+next selected work. Recording M does not itself start a migration,
 reorder C1–C5 or activate extension trials. This roadmap owns coordination and
 priority; the [migration plan](cross-harness-workflow-migration.md) owns detailed
 checklists, acceptance criteria and consumer-project status. It was moved from
@@ -750,21 +749,7 @@ A future session should:
 4. Change exactly one item to `IN PROGRESS`.
 5. Record evidence and the promote/reject decision here when the item ends.
 
-**Next action:** C4 — S1 is committed (`cf5af8f`); review P1 invalidated the
-first benefit A/B (both arms injected nothing) and its fix —
-`buildLoadedResourceLoader()` + `noExtensions` + the offline integration
-test, which also verifies S1 end-to-end (exactly one copy in the real session
-prompt) — is **committed as `5ae95a8` (2026-10-26)**. The corrected A/B
-(2026-10-26) is valid: **no detectable benefit**; measurement closed without
-expansion. The `/feature` end-to-end comparison reading totals from the
-persisted run log has a **completed current-runtime smoke (2026-10-27)**,
-but the old runtime failed planner validation twice. The full before/after
-criterion is explicitly unmet and retired; C4 is closed as a bounded
-assessment with an inconclusive comparison. **Next: continue C5 after the completed inventory, Node screen and approved
-correction batch** (see current next action above); U1 or a reference-sensitive
-Node case remains, with no automatic provider-run expansion or S3. Evidence and limitations:
-[feature E2E report](../evals/pi-usage/FEATURE-E2E-2026-10-27.md).
-The comparison spans S1 and P1 rather than isolating S1 savings;
-S3, if ever considered, must justify itself with its own total-cost, latency
-and quality evidence. R1.1
-(`pi-vcc`) is postponed behind C1–C5 and still requires an explicit trial request.
+**Next action:** M1, as specified in Current next action above and the
+[cross-harness migration plan](cross-harness-workflow-migration.md). C1–C5 are
+closed with their documented limits; no further evaluation run, plugin trial,
+global installation or consumer rollout starts automatically.

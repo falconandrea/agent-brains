@@ -1,0 +1,54 @@
+---
+interface Props {
+  guides: { href: string; title: string; description: string }[];
+}
+
+const { guides } = Astro.props;
+---
+
+<section
+  aria-labelledby="related-guides-heading"
+  class="mx-0! max-w-none! px-0!"
+  data-pagefind-ignore
+>
+  <h2
+    id="related-guides-heading"
+    class="mt-8 mb-4 text-xl font-bold text-foreground"
+  >
+    Continua a organizzare il viaggio
+  </h2>
+  <ul class="flex flex-col gap-4">
+    {
+      guides.map(({ href, title, description }) => (
+        <li>
+          <a
+            href={href}
+            class="group flex items-start gap-2 rounded-sm px-1 py-3 decoration-dashed underline-offset-4 hover:bg-muted/50 focus-visible:no-underline"
+          >
+            <span class="min-w-0 flex-1">
+              <span class="block text-lg font-medium text-accent group-hover:underline">
+                {title}
+              </span>
+              <span class="mt-1 block text-sm text-foreground/80">
+                {description}
+              </span>
+            </span>
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              class="mt-1 inline-block h-5 w-5 flex-none text-accent rtl:rotate-180"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M5 12h14" />
+              <path d="m13 6 6 6-6 6" />
+            </svg>
+          </a>
+        </li>
+      ))
+    }
+  </ul>
+</section>

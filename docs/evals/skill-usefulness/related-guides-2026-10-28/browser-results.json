@@ -1,0 +1,423 @@
+{
+  "tooling": "Existing installed Playwright Chromium; no downloaded browser/tool changes",
+  "checks": [
+    {
+      "label": "1",
+      "size": "desktop",
+      "theme": "light",
+      "status": "passed",
+      "baselineGeometry": {
+        "width": 1440,
+        "viewport": 1440
+      },
+      "geometry": {
+        "documentWidth": 1440,
+        "viewport": 1440,
+        "links": [
+          {
+            "height": 144,
+            "scrollWidth": 736,
+            "clientWidth": 736,
+            "left": 352,
+            "right": 1088,
+            "text": "clip"
+          },
+          {
+            "height": 124,
+            "scrollWidth": 736,
+            "clientWidth": 736,
+            "left": 352,
+            "right": 1088,
+            "text": "clip"
+          },
+          {
+            "height": 144,
+            "scrollWidth": 736,
+            "clientWidth": 736,
+            "left": 352,
+            "right": 1088,
+            "text": "clip"
+          }
+        ]
+      },
+      "focus": {
+        "visible": true,
+        "style": "dashed",
+        "width": "2px"
+      },
+      "articleHash": "50322b42ef1a497c0bbaf14de9cbc2770470530c8b273465f2a857478bba8ddd",
+      "navigation": [
+        {
+          "href": "/posts/carta-suica-come-funziona-iphone",
+          "text": "Prossimo post Carta Suica in Giappone: come si usa e come aggiungerla su iPhone"
+        }
+      ]
+    },
+    {
+      "label": "1",
+      "size": "desktop",
+      "theme": "dark",
+      "status": "passed",
+      "baselineGeometry": {
+        "width": 1440,
+        "viewport": 1440
+      },
+      "geometry": {
+        "documentWidth": 1440,
+        "viewport": 1440,
+        "links": [
+          {
+            "height": 144,
+            "scrollWidth": 736,
+            "clientWidth": 736,
+            "left": 352,
+            "right": 1088,
+            "text": "clip"
+          },
+          {
+            "height": 124,
+            "scrollWidth": 736,
+            "clientWidth": 736,
+            "left": 352,
+            "right": 1088,
+            "text": "clip"
+          },
+          {
+            "height": 144,
+            "scrollWidth": 736,
+            "clientWidth": 736,
+            "left": 352,
+            "right": 1088,
+            "text": "clip"
+          }
+        ]
+      },
+      "focus": {
+        "visible": true,
+        "style": "dashed",
+        "width": "2px"
+      },
+      "articleHash": "50322b42ef1a497c0bbaf14de9cbc2770470530c8b273465f2a857478bba8ddd",
+      "navigation": [
+        {
+          "href": "/posts/carta-suica-come-funziona-iphone",
+          "text": "Prossimo post Carta Suica in Giappone: come si usa e come aggiungerla su iPhone"
+        }
+      ]
+    },
+    {
+      "label": "1",
+      "size": "mobile",
+      "theme": "light",
+      "status": "passed",
+      "baselineGeometry": {
+        "width": 515,
+        "viewport": 390
+      },
+      "geometry": {
+        "documentWidth": 515,
+        "viewport": 390,
+        "links": [
+          {
+            "height": 240,
+            "scrollWidth": 358,
+            "clientWidth": 358,
+            "left": 16,
+            "right": 374,
+            "text": "clip"
+          },
+          {
+            "height": 212,
+            "scrollWidth": 358,
+            "clientWidth": 358,
+            "left": 16,
+            "right": 374,
+            "text": "clip"
+          },
+          {
+            "height": 252,
+            "scrollWidth": 358,
+            "clientWidth": 358,
+            "left": 16,
+            "right": 374,
+            "text": "clip"
+          }
+        ]
+      },
+      "focus": {
+        "visible": true,
+        "style": "dashed",
+        "width": "2px"
+      },
+      "articleHash": "50322b42ef1a497c0bbaf14de9cbc2770470530c8b273465f2a857478bba8ddd",
+      "navigation": [
+        {
+          "href": "/posts/carta-suica-come-funziona-iphone",
+          "text": "Prossimo post Carta Suica in Giappone: come si usa e come aggiungerla su iPhone"
+        }
+      ]
+    },
+    {
+      "label": "1",
+      "size": "mobile",
+      "theme": "dark",
+      "status": "passed",
+      "baselineGeometry": {
+        "width": 515,
+        "viewport": 390
+      },
+      "geometry": {
+        "documentWidth": 515,
+        "viewport": 390,
+        "links": [
+          {
+            "height": 240,
+            "scrollWidth": 358,
+            "clientWidth": 358,
+            "left": 16,
+            "right": 374,
+            "text": "clip"
+          },
+          {
+            "height": 212,
+            "scrollWidth": 358,
+            "clientWidth": 358,
+            "left": 16,
+            "right": 374,
+            "text": "clip"
+          },
+          {
+            "height": 252,
+            "scrollWidth": 358,
+            "clientWidth": 358,
+            "left": 16,
+            "right": 374,
+            "text": "clip"
+          }
+        ]
+      },
+      "focus": {
+        "visible": true,
+        "style": "dashed",
+        "width": "2px"
+      },
+      "articleHash": "50322b42ef1a497c0bbaf14de9cbc2770470530c8b273465f2a857478bba8ddd",
+      "navigation": [
+        {
+          "href": "/posts/carta-suica-come-funziona-iphone",
+          "text": "Prossimo post Carta Suica in Giappone: come si usa e come aggiungerla su iPhone"
+        }
+      ]
+    },
+    {
+      "label": "2",
+      "size": "desktop",
+      "theme": "light",
+      "status": "passed",
+      "baselineGeometry": {
+        "width": 1440,
+        "viewport": 1440
+      },
+      "geometry": {
+        "documentWidth": 1440,
+        "viewport": 1440,
+        "links": [
+          {
+            "height": 146,
+            "scrollWidth": 702,
+            "clientWidth": 702,
+            "left": 368,
+            "right": 1072,
+            "text": "clip"
+          },
+          {
+            "height": 102,
+            "scrollWidth": 702,
+            "clientWidth": 702,
+            "left": 368,
+            "right": 1072,
+            "text": "clip"
+          },
+          {
+            "height": 122,
+            "scrollWidth": 702,
+            "clientWidth": 702,
+            "left": 368,
+            "right": 1072,
+            "text": "clip"
+          }
+        ]
+      },
+      "focus": {
+        "visible": true,
+        "style": "dashed",
+        "width": "2px"
+      },
+      "articleHash": "50322b42ef1a497c0bbaf14de9cbc2770470530c8b273465f2a857478bba8ddd",
+      "navigation": [
+        {
+          "href": "/posts/carta-suica-come-funziona-iphone",
+          "text": "Prossimo post Carta Suica in Giappone: come si usa e come aggiungerla su iPhone"
+        }
+      ]
+    },
+    {
+      "label": "2",
+      "size": "desktop",
+      "theme": "dark",
+      "status": "passed",
+      "baselineGeometry": {
+        "width": 1440,
+        "viewport": 1440
+      },
+      "geometry": {
+        "documentWidth": 1440,
+        "viewport": 1440,
+        "links": [
+          {
+            "height": 146,
+            "scrollWidth": 702,
+            "clientWidth": 702,
+            "left": 368,
+            "right": 1072,
+            "text": "clip"
+          },
+          {
+            "height": 102,
+            "scrollWidth": 702,
+            "clientWidth": 702,
+            "left": 368,
+            "right": 1072,
+            "text": "clip"
+          },
+          {
+            "height": 122,
+            "scrollWidth": 702,
+            "clientWidth": 702,
+            "left": 368,
+            "right": 1072,
+            "text": "clip"
+          }
+        ]
+      },
+      "focus": {
+        "visible": true,
+        "style": "dashed",
+        "width": "2px"
+      },
+      "articleHash": "50322b42ef1a497c0bbaf14de9cbc2770470530c8b273465f2a857478bba8ddd",
+      "navigation": [
+        {
+          "href": "/posts/carta-suica-come-funziona-iphone",
+          "text": "Prossimo post Carta Suica in Giappone: come si usa e come aggiungerla su iPhone"
+        }
+      ]
+    },
+    {
+      "label": "2",
+      "size": "mobile",
+      "theme": "light",
+      "status": "passed",
+      "baselineGeometry": {
+        "width": 515,
+        "viewport": 390
+      },
+      "geometry": {
+        "documentWidth": 515,
+        "viewport": 390,
+        "links": [
+          {
+            "height": 254,
+            "scrollWidth": 324,
+            "clientWidth": 324,
+            "left": 32,
+            "right": 358,
+            "text": "clip"
+          },
+          {
+            "height": 230,
+            "scrollWidth": 324,
+            "clientWidth": 324,
+            "left": 32,
+            "right": 358,
+            "text": "clip"
+          },
+          {
+            "height": 270,
+            "scrollWidth": 324,
+            "clientWidth": 324,
+            "left": 32,
+            "right": 358,
+            "text": "clip"
+          }
+        ]
+      },
+      "focus": {
+        "visible": true,
+        "style": "dashed",
+        "width": "2px"
+      },
+      "articleHash": "50322b42ef1a497c0bbaf14de9cbc2770470530c8b273465f2a857478bba8ddd",
+      "navigation": [
+        {
+          "href": "/posts/carta-suica-come-funziona-iphone",
+          "text": "Prossimo post Carta Suica in Giappone: come si usa e come aggiungerla su iPhone"
+        }
+      ]
+    },
+    {
+      "label": "2",
+      "size": "mobile",
+      "theme": "dark",
+      "status": "passed",
+      "baselineGeometry": {
+        "width": 515,
+        "viewport": 390
+      },
+      "geometry": {
+        "documentWidth": 515,
+        "viewport": 390,
+        "links": [
+          {
+            "height": 254,
+            "scrollWidth": 324,
+            "clientWidth": 324,
+            "left": 32,
+            "right": 358,
+            "text": "clip"
+          },
+          {
+            "height": 230,
+            "scrollWidth": 324,
+            "clientWidth": 324,
+            "left": 32,
+            "right": 358,
+            "text": "clip"
+          },
+          {
+            "height": 270,
+            "scrollWidth": 324,
+            "clientWidth": 324,
+            "left": 32,
+            "right": 358,
+            "text": "clip"
+          }
+        ]
+      },
+      "focus": {
+        "visible": true,
+        "style": "dashed",
+        "width": "2px"
+      },
+      "articleHash": "50322b42ef1a497c0bbaf14de9cbc2770470530c8b273465f2a857478bba8ddd",
+      "navigation": [
+        {
+          "href": "/posts/carta-suica-come-funziona-iphone",
+          "text": "Prossimo post Carta Suica in Giappone: come si usa e come aggiungerla su iPhone"
+        }
+      ]
+    }
+  ],
+  "blockedHosts": [],
+  "objectiveFailures": []
+}

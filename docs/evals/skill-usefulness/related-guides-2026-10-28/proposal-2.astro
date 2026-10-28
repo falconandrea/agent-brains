@@ -1,0 +1,38 @@
+---
+interface Guide {
+  href: string;
+  title: string;
+  description: string;
+}
+
+interface Props {
+  guides: Guide[];
+}
+
+const { guides } = Astro.props;
+---
+
+<section class="mx-auto mt-8 max-w-app px-4" aria-labelledby="related-guides-heading">
+  <h2 id="related-guides-heading" class="mb-4 text-lg font-bold text-foreground">
+    Continua a organizzare il viaggio
+  </h2>
+  <ul class="flex flex-col gap-4">
+    {
+      guides.map(({ href, title, description }) => (
+        <li>
+          <a
+            href={href}
+            class="group flex min-h-11 flex-col gap-1 border border-border p-4 no-underline hover:border-accent focus-visible:no-underline"
+          >
+            <span class="text-foreground font-medium decoration-dashed underline-offset-4 group-hover:text-accent group-hover:underline">
+              {title}
+            </span>
+            <span class="text-sm wrap-break-word text-foreground/75">
+              {description}
+            </span>
+          </a>
+        </li>
+      ))
+    }
+  </ul>
+</section>

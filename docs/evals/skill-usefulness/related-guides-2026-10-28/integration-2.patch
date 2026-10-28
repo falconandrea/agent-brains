@@ -1,0 +1,54 @@
+--- a/src/layouts/PostDetails.astro
++++ b/src/layouts/PostDetails.astro
+@@ -15,6 +15,7 @@
+ import IconChevronLeft from "@/assets/icons/IconChevronLeft.svg";
+ import IconChevronRight from "@/assets/icons/IconChevronRight.svg";
+ import { SITE } from "@/config";
++import RelatedGuides from "@/components/RelatedGuides.astro";
+ 
+ export interface Props {
+   post: CollectionEntry<"blog">;
+@@ -22,6 +23,28 @@
+ }
+ 
+ const { post, posts } = Astro.props;
++
++const experimentalRelatedGuides = [
++  {
++    href: "/posts/treno-aeroporto-tokyo-haneda-narita",
++    title:
++      "Dall'aeroporto al centro di Tokyo: quale treno prendere da Haneda e Narita (prezzi e tempi)",
++    description:
++      "Come arrivare in centro a Tokyo dagli aeroporti di Haneda e Narita: Keikyū, Monorail, Narita Express, Skyliner e Access Express a confronto, con prezzi verificati e consigli pratici.",
++  },
++  {
++    href: "/posts/carta-suica-come-funziona-iphone",
++    title: "Carta Suica in Giappone: come si usa e come aggiungerla su iPhone",
++    description:
++      "Come usare Suica su metro, treni e bus nelle aree abilitate, aggiungerla al Wallet e ricaricarla. La mia esperienza con iPhone, Revolut e pass giornalieri.",
++  },
++  {
++    href: "/posts/shinkansen-quando-prenotare-biglietti-jr-pass",
++    title: "Shinkansen: quando prenotare e quando no (e come funziona davvero)",
++    description:
++      "Una guida pratica sullo Shinkansen: quando conviene prenotare, come comprare i biglietti, cosa sono base fare e limited express ticket, perché il JR Pass spesso non conviene più e come godersi il bento durante il viaggio.",
++  },
++];
+ 
+ const {
+   title,
+@@ -110,6 +133,14 @@
+     >
+       <Content />
+     </article>
++
++    {
++      post.id === "come-muoversi-in-giappone" && (
++        <div data-prototype-related>
++          <RelatedGuides guides={experimentalRelatedGuides} />
++        </div>
++      )
++    }
+ 
+     <hr class="my-8 border-dashed" />
+ 

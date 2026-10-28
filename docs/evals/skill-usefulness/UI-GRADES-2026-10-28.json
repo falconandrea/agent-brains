@@ -1,0 +1,59 @@
+{
+  "calls": [
+    {
+      "index": 0,
+      "arm": "A",
+      "one_html_block": true,
+      "exact_scope_match": true,
+      "prose_for_manual_review": "Changed the label/input gap from `gap-1` to the approved `gap-2` token; all other attributes and styles are unchanged.",
+      "elapsedMs": 1995,
+      "assistant_batches": 1,
+      "sdkCost": 0.02324364
+    },
+    {
+      "index": 1,
+      "arm": "B",
+      "one_html_block": true,
+      "exact_scope_match": true,
+      "prose_for_manual_review": "Changed the label/input gap from `gap-1` to the approved `gap-2` token; label association, input name, required attribute, and all other styles are unchanged.",
+      "elapsedMs": 1840,
+      "assistant_batches": 1,
+      "sdkCost": 0.0008841599999999999
+    },
+    {
+      "index": 2,
+      "arm": "B",
+      "one_html_block": true,
+      "exact_scope_match": true,
+      "prose_for_manual_review": "Changed the label/input gap from `gap-1` to the approved `gap-2` token per the design system; all other classes, the label association (`for`/`id`), `name`, and `required` are unchanged.",
+      "elapsedMs": 1633,
+      "assistant_batches": 1,
+      "sdkCost": 0.00094136
+    },
+    {
+      "index": 3,
+      "arm": "A",
+      "one_html_block": true,
+      "exact_scope_match": true,
+      "prose_for_manual_review": "Changed the label/input gap from `gap-1` to the approved `gap-2` token; all other attributes and styles are untouched.",
+      "elapsedMs": 1499,
+      "assistant_batches": 1,
+      "sdkCost": 0.0047118
+    }
+  ],
+  "totals": {
+    "A": {
+      "calls": 2,
+      "correct": 2,
+      "sdkCost": 0.027955439999999998,
+      "elapsedMs": 3494
+    },
+    "B": {
+      "calls": 2,
+      "correct": 2,
+      "sdkCost": 0.00182552,
+      "elapsedMs": 3473
+    }
+  },
+  "limits": "Structural scope only; manually inspect prose. No rendering/accessibility or general skill-efficacy claim."
+}
