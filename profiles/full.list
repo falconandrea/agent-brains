@@ -1,12 +1,14 @@
 # Everything — escape hatch. NOTE: the `full` profile is special-cased in
 # setup.sh to symlink the whole .agents/skills dir, so this manifest is only
-# a reference of what "everything" currently contains. It is NOT used by
-# setup.sh for the full profile. Keep it in sync for documentation.
+# a reference of what "everything" currently contains for setup.sh; Pi resolves
+# this manifest for the full profile and applies its role filter. Keep it in sync
+# with the canonical skill catalog.
 @include frontend
 astro
 astro-framework
 better-auth-best-practices
 improve-animations
+laravel
 laravel-best-practices
 laravel-permission-development
 livewire-development
@@ -16,6 +18,7 @@ agent-readiness
 html-report
 nodejs-backend-patterns
 nodejs-best-practices
+nextjs
 next-best-practices
 pest-testing
 react-doctor
@@ -25,6 +28,7 @@ sql-pro
 test-master
 supabase-postgres-best-practices
 solution-capture
+socialite-development
 typescript-expert
 vercel-composition-patterns
 vercel-react-best-practices

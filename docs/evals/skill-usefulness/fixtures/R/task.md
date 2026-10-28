@@ -1,0 +1,1 @@
+Review only the supplied diff. Available tools are read/grep/find/ls; shell, edits, writes and delegation are unavailable. Do not execute tests or formatters. Report material findings with file and line, and report verification as unavailable. Cleanup suggestions are optional and must remain suggestions. Do not invent a blocking finding for unused imports.

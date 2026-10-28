@@ -1,0 +1,279 @@
+{
+  "calls": [
+    {
+      "index": 0,
+      "arm": "A",
+      "checks": [
+        {
+          "name": "reject null without persistence",
+          "pass": true
+        },
+        {
+          "name": "reject array without persistence",
+          "pass": true
+        },
+        {
+          "name": "reject missing without persistence",
+          "pass": true
+        },
+        {
+          "name": "reject non-string without persistence",
+          "pass": true
+        },
+        {
+          "name": "reject empty without persistence",
+          "pass": true
+        },
+        {
+          "name": "reject overlong without persistence",
+          "pass": true
+        },
+        {
+          "name": "persist trimmed valid name length 3",
+          "pass": true
+        },
+        {
+          "name": "persist trimmed valid name length 1",
+          "pass": true
+        },
+        {
+          "name": "persist trimmed valid name length 80",
+          "pass": true
+        },
+        {
+          "name": "repository rejection does not leak details",
+          "pass": true
+        }
+      ],
+      "passed": 10,
+      "candidateSha256": "87cab93a985ae593424cf9d0518b0bbef55d49d43f3e2a8e61f2b4f6d3080096",
+      "usage": {
+        "input": 3197,
+        "output": 283,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "reasoning": 23,
+        "totalTokens": 3480,
+        "cost": {
+          "input": 0.004475799999999999,
+          "output": 0.0012452000000000001,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0.0057209999999999995
+        }
+      },
+      "elapsedMs": 3507,
+      "manualReview": "Source inspected before execution: no external calls or extra infrastructure; no verification pass claim in answer"
+    },
+    {
+      "index": 1,
+      "arm": "B",
+      "checks": [
+        {
+          "name": "reject null without persistence",
+          "pass": true
+        },
+        {
+          "name": "reject array without persistence",
+          "pass": true
+        },
+        {
+          "name": "reject missing without persistence",
+          "pass": true
+        },
+        {
+          "name": "reject non-string without persistence",
+          "pass": true
+        },
+        {
+          "name": "reject empty without persistence",
+          "pass": true
+        },
+        {
+          "name": "reject overlong without persistence",
+          "pass": true
+        },
+        {
+          "name": "persist trimmed valid name length 3",
+          "pass": true
+        },
+        {
+          "name": "persist trimmed valid name length 1",
+          "pass": true
+        },
+        {
+          "name": "persist trimmed valid name length 80",
+          "pass": true
+        },
+        {
+          "name": "repository rejection does not leak details",
+          "pass": true
+        }
+      ],
+      "passed": 10,
+      "candidateSha256": "ffdc2f09bbc20edaf10f29e6ede15616b0ef12648ffc5623f0da7a796e3b30b3",
+      "usage": {
+        "input": 15,
+        "output": 303,
+        "cacheRead": 640,
+        "cacheWrite": 0,
+        "reasoning": 0,
+        "totalTokens": 958,
+        "cost": {
+          "input": 0.000021,
+          "output": 0.0013332,
+          "cacheRead": 0.0001664,
+          "cacheWrite": 0,
+          "total": 0.0015206
+        }
+      },
+      "elapsedMs": 3425,
+      "manualReview": "Source inspected before execution: no external calls or extra infrastructure; no verification pass claim in answer"
+    },
+    {
+      "index": 2,
+      "arm": "B",
+      "checks": [
+        {
+          "name": "reject null without persistence",
+          "pass": true
+        },
+        {
+          "name": "reject array without persistence",
+          "pass": true
+        },
+        {
+          "name": "reject missing without persistence",
+          "pass": true
+        },
+        {
+          "name": "reject non-string without persistence",
+          "pass": true
+        },
+        {
+          "name": "reject empty without persistence",
+          "pass": true
+        },
+        {
+          "name": "reject overlong without persistence",
+          "pass": true
+        },
+        {
+          "name": "persist trimmed valid name length 3",
+          "pass": true
+        },
+        {
+          "name": "persist trimmed valid name length 1",
+          "pass": true
+        },
+        {
+          "name": "persist trimmed valid name length 80",
+          "pass": true
+        },
+        {
+          "name": "repository rejection does not leak details",
+          "pass": true
+        }
+      ],
+      "passed": 10,
+      "candidateSha256": "ffdc2f09bbc20edaf10f29e6ede15616b0ef12648ffc5623f0da7a796e3b30b3",
+      "usage": {
+        "input": 15,
+        "output": 259,
+        "cacheRead": 640,
+        "cacheWrite": 0,
+        "reasoning": 0,
+        "totalTokens": 914,
+        "cost": {
+          "input": 0.000021,
+          "output": 0.0011396000000000002,
+          "cacheRead": 0.0001664,
+          "cacheWrite": 0,
+          "total": 0.001327
+        }
+      },
+      "elapsedMs": 3966,
+      "manualReview": "Source inspected before execution: no external calls or extra infrastructure; no verification pass claim in answer"
+    },
+    {
+      "index": 3,
+      "arm": "A",
+      "checks": [
+        {
+          "name": "reject null without persistence",
+          "pass": true
+        },
+        {
+          "name": "reject array without persistence",
+          "pass": true
+        },
+        {
+          "name": "reject missing without persistence",
+          "pass": true
+        },
+        {
+          "name": "reject non-string without persistence",
+          "pass": true
+        },
+        {
+          "name": "reject empty without persistence",
+          "pass": true
+        },
+        {
+          "name": "reject overlong without persistence",
+          "pass": true
+        },
+        {
+          "name": "persist trimmed valid name length 3",
+          "pass": true
+        },
+        {
+          "name": "persist trimmed valid name length 1",
+          "pass": true
+        },
+        {
+          "name": "persist trimmed valid name length 80",
+          "pass": true
+        },
+        {
+          "name": "repository rejection does not leak details",
+          "pass": true
+        }
+      ],
+      "passed": 10,
+      "candidateSha256": "19855c20a2c28b909e70c663336934e579025bc0ed271b9c3347501529424dfb",
+      "usage": {
+        "input": 61,
+        "output": 258,
+        "cacheRead": 3136,
+        "cacheWrite": 0,
+        "reasoning": 0,
+        "totalTokens": 3455,
+        "cost": {
+          "input": 0.0000854,
+          "output": 0.0011352,
+          "cacheRead": 0.00081536,
+          "cacheWrite": 0,
+          "total": 0.00203596
+        }
+      },
+      "elapsedMs": 3437,
+      "manualReview": "Source inspected before execution: no external calls or extra infrastructure; no verification pass claim in answer"
+    }
+  ],
+  "totals": {
+    "A": {
+      "calls": 2,
+      "checksPassed": 20,
+      "sdkCost": 0.007756959999999999,
+      "elapsedMs": 6944
+    },
+    "B": {
+      "calls": 2,
+      "checksPassed": 20,
+      "sdkCost": 0.0028476,
+      "elapsedMs": 7391
+    }
+  },
+  "limitation": "Two pairs on one easy, explicit-contract fixture; entry points only. Cache warmth differs; no causal savings, reference-value or removal conclusion."
+}

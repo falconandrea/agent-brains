@@ -40,7 +40,6 @@ const SKILL_CATEGORIES: Record<string, SkillCategory> = {
   prototype: "planning",
   // review
   "code-review": "review",
-  simplify: "review",
   "security-reviewer": "review",
   "web-design-guidelines": "review",
   "review-animations": "review",
@@ -79,6 +78,13 @@ const SKILL_CATEGORIES: Record<string, SkillCategory> = {
   "i-have-adhd": "operational",
   "find-skills": "operational",
   setup: "operational", // greenfield bootstrap drives a whole session, not a pipeline child
+  // Cleanup needs writes and shell execution; the main session owns it.
+  simplify: "operational",
+  // Explicit stack workflows run plan/act/review themselves. Children use
+  // the framework specialists instead of receiving a second workflow.
+  laravel: "operational",
+  nextjs: "operational",
+  astro: "operational",
   // Interactive workflow skills (roadmap F0.1): feature/grilling/grill-with-docs
   // drive a whole conversational session when explicitly invoked — like the
   // other operational skills, they must never be injected into a one-shot

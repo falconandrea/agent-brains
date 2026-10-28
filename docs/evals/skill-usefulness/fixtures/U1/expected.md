@@ -1,0 +1,1 @@
+Only gap-1 becomes gap-2. No arbitrary value, replacement palette, new tokens, new artifact or approval interruption. Preserve the label for=email and input id/name/type/required, with unchanged component structure. Grade exact semantic scope as well as token choice. This fixture tests adherence to a supplied design system, not visual craft or rendered accessibility.

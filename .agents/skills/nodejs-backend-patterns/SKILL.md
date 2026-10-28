@@ -42,4 +42,7 @@ Detailed pattern documentation lives in `references/details.md`. Read that file 
 
 ## Testing Patterns
 
-See `javascript-testing-patterns` skill for comprehensive testing guidance.
+Use the project's existing test framework and conventions. Consult applicable
+installed testing skills when needed; reuse adequate coverage and add tests for
+material behavior changes. If command execution belongs to the orchestrator,
+hand verification to it and report tests as unexecuted until results arrive.

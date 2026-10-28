@@ -204,9 +204,20 @@ no savings or skill-efficacy claim. Evidence and reconciliation:
 S3 may only be considered on its own measured
 total-cost/latency/quality evidence, never on dedup savings. C1 and C2 are
 complete (2026-10-22); C3 is complete (2026-10-23).
-**Current next action: C5**, pending — begin with a bounded manual inventory
-of triggers, permissions, overlap and distribution, then define representative
-with/without cases before any model experiment. The C4 trace is evidence of
+**Current next action: C5**, in progress (2026-10-28). The bounded manual
+inventory covers 64 canonical skills and four active extras; priority
+trigger/permission/overlap/distribution findings and representative with/without
+cases are recorded in the [C5 report](../evals/skill-usefulness/C5-2026-10-28.md).
+R/U1/N fixtures and local checks are ready. Four user-authorized Node
+entry-point calls found no correctness difference on the easy fixture (all
+10/10); cache warmth prevents causal cost claims. See the
+[follow-up](../evals/skill-usefulness/FOLLOWUP-2026-10-28.md) for evidence and
+approved role/distribution/dependency corrections, now implemented: operational
+cleanup/stack workflows, 64/64 full catalog and project-owned Node test guidance.
+Three regressions observed red/green; 446/446 tests, typecheck clean and skill
+validation passed. Fake-runtime /feature integration passes on all three stacks.
+Next U1 or a harder reference-sensitive Node case. No broad efficacy
+conclusion or skill deletion. The C4 trace is evidence of
 skill availability, not use or efficacy. No skill deletion is authorized.
 R1.1–R1.3 follow this sequence and still require
 an explicit trial request. W2/W3 and R2 retain their evidence-based deferral;
@@ -749,8 +760,9 @@ expansion. The `/feature` end-to-end comparison reading totals from the
 persisted run log has a **completed current-runtime smoke (2026-10-27)**,
 but the old runtime failed planner validation twice. The full before/after
 criterion is explicitly unmet and retired; C4 is closed as a bounded
-assessment with an inconclusive comparison. **Next: C5's bounded manual
-skill inventory**, not another provider run or S3. Evidence and limitations:
+assessment with an inconclusive comparison. **Next: continue C5 after the completed inventory, Node screen and approved
+correction batch** (see current next action above); U1 or a reference-sensitive
+Node case remains, with no automatic provider-run expansion or S3. Evidence and limitations:
 [feature E2E report](../evals/pi-usage/FEATURE-E2E-2026-10-27.md).
 The comparison spans S1 and P1 rather than isolating S1 savings;
 S3, if ever considered, must justify itself with its own total-cost, latency

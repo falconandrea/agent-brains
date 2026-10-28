@@ -1,0 +1,131 @@
+{
+  "surface": "repository-local deterministic evidence; no provider calls",
+  "simplifySelected": {
+    "planner": false,
+    "developer": false,
+    "reviewer": false,
+    "security-reviewer": false,
+    "tester": false
+  },
+  "stackWorkflowsSelected": {
+    "laravel": {
+      "planner": false,
+      "developer": false,
+      "reviewer": false,
+      "security-reviewer": false,
+      "tester": false
+    },
+    "nextjs": {
+      "planner": false,
+      "developer": false,
+      "reviewer": false,
+      "security-reviewer": false,
+      "tester": false
+    },
+    "astro": {
+      "planner": false,
+      "developer": false,
+      "reviewer": false,
+      "security-reviewer": false,
+      "tester": false
+    }
+  },
+  "reviewerTools": [
+    "read",
+    "grep",
+    "find",
+    "ls"
+  ],
+  "full": {
+    "canonical": 64,
+    "manifest": 64,
+    "omissions": []
+  },
+  "missingNodeDependency": null,
+  "nodeContract": {
+    "seed": [
+      {
+        "name": "reject null without persistence",
+        "pass": false
+      },
+      {
+        "name": "reject array without persistence",
+        "pass": false
+      },
+      {
+        "name": "reject missing without persistence",
+        "pass": false
+      },
+      {
+        "name": "reject non-string without persistence",
+        "pass": false
+      },
+      {
+        "name": "reject empty without persistence",
+        "pass": false
+      },
+      {
+        "name": "reject overlong without persistence",
+        "pass": false
+      },
+      {
+        "name": "persist trimmed valid name length 3",
+        "pass": false
+      },
+      {
+        "name": "persist trimmed valid name length 1",
+        "pass": true
+      },
+      {
+        "name": "persist trimmed valid name length 80",
+        "pass": true
+      },
+      {
+        "name": "repository rejection does not leak details",
+        "pass": false
+      }
+    ],
+    "oracle": [
+      {
+        "name": "reject null without persistence",
+        "pass": true
+      },
+      {
+        "name": "reject array without persistence",
+        "pass": true
+      },
+      {
+        "name": "reject missing without persistence",
+        "pass": true
+      },
+      {
+        "name": "reject non-string without persistence",
+        "pass": true
+      },
+      {
+        "name": "reject empty without persistence",
+        "pass": true
+      },
+      {
+        "name": "reject overlong without persistence",
+        "pass": true
+      },
+      {
+        "name": "persist trimmed valid name length 3",
+        "pass": true
+      },
+      {
+        "name": "persist trimmed valid name length 1",
+        "pass": true
+      },
+      {
+        "name": "persist trimmed valid name length 80",
+        "pass": true
+      },
+      {
+        "name": "repository rejection does not leak details",
+        "pass": true
+      }
+    ]
+  }
+}

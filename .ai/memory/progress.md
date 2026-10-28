@@ -2,16 +2,22 @@
 
 ## Open items
 
-- **Next: C5**, pending — bounded manual review of skill triggers,
-  permissions, overlap and distribution, then define representative
-  with/without cases before any model experiment. C4 is closed as a bounded
-  assessment with an inconclusive full-workflow comparison: the original
-  full before/after criterion is unmet and explicitly retired after two
-  failed old-runtime plans, not marked passed. No savings or skill-efficacy
-  gain claimed; no S3/profile-filtering promotion, skill deletion or further
-  provider runs. Evidence and decision:
-  [C4 reconciliation](../../docs/evals/pi-usage/FEATURE-E2E-2026-10-27.md#c4-reconciliation-decision).
-  No pending approval or live workflow.
+- **C5 in progress (2026-10-28)** — 64 canonical/four extra inventory,
+  reproducible local checks and R/U1/N fixtures complete. Checks confirm
+  simplify/reviewer mismatch, explicit stack workflows falling back to craft,
+  full distribution mismatch (64/61) and missing Node dependency. Four authorized
+  zai/glm-5.2 Node entry-point screen calls (AB/BA): all candidates 10/10,
+  no incremental correctness benefit on this easy case; unequal cache warmth
+  prevents causal savings claims. Initial network failure retained separately.
+  [Follow-up, evidence and proposed corrections](../../docs/evals/skill-usefulness/FOLLOWUP-2026-10-28.md).
+  Approved correction batch implemented: simplify and explicit stack workflows
+  are operational/main-session only; full manifest is 64/64; unavailable Node
+  dependency replaced by project test guidance. Three regressions observed
+  red/green; final suite 446/446, typecheck clean, Node skill validator passes.
+  Fake-runtime /feature completes on all three frameworks with specialists and
+  role permissions preserved. No consumer migration or new provider run.
+  Next: U1 or harder reference-sensitive Node case; no automatic model expansion.
+  C4 remains closed/inconclusive; no S3 promotion or live workflow.
 
 - C3 instruction changes are complete; behavioral validation C3-V remains
   pending on the next explicitly requested real security review. Criteria and

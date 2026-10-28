@@ -32,6 +32,7 @@ import {
 } from "../src/workflows/feature.ts";
 import { replayRunLog } from "../src/workflows/resume.ts";
 import { usageFromEvents } from "../src/usage.ts";
+import { resolveProfile } from "../src/profiles.ts";
 import { mkdirSync, writeFileSync } from "node:fs";
 
 const PROFILES_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "profiles");
@@ -148,6 +149,28 @@ const approvingResponder = (req: AgentRunRequest): AgentRunResult => {
   if (req.role === "developer") return devResult;
   return reviewOf({ verdict: "approved", summary: "ok", issues: [] });
 };
+
+test("feature completes with framework specialists and no nested workflow or cleanup guidance", async () => {
+  for (const [stack, specialist] of [
+    ["laravel", "laravel-best-practices"],
+    ["nextjs", "next-best-practices"],
+    ["astro", "astro-framework"],
+  ] as const) {
+    const { deps, agents } = harness(approvingResponder, { config: { stack } });
+    deps.availableSkills = new Set(resolveProfile(PROFILES_DIR, stack).skills);
+    const outcome = await runFeatureWorkflow(deps, "Add invitations", `run-c5-${stack}`);
+    assert.equal(outcome.status, "completed");
+    assert.deepEqual(agents.calls.map(call => call.role), ["planner", "developer", "reviewer"]);
+    for (const call of agents.calls) {
+      assert.ok(call.skills?.includes(specialist), `${stack}/${call.role} retains framework knowledge`);
+      for (const excluded of ["simplify", "laravel", "nextjs", "astro"]) {
+        assert.ok(!call.skills?.includes(excluded), `${stack}/${call.role} excludes ${excluded}`);
+      }
+    }
+    assert.equal(agents.calls[2]!.readOnly, true);
+    assert.ok(!agents.calls[1]!.tools?.includes("bash"));
+  }
+});
 
 test("inconsistent changes_requested review ends needs_human without another developer pass", async () => {
   const inconsistent: ReviewResult = {

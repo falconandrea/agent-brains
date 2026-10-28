@@ -45,6 +45,13 @@ test("every profile entry points at a real skill directory", () => {
   assert.deepEqual(broken, [], `profiles reference skills that do not exist:\n${broken.join("\n")}`);
 });
 
+test("the full manifest covers the same skill catalog as whole-directory setup", () => {
+  assert.deepEqual(
+    [...resolveProfile(PROFILES_DIR, "full").skills].sort(),
+    [...realSkills()].sort(),
+  );
+});
+
 test("the skills the role router insists on are actually installed", () => {
   const skills = realSkills();
   for (const required of ["code-review", "karpathy-guidelines", "grilling", "feature", "tdd"]) {

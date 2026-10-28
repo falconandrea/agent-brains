@@ -564,7 +564,7 @@ test("each role gets only its categories: developer plans nothing, reviewer revi
   assert.ok(!dev.skills.includes("product-thinking"), "planning must not reach the developer");
   assert.ok(!rev.skills.includes("feature"), "planning must not reach the reviewer");
   assert.ok(!plan.skills.includes("code-review"), "review must not reach the planner");
-  assert.ok(!plan.skills.includes("simplify"), "review must not reach the planner");
+  assert.ok(!plan.skills.includes("simplify"), "cleanup belongs to the main session");
   assert.ok(rev.skills.includes("code-review"), "the reviewer judges code");
   assert.ok(dev.skills.includes("tdd"), "the developer tests");
   assert.ok(dev.skills.includes("diagnosing-bugs"), "the developer debugs");
@@ -575,6 +575,42 @@ test("no operational skill reaches any pipeline role", () => {
     const sel = selectSkills(PROFILES_DIR, "full", role, AVAILABLE_SKILLS);
     for (const banned of ["handoff", "start", "setup", "to-tickets", "lessons-gardener", "context-audit", "long-horizon-brief", "improve-codebase-architecture"]) {
       assert.ok(!sel.skills.includes(banned), `${banned} must not reach ${role}`);
+    }
+  }
+});
+
+test("cleanup stays in the main-session catalog and out of every pipeline role", () => {
+  for (const profile of listProfiles(PROFILES_DIR)) {
+    if (!resolveProfile(PROFILES_DIR, profile).skills.includes("simplify")) continue;
+    for (const role of ["planner", "developer", "reviewer", "tester", "security-reviewer"] as const) {
+      const selection = selectSkills(PROFILES_DIR, profile, role, AVAILABLE_SKILLS);
+      assert.ok(!selection.skills.includes("simplify"), `${profile}/${role} must not receive mutating cleanup instructions`);
+      assert.ok(!selection.missing.includes("simplify"));
+    }
+  }
+  assert.ok(resolveProfile(PROFILES_DIR, "common").skills.includes("simplify"));
+});
+
+test("explicit stack workflows stay available while pipeline roles retain framework knowledge", () => {
+  for (const [workflow, specialist] of [
+    ["laravel", "laravel-best-practices"],
+    ["nextjs", "next-best-practices"],
+    ["astro", "astro-framework"],
+  ] as const) {
+    for (const profile of [workflow, "full"]) {
+      const catalog = resolveProfile(PROFILES_DIR, profile).skills;
+      assert.ok(catalog.includes(workflow), `${profile} keeps explicit ${workflow} invocation`);
+      const available = new Set(catalog);
+      for (const role of ["planner", "developer", "reviewer", "tester", "security-reviewer"] as const) {
+        const selection = selectSkills(PROFILES_DIR, profile, role, available);
+        for (const excluded of ["laravel", "nextjs", "astro"]) {
+          assert.ok(!selection.skills.includes(excluded), `${profile}/${role} must not receive ${excluded} workflow`);
+          assert.ok(!selection.missing.includes(excluded));
+        }
+        if (role !== "tester") {
+          assert.ok(selection.skills.includes(specialist), `${profile}/${role} keeps ${specialist}`);
+        }
+      }
     }
   }
 });

@@ -142,6 +142,11 @@ carry `agents/openai.yaml` with
 prompt — you must type `$feature` or `$solution-capture`. `start` keeps implicit
 activation on (useful to auto-suggest when you ask "what's the status").
 
+Pi `/feature` filters skills by role: the `laravel`, `nextjs` and `astro`
+session workflows remain available for explicit use, while pipeline children
+receive their framework specialists. `simplify` belongs to the main session,
+which can edit files and run cleanup commands; it is excluded from pipeline roles.
+
 `.opencode/agents/*.md` and `.agents/workflows/*.md` (symlinks) both point at the
 same `SKILL.md` — single source of truth per workflow, no duplication.
 
@@ -332,7 +337,7 @@ link into the store does not survive a refresh.
    - Generic / cross-stack skill → `profiles/common.list` (inherits to every profile)
    - Frontend / motion / UI skill → the relevant `profiles/frontend-*.list` group (or `frontend.list` for every frontend profile; not nodejs)
    - Stack-specific skill → the relevant `profiles/<stack>.list`
-   - For documentation only, also add a line to `profiles/full.list` (the `full` profile is special-cased in `setup.sh` to symlink the whole dir, but `full.list` is kept as a reference of what "everything" contains).
+   - Keep `profiles/full.list` aligned with the canonical catalog: Pi resolves this manifest before role filtering. `setup.sh full` links the whole directory directly.
 3. **Re-run setup.sh on each project** that should pick it up, with its profile:
    ```bash
    ./setup.sh /path/to/project laravel   # or nextjs | astro | nodejs | full
