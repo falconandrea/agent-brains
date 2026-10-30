@@ -40,7 +40,7 @@ Skill details live in the skills themselves — do not preload or copy them here
 
 ## Stable directives
 
-- For non-trivial feature work, follow the `/feature` skill: no code before PRD approval.
+- For non-trivial feature work, follow the `spec-and-tasks` skill: no code before the approved `spec.md` + `tasks.md`. Small fixes need no spec.
 - Read `.ai/context/TECH_STACK.md` before technical decisions; `.ai/memory/lessons.md` before starting work.
 - Update `.ai/memory/progress.md` when completing a task. Blockers live in its Blockers section — no separate file exists.
 - Never install a dependency without checking it is not already present.

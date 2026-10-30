@@ -2,11 +2,27 @@
 
 ## Open items
 
-- **Next: M1** — portable skills and planning/implementation/review boundaries
-  under the [migration plan](../../docs/plans/cross-harness-workflow-migration.md).
+- 2026-10-30 behavioral verification ideas from the pstack/video discussion
+  are saved in the [roadmap follow-ups](../../docs/plans/pi-plugin-adoption-roadmap.md#behavioral-verification-follow-ups-recorded-2026-10-30).
+  M1 is now implemented in agent-brains (see Done 2026-10-30); the scheduling
+  priority for the pilot shifts to M2 preparation and the pilot itself.
+  Pending: a small project-local verification pilot (target
+  unselected), explicit verification outcomes building on C2; deferred:
+  targeted property/mutation experiment. Existing `config.verify` can support
+  the pilot without waiting technically for M1. No implementation, tool
+  installation or new runtime contract started; full video claims unverified.
+
+- **Next: M1 re-approval, then M2 (global distribution)** — M1 (portable
+  skills and planning/implementation/review boundaries) is implemented in
+  agent-brains, left uncommitted for review; review round 1 returned four P2
+  findings, all corrected 2026-10-30 (see Done). M1 is not closed until the
+  corrected diff is re-approved; M2 starts only after that. Per-item status
+  and limits live in the
+  [migration plan](../../docs/plans/cross-harness-workflow-migration.md).
   C5 is closed as a bounded assessment; no broad efficacy or savings claim.
-  M1 implementation, global installation and consumer migration have not started.
-  Preserve C1/C2/C3 behavior, Pi /feature and existing resume artifacts.
+  Global installation, harness verification and consumer migration have not
+  started. Preserve C1/C2/C3 behavior, Pi /feature and existing resume
+  artifacts.
 
 - C3 instruction changes are complete; behavioral validation C3-V remains
   pending on the next explicitly requested real security review. Criteria and
@@ -85,6 +101,57 @@
   `changes_requested` policy option B is implemented (U15).
 
 ## Done
+
+- 2026-10-30 **M1 implemented in agent-brains** (portable skills and
+  planning/implementation/review boundaries; uncommitted, left for independent
+  review). Skill `feature` renamed `spec-and-tasks`: directory, SKILL.md
+  (planning-only — explore, clarify, approved `spec.md`+`tasks.md`, explicit
+  handoff; HARD-GATE against implementation; fast path for small fixes kept),
+  `agents/openai.yaml` unchanged, `.agents/workflows/` and `.opencode/agents/`
+  adapters renamed, `common.list` and `src/skill-router.ts` updated (full.list
+  covers via `@include`). Document contracts defined in the skill and in
+  `templates/.ai/features/_TEMPLATE.md`; historical `prd-<slug>.md` /
+  `tasks-<slug>.md` and Pi runtime artifacts (`<!-- pi-brain:feature -->`,
+  run logs, resume) preserved untouched. Portable references: `laravel`,
+  `nextjs`, `astro`, `context-audit` and `spec-and-tasks` now reference other
+  skills by name with skill-relative file resolution (`../<name>/SKILL.md`,
+  resolving any symlink to the skill's real directory first) and keep `.ai/...`
+  project-root-relative; implementation skills recognize both new and
+  historical document names without repeating planning discovery.
+  `code-review` and `to-spec` adopted `management: local` with mattpocock
+  provenance and MIT LICENSE before editing (removed from `skills-lock.json`;
+  upstream reviewed at `7739eaed7f8f…` and `5c89081d4bbe…`):
+  code-review gained spec/task inputs incl. historical names,
+  acceptance-criteria and task-coverage checks, verifiable-findings rule,
+  "review is not fixing" and the C2 test-quality questions (the Pi reviewer
+  prompt keeps its own C2 copy unchanged); to-spec gained the existing-spec
+  guard — no silent overwrite of `spec.md`, an approved planning document is
+  updated in place only on explicit request, preserving its own contract.
+  `grill-with-docs` now describes `grilling`'s actual batched-frontier
+  behavior and documents the procedure split; `grilling`, `to-tickets` left
+  upstream-lock-managed and untouched; no skill merged or deleted.
+  `templates/AGENTS.md` directive updated. New structural tests in
+  `tests/repo.test.ts`: sibling skill references resolve, no project-local
+  `.agents` paths in skill markdown, frontmatter `name:` == directory, every
+  `.agents/workflows/*.md` link resolves to its skill, and sibling
+  references resolve from the REAL directory behind the workflow links.
+  Verification: `npm test` 450/450, `npm run typecheck` clean,
+  `git diff --check` clean. **Review round 1 (2026-10-30): four P2 findings,
+  all corrected the same day** — (1) setup had reverted to the removed
+  `feature` reference (a `git checkout` during a mutation check discarded the
+  staged edits; re-applied with the Pi `/feature` distinction), (2) to-spec
+  contract conflict (adopted locally with the guard above), (3) symlink
+  resolution (prescribed everywhere + pinning test), (4) subfolder item
+  wrongly ticked (split into documented vs unverified). M1 is **not closed**:
+  the corrected diff awaits re-approval, and M2 does not start before that.
+  Limits: file-level and structural checks only — discovery/invocation on
+  live Codex/OpenCode/Pi sessions NOT verified (M3/M4 criteria untouched in
+  the migration plan); path resolution when a harness starts in a subfolder
+  documented but not exercised; consumer projects with a `feature` skill
+  symlink dangle until their next `setup.sh` run (M4); Laravel Boost
+  catalog/generated-content separation not addressed (M2/M4); scaffold.sh
+  unchanged (`copy_if_missing` already idempotent). Roadmap, migration plan
+  and this file updated; no commit created.
 
 - 2026-10-28 **C5 closed by user decision**: 64 canonical/four extra inventory,
   concrete corrections in `27b9be7`, bounded Node/U1 screens and two real

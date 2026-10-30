@@ -54,9 +54,101 @@ test("the full manifest covers the same skill catalog as whole-directory setup",
 
 test("the skills the role router insists on are actually installed", () => {
   const skills = realSkills();
-  for (const required of ["code-review", "karpathy-guidelines", "grilling", "feature", "tdd"]) {
+  for (const required of ["code-review", "karpathy-guidelines", "grilling", "spec-and-tasks", "tdd"]) {
     assert.ok(skills.has(required), `${required} missing from .agents/skills/`);
   }
+});
+
+/** Every markdown file inside a skill directory (SKILL.md, references, evals). */
+function* skillMarkdownFiles(): Generator<{ skill: string; file: string; content: string }> {
+  for (const skill of realSkills()) {
+    const stack = [join(SKILLS_DIR, skill)];
+    while (stack.length > 0) {
+      const dir = stack.pop()!;
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) stack.push(full);
+        else if (entry.isFile() && entry.name.endsWith(".md")) {
+          yield { skill, file: full, content: readFileSync(full, "utf8") };
+        }
+      }
+    }
+  }
+}
+
+test("each skill's frontmatter name matches its directory", () => {
+  const mismatches: string[] = [];
+  for (const skill of realSkills()) {
+    const fm = readFileSync(join(SKILLS_DIR, skill, "SKILL.md"), "utf8").match(/^---\n(.*?)\n---/s)?.[1] ?? "";
+    const name = fm.match(/^name:\s*(\S+)\s*$/m)?.[1];
+    if (name !== skill) mismatches.push(`directory ${skill} declares name: ${name ?? "<none>"}`);
+  }
+  assert.deepEqual(mismatches, [], `frontmatter name must equal the directory name:\n${mismatches.join("\n")}`);
+});
+
+test("cross-skill references resolve relative to the skill, without project-local .agents paths", () => {
+  const broken: string[] = [];
+  const localPaths: string[] = [];
+  for (const { skill, file, content } of skillMarkdownFiles()) {
+    // Sibling/catalog references like `../<skill>/SKILL.md` (or `../../tdd/SKILL.md`
+    // from a references/ subdirectory) must resolve from the file's own location.
+    for (const m of content.matchAll(/(?:\.\.\/)+[a-z0-9-]+\/SKILL\.md/g)) {
+      const target = join(dirname(file), m[0]!);
+      if (!existsSync(target)) broken.push(`${skill}: ${m[0]} (from ${file}) does not exist`);
+    }
+    // Skills must not assume the consuming project contains `.agents/`.
+    if (/\.agents\/(skills|workflows)\b/.test(content)) {
+      localPaths.push(`${skill}: ${file} references a project-local .agents path`);
+    }
+  }
+  assert.deepEqual(broken, [], `broken skill-relative references:\n${broken.join("\n")}`);
+  assert.deepEqual(
+    localPaths,
+    [],
+    `skills must reference other skills by name or relative to themselves, never via the consumer project's .agents tree:\n${localPaths.join("\n")}`,
+  );
+});
+
+test("sibling references also resolve from the REAL skill directory behind a workflow link", () => {
+  // Harnesses may load these skills through `.agents/workflows/<name>.md`
+  // symlinks. The prescribed resolution is: realpath the skill first, then
+  // walk `../<name>/SKILL.md` from the resolved directory. This pins that the
+  // references do resolve there — they would NOT resolve from the link's own
+  // directory, which is why every skill must prescribe symlink resolution.
+  const workflowsDir = join(ROOT, ".agents", "workflows");
+  const problems: string[] = [];
+  for (const entry of readdirSync(workflowsDir, { withFileTypes: true })) {
+    if (!entry.isSymbolicLink() || !entry.name.endsWith(".md")) continue;
+    const realDir = dirname(realpathSync(join(workflowsDir, entry.name)));
+    const content = readFileSync(realpathSync(join(workflowsDir, entry.name)), "utf8");
+    for (const m of content.matchAll(/(?:\.\.\/)+[a-z0-9-]+\/SKILL\.md/g)) {
+      if (!existsSync(join(realDir, m[0]!))) {
+        problems.push(`${entry.name}: ${m[0]} does not resolve from the real directory ${realDir}`);
+      }
+    }
+  }
+  assert.deepEqual(problems, [], problems.join("\n"));
+});
+
+test("every workflow link resolves to the matching skill's SKILL.md", () => {
+  const workflowsDir = join(ROOT, ".agents", "workflows");
+  const problems: string[] = [];
+  for (const entry of readdirSync(workflowsDir, { withFileTypes: true })) {
+    if (!entry.isSymbolicLink() || !entry.name.endsWith(".md")) {
+      problems.push(`${entry.name}: workflows entries must be <name>.md symlinks`);
+      continue;
+    }
+    const skill = entry.name.slice(0, -".md".length);
+    const target = join(SKILLS_DIR, skill, "SKILL.md");
+    try {
+      if (realpathSync(join(workflowsDir, entry.name)) !== realpathSync(target)) {
+        problems.push(`${entry.name}: does not resolve to ${target}`);
+      }
+    } catch {
+      problems.push(`${entry.name}: broken symlink`);
+    }
+  }
+  assert.deepEqual(problems, [], problems.join("\n"));
 });
 
 const frontmatterOf = (skill: string): string =>
@@ -143,9 +235,9 @@ test("every workflow in the README table has an OpenCode pointer and a resolved 
   assert.deepEqual(problems, [], problems.join("\n"));
 });
 
-test("the adopted skills grill-with-docs and research carry provenance and stay out of the lock", () => {
+test("the adopted skills grill-with-docs, research and to-spec carry provenance and stay out of the lock", () => {
   const lock = JSON.parse(readFileSync(join(ROOT, "skills-lock.json"), "utf8"));
-  for (const skill of ["grill-with-docs", "research"]) {
+  for (const skill of ["grill-with-docs", "research", "to-spec"]) {
     assert.ok(!(skill in lock.skills), `${skill} must not be upstream-lock-managed`);
     assert.ok(existsSync(join(SKILLS_DIR, skill, "LICENSE")), `${skill} must retain its upstream LICENSE`);
     const fm = frontmatterOf(skill);

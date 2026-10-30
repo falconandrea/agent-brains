@@ -37,7 +37,7 @@ test("solution memory is scaffolded and progressively retrieved", () => {
   assert.match(readFileSync(template, "utf8"), /^## Root cause \(verified\)$/m);
   assert.match(readFileSync(join(ROOT, "scaffold.sh"), "utf8"), /memory\/solutions\/_TEMPLATE\.md/);
 
-  for (const workflow of ["feature", "diagnosing-bugs"]) {
+  for (const workflow of ["spec-and-tasks", "diagnosing-bugs"]) {
     const skill = readFileSync(join(ROOT, ".agents", "skills", workflow, "SKILL.md"), "utf8");
     assert.match(skill, /\.ai\/memory\/solutions\//);
     assert.match(skill, /targeted `rg`/);

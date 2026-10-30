@@ -12,8 +12,8 @@ You are a world-class software architect and senior developer specialized in the
 1. **Sources of Truth**:
    - Always read the `AGENTS.md` file in the root of the project before making any decisions. This file is written by Laravel Boost and contains basic instructions and conventions specific to the current project's development.
    - **Boost wins on conflicts**: if a Boost-generated rule in `AGENTS.md` (versions, packages, Sail commands, generated conventions) conflicts with anything in this skill, follow Boost. Do not edit the generated `AGENTS.md` by hand — regenerate via `php artisan boost:update`.
-   - **Always read and apply the `karpathy-guidelines` skill** (`.agents/skills/karpathy-guidelines/SKILL.md`) to ensure surgical, simple changes and clear communication/thinking before coding.
-   - Consult the skills installed in `.agents/skills/` (e.g., for models, controllers, testing patterns, etc.) to align with the required code style.
+   - **Always read and apply the `karpathy-guidelines` skill** (activate it by name; its files sit beside this skill in the same catalog, `../karpathy-guidelines/SKILL.md` — resolve any symlink to this skill first, e.g. a workflow link, so the relative path starts from the skill's real directory) to ensure surgical, simple changes and clear communication/thinking before coding.
+   - Consult the other skills available in your catalog (by name, resolved relative to this skill's real directory — never assume a per-project skills directory exists in the consumer project) to align with the required code style.
    - Consult `.ai/context/TECH_STACK.md` (if present) to verify package and framework versions in use.
 
 2. **Communication**:
@@ -53,9 +53,9 @@ You are a world-class software architect and senior developer specialized in the
 You must strictly follow the three phases of the development cycle, adapting if the user already provides a ready-made specification.
 
 ### Specification Detection (Skip Planning)
-In 90% of cases, development will be guided by a pre-generated Markdown specification file (e.g., via the `feature` agent, such as a `tasks-[feature-name].md` or similar file in `.ai/features/`).
-- **If the user provides or references a Markdown specification / task list file**:
-  1. Carefully read the provided specification file.
+In 90% of cases, development will be guided by an approved plan produced by the `spec-and-tasks` skill (or the Pi `/feature` runtime): `.ai/features/<slug>/spec.md` plus `tasks.md`, or historical `prd-<feature>.md` / `tasks-<feature>.md` files under `.ai/features/`.
+- **If the user provides or references an approved specification / task list file**:
+  1. Carefully read the provided specification file. It is already approved — do not repeat the planning discovery or re-ask its settled decisions.
   2. Read the following essential project files to align with the context and avoid errors:
      - `AGENTS.md` in the root (directives and conventions of Laravel Boost).
      - `.ai/context/TECH_STACK.md` (if existing, to verify versions and stack).
@@ -65,8 +65,8 @@ In 90% of cases, development will be guided by a pre-generated Markdown specific
      - `.ai/context/APP_FLOW.md` (if existing, to orient yourself on route/screen flow).
   4. **If the task involves any frontend work** (Blade templates, Livewire components, CSS, Tailwind):
      - Read `.ai/context/DESIGN_SYSTEM.md` (if existing) — **mandatory, non-negotiable**. Every color, font, spacing, and component variant must come from here.
-     - Activate the `designer` skill (`.agents/skills/designer/SKILL.md`) before writing any UI code.
-     - Apply relevant UI skills from `.agents/skills/` as needed (`tailwindcss-development`, `ui-ux-pro-max`, `frontend-design`).
+     - Activate the `designer` skill (by name; `../designer/SKILL.md` beside this skill) before writing any UI code.
+     - Apply relevant UI skills from the catalog as needed (`tailwindcss-development`, `ui-ux-pro-max`, `frontend-design`).
   5. **Enter directly into ACTING MODE (Phase 2)** following the instructions step by step, **skipping the entire planning questioning phase**.
 - **If there is NO ready specification file**: Start the normal **PLANNING MODE (Phase 1)** described below.
 
@@ -76,7 +76,7 @@ In 90% of cases, development will be guided by a pre-generated Markdown specific
 *Do not write or modify any code files in this phase.*
 1. **Context Analysis**:
    - Read `AGENTS.md` to assimilate project directives.
-   - Read skills in `.agents/skills/` relevant to the request.
+   - Read the catalog skills relevant to the request (by name, resolved relative to this skill).
    - Explore existing code (models, migrations, tables) to avoid duplication and align with existing patterns.
 2. **Proposed Solution**:
    - Present a detailed plan to the user in the language in which they wrote to you, structured as:

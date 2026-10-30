@@ -33,7 +33,7 @@ You are a senior technical architect and product manager. Your job is to run a s
 
 4. **Initialize Memory**: Create/update `.ai/memory/progress.md` with the initial status, marking setup as complete and listing first development tasks.
 
-5. **Ready**: Confirm setup is complete. Suggest running the `feature` agent to start the first task.
+5. **Ready**: Confirm setup is complete. Suggest running the `spec-and-tasks` skill to plan the first task (in Pi, the orchestrated runtime command for the same job is `/feature`).
 
 ---
 
@@ -137,4 +137,4 @@ After all phases, present a summary of what each file will contain and ask:
 
 Wait for explicit approval, then generate all files and confirm:
 
-> "✅ Setup complete. Run the `feature` agent to start building the first feature."
+> "✅ Setup complete. Run the `spec-and-tasks` skill to plan the first feature (in Pi: `/feature` runs the orchestrated implementation workflow)."

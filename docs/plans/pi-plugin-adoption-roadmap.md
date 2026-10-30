@@ -2,7 +2,7 @@
 
 **Created:** 2026-09-08
 
-**Status:** R0 and C1–C5 closed; C4 retains an inconclusive full-workflow comparison and C5 is a bounded assessment, not full-collection efficacy validation. Next selected work: M1. External extension trials still require an explicit request (updated 2026-10-28).
+**Status:** R0 and C1–C5 closed; C4 retains an inconclusive full-workflow comparison and C5 is a bounded assessment, not full-collection efficacy validation. M1 is implemented in agent-brains (2026-10-30); the first independent review returned four P2 findings, corrected the same day — M1 awaits re-approval and M2–M4 do not start until then. External extension trials still require an explicit request (updated 2026-10-30).
 
 **Source of truth for execution status:** this document
 
@@ -13,6 +13,56 @@
 after the [Spotify shunt assessment](../research/spotify-shunt-assessment.md).
 These items are independent of R1 external extension trials; recording them
 does not start implementation or change the R1 sequence.
+
+## Behavioral verification follow-ups (recorded 2026-10-30)
+
+Discussion of the user-supplied analysis of Matt Pocock's interview with Lauren
+Tan identified the following candidate work. Recording it does not start
+implementation or reorder M1, which remains next.
+
+- **Project-local verification pilot — pending, target not selected.** Reuse
+  an existing test environment and `config.verify` with a small deterministic
+  helper and one or two UI/API/CLI journeys. Document launch, usable readiness,
+  instance/data isolation, drive, observable assertions, evidence and cleanup.
+  Check action and resulting effects (including persistence where relevant),
+  rather than treating screenshots alone as proof. Evidence must survive
+  cleanup. Acceptance: the same check passes on correct behavior and detects
+  a deliberately introduced regression for the expected reason in an isolated
+  copy. M1 is the scheduling priority, not a technical prerequisite for this
+  bounded pilot; no new runtime artifact contract is required to try it.
+- **Explicit verification outcomes — pending, independently justified.** Build
+  on the existing proposal in [C2](../evals/tdd-review/C2-2026-10-22.md), rather
+  than creating a competing status model. Distinguish execution availability,
+  command outcome and blocking policy; an empty command list or absence of
+  blocking failures is not proof that all checks executed and passed.
+  Preserve historical event semantics, frozen verification inputs, bounded
+  retries and resume compatibility. If the pilot warrants artifact integration,
+  associate evidence with its source run and verified code state, including
+  freshness on reuse. This status clarification need not depend on pilot
+  promotion.
+- **Targeted property/mutation experiment — deferred.** Choose one concrete
+  invariant in transitions, resume or locking; compare added defect detection
+  against current tests before adopting dependencies or a general gate.
+- **Recurring mistakes and review — candidate guidance, not new skills.**
+  Prefer removing structural causes, then types/lint/tests, with instructions
+  for judgment that cannot be enforced mechanically. Prove a new guard catches
+  a known bad case. Trial the review question "which fact makes this change
+  safe, and what execution supports it?" before adding a separate blast-radius
+  skill. Reuse existing review and memory responsibilities.
+
+Preserve orchestrator-owned command execution, the Pi developer's no-shell
+boundary, independent review and single-writer ownership. No pstack/Noodle
+installation, second orchestrator, automatic merge, mandatory extra reviewer
+or full-repository Stryker rollout is selected.
+
+Sources inspected: upstream pstack
+[create-verification-skill](https://github.com/cursor/plugins/blob/main/pstack/skills/create-verification-skill/SKILL.md),
+[correct](https://github.com/cursor/plugins/blob/main/pstack/skills/correct/SKILL.md)
+and [blast-radius](https://github.com/cursor/plugins/blob/main/pstack/skills/blast-radius/SKILL.md),
+plus local `src/verify.ts`, `src/review.ts`, `src/workflows/feature.ts` and C2.
+The full [video](https://www.youtube.com/watch?v=MN9dGgmLyso) and its quantitative
+claims were not independently verified. Upstream links are mutable references,
+not pinned vendored sources. No efficacy improvement is claimed.
 
 ## Agreed consolidation sequence (2026-10-22)
 
@@ -214,12 +264,17 @@ was a tentative preference for expanded-guidance Version 1 on the real UI task.
 Unexecuted interview/tooling/reference/trigger cases remain explicitly unmeasured.
 C3-V remains pending the next requested real security review.
 
-**Current next action: M1** — portable skill references and explicit
-planning/implementation/review boundaries, preserving C1/C2/C3, Pi `/feature`
-and resume compatibility. The migration plan below owns implementation detail;
-M1 implementation and global machine/consumer migration have not started.
-R1 trials remain available only on explicit request; W2/W3/R2/S3 retain their
-existing deferral. Appunti prototype adoption is a separate project handoff.
+**Current next action: M1 re-approval.** M1 (portable skill references and
+explicit planning/implementation/review boundaries) is implemented in
+agent-brains (2026-10-30) and left uncommitted for review; the first
+independent review returned four P2 findings, all corrected the same day (see
+the M1 bullet above and the migration plan's progress log). M1 is not closed
+until the corrected diff is re-approved; **M2 does not start before that**.
+Global machine/consumer migration have not started. Preserved: C1/C2/C3
+behavior, Pi `/feature`, `/flow`, resume compatibility and historical
+artifacts. R1 trials remain available only on explicit request; W2/W3/R2/S3
+retain their existing deferral. Appunti prototype adoption is a separate
+project handoff.
 
 Supporting evidence: [TDD assessment](../research/tdd-agent-loop-assessment.md),
 [QA suite assessment](../research/claude-code-skills-assessment.md).
@@ -245,6 +300,25 @@ OpenCode, expose skills globally once per machine, and retain project-owned
   `spec-and-tasks`; define spec/task handoff to implementation and independent
   review. Keep Pi `/feature` as the existing runtime workflow and preserve
   historical artifacts and resume compatibility.
+  **Implemented in agent-brains (2026-10-30, uncommitted pending review):**
+  skill rename with planning-only contract and handoff, portable skill
+  references (name + skill-relative resolution), `spec.md`/`tasks.md`
+  document contracts, planning-procedure harmonization
+  (`grilling`/`grill-with-docs`/`to-spec`/`to-tickets` documented, none
+  merged or deleted), implementation skills consume approved documents,
+  `code-review` adopted locally with the shared review contract, structural
+  tests extended. Pi runtime untouched. **Review round 1 (2026-10-30): four
+  P2 findings, all corrected** — setup skill had reverted to the removed
+  `feature` reference (accidental revert during checks; re-applied with the
+  Pi `/feature` distinction), `to-spec` adopted locally with an
+  existing-spec guard (no silent overwrite of an approved spec), sibling
+  paths now prescribe symlink resolution to the real skill directory (plus a
+  test pinning resolution through the workflow links), and the subfolder
+  item was split into documented convention vs unexecuted verification.
+  Limits: no live-harness discovery or
+  invocation check (M3/M4), consumer projects not migrated, Laravel Boost
+  separation not addressed. Details and per-item status live in the
+  [migration plan](cross-harness-workflow-migration.md).
 - **M2 — Global distribution:** prepare a conservative installer, conflict
   inventory, diagnostics and rollback; preserve personal skills and local
   ownership/provenance. Replace the current OpenCode pointers, README contract
@@ -749,7 +823,9 @@ A future session should:
 4. Change exactly one item to `IN PROGRESS`.
 5. Record evidence and the promote/reject decision here when the item ends.
 
-**Next action:** M1, as specified in Current next action above and the
-[cross-harness migration plan](cross-harness-workflow-migration.md). C1–C5 are
-closed with their documented limits; no further evaluation run, plugin trial,
-global installation or consumer rollout starts automatically.
+**Next action:** obtain re-approval of the corrected M1 diff (review round 1
+returned four P2 findings, corrected 2026-10-30); only then M2, per the
+[cross-harness migration plan](cross-harness-workflow-migration.md), whose
+section 4 and progress log record per-item status. C1–C5 are
+closed with their documented limits; no further evaluation run,
+plugin trial, global installation or consumer rollout starts automatically.

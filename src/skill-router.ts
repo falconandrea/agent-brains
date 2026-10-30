@@ -85,11 +85,13 @@ const SKILL_CATEGORIES: Record<string, SkillCategory> = {
   laravel: "operational",
   nextjs: "operational",
   astro: "operational",
-  // Interactive workflow skills (roadmap F0.1): feature/grilling/grill-with-docs
+  // Interactive workflow skills (roadmap F0.1): spec-and-tasks (the renamed
+  // documentary planning skill formerly called `feature` — the Pi /feature
+  // runtime command is a separate mechanism), grilling and grill-with-docs
   // drive a whole conversational session when explicitly invoked — like the
   // other operational skills, they must never be injected into a one-shot
   // pipeline child.
-  feature: "operational",
+  "spec-and-tasks": "operational",
   grilling: "operational",
   "grill-with-docs": "operational",
 };

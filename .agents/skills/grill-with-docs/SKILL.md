@@ -28,10 +28,28 @@ metadata:
 
 # Grill with Docs
 
-Use this skill for an explicit, documentation-backed grilling session before a
-plan or design is enacted. It extends the one-question-at-a-time behavior of
-`grilling` and keeps a durable record of the shared understanding. It does not
+Use this skill for an explicit, documentation-backed stress test before a plan
+or design is enacted. It keeps a durable checkpoint of the shared
+understanding and produces only explicitly approved documents. It does not
 implement the plan.
+
+## Choosing the interview procedure
+
+Do not run two interviews over the same decisions:
+
+- **`grilling`** — fast stress test in batched rounds: each round asks the
+  whole open frontier (numbered questions with recommendations), no artifacts.
+  Use it for ordinary brainstorming and decision stress-testing.
+- **`grill-with-docs`** (this skill) — one decision at a time, with a persisted
+  checkpoint and document-backed output. Use it when the discussion must be
+  recorded or must survive session boundaries.
+- **`spec-and-tasks`** — the standard planning skill for feature work: it
+  interviews in one batch and produces approved `spec.md` + `tasks.md`. When
+  the goal is a feature plan, use `spec-and-tasks` and let this skill
+  stress-test its draft before approval (it may then update that same draft);
+  do not produce a competing plan document.
+
+Document approval here is never implementation approval.
 
 ## Invariants
 
@@ -125,9 +143,11 @@ question.
 
 Typical choices are:
 
-- a feature plan under `.ai/features/<slug>/`;
 - an ADR under the project's existing ADR convention;
-- additions to the project's existing `.ai/context/GLOSSARY.md`.
+- additions to the project's existing `.ai/context/GLOSSARY.md`;
+- edits to the feature's draft `spec.md`/`tasks.md` when the stressed plan was
+  produced by `spec-and-tasks` (update those documents in place; do not create
+  a second plan file under `.ai/features/<slug>/`).
 
 The checkpoint itself remains the durable interview record. Do not create an
 ADR, glossary entry or plan merely because it was mentioned during the

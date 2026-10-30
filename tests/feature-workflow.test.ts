@@ -36,7 +36,7 @@ import { resolveProfile } from "../src/profiles.ts";
 import { mkdirSync, writeFileSync } from "node:fs";
 
 const PROFILES_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "profiles");
-const SKILLS = new Set(["karpathy-guidelines", "code-review", "feature", "nodejs-best-practices"]);
+const SKILLS = new Set(["karpathy-guidelines", "code-review", "spec-and-tasks", "nodejs-best-practices"]);
 
 const PLAN = "## TITLE\nAdd Invitations\n\n## PRD\nBuild the thing.\n\n## TASKS\n- T1 do it\n";
 

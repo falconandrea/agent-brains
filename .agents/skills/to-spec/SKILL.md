@@ -2,6 +2,24 @@
 name: to-spec
 description: "Turn the current conversation into a spec and publish it to the project issue tracker: no interview, just synthesis of what you've already discussed."
 disable-model-invocation: true
+license: MIT
+metadata:
+  management: local
+  provenance: adopted
+  origins:
+    - repository: https://github.com/mattpocock/skills
+      path: skills/engineering/to-spec/SKILL.md
+      commit: 5c89081d4bbeb3d039a42093653f90bb698d780e
+      license: MIT — full text in LICENSE in this folder
+  adopted_at: 2026-10-30
+  adaptation: >
+    The tracker convention reads from `.ai/agents/issue-tracker.md` (the
+    upstream default was replaced when the `.ai/` remap was applied). M1
+    (2026-10-30) adds the existing-spec guard: when `spec.md` already exists,
+    never overwrite it silently, and update an approved planning document in
+    its own contract instead of converting it to the template below.
+    Declared management: local so upstream updates can no longer silently
+    overwrite this guard.
 ---
 
 This skill takes the current conversation context and codebase understanding and produces a spec. Do NOT interview the user; just synthesize what you already know.
@@ -17,6 +35,17 @@ The issue tracker is described in `.ai/agents/issue-tracker.md`: issues and spec
 Check with the user that these seams match their expectations.
 
 3. Write the spec using the template below, then publish it as `.ai/features/<feature-slug>/spec.md` (per `.ai/agents/issue-tracker.md`).
+
+<existing-spec-guard>
+
+If `spec.md` already exists in the target directory, do NOT overwrite it silently:
+
+- Ask the user: update the existing spec in place, or publish this one separately (e.g. alongside it under a distinct name).
+- When updating in place, preserve the document's own structure and every approved acceptance criterion, decision and residual assumption it already records — refine and extend, never rewrite them away. If the existing spec follows the planning contract (`spec-and-tasks`: Goal/Behavior/Boundaries/Constraints/Edge cases/Decisions/Observable acceptance criteria/Residual assumptions), keep that contract; do not convert it to the template below.
+- The template below is for creating a NEW spec, not for rewriting an existing one.
+- An approved spec is not regenerated from a later conversation unless the user explicitly asks for that replacement.
+
+</existing-spec-guard>
 
 <spec-template>
 

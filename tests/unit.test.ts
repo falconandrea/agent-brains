@@ -530,7 +530,7 @@ const AVAILABLE_SKILLS = (() => {
     "code-review",
     "karpathy-guidelines",
     "verification-before-completion",
-    "feature",
+    "spec-and-tasks",
     "grilling",
     "grill-with-docs",
     "product-thinking",
@@ -559,10 +559,10 @@ test("each role gets only its categories: developer plans nothing, reviewer revi
   const rev = selectSkills(PROFILES_DIR, "nodejs", "reviewer", AVAILABLE_SKILLS);
   const plan = selectSkills(PROFILES_DIR, "nodejs", "planner", AVAILABLE_SKILLS);
 
-  assert.ok(!dev.skills.includes("feature"), "planning must not reach the developer");
+  assert.ok(!dev.skills.includes("spec-and-tasks"), "planning must not reach the developer");
   assert.ok(!dev.skills.includes("grilling"), "planning must not reach the developer");
   assert.ok(!dev.skills.includes("product-thinking"), "planning must not reach the developer");
-  assert.ok(!rev.skills.includes("feature"), "planning must not reach the reviewer");
+  assert.ok(!rev.skills.includes("spec-and-tasks"), "planning must not reach the reviewer");
   assert.ok(!plan.skills.includes("code-review"), "review must not reach the planner");
   assert.ok(!plan.skills.includes("simplify"), "cleanup belongs to the main session");
   assert.ok(rev.skills.includes("code-review"), "the reviewer judges code");
@@ -643,12 +643,12 @@ test("interactive workflow skills no longer reach any pipeline role", () => {
   // Synthetic profile so every skill under test is present regardless of the
   // real manifests: the routing TABLE is the thing under test.
   const dir = fixture();
-  const names = ["feature", "grilling", "grill-with-docs", "product-thinking", "to-spec", "prototype"];
+  const names = ["spec-and-tasks", "grilling", "grill-with-docs", "product-thinking", "to-spec", "prototype"];
   writeFileSync(join(dir, "routing.list"), names.join("\n") + "\n");
   const available = new Set(names);
   for (const role of ["planner", "developer", "reviewer", "tester", "security-reviewer"] as const) {
     const sel = selectSkills(dir, "routing", role, available);
-    for (const banned of ["feature", "grilling", "grill-with-docs"]) {
+    for (const banned of ["spec-and-tasks", "grilling", "grill-with-docs"]) {
       assert.ok(!sel.skills.includes(banned), `${banned} must not reach ${role}`);
     }
   }
@@ -656,7 +656,7 @@ test("interactive workflow skills no longer reach any pipeline role", () => {
 
 test("the planner keeps the non-interactive planning skills", () => {
   const dir = fixture();
-  const names = ["feature", "grilling", "grill-with-docs", "product-thinking", "to-spec", "prototype"];
+  const names = ["spec-and-tasks", "grilling", "grill-with-docs", "product-thinking", "to-spec", "prototype"];
   writeFileSync(join(dir, "routing.list"), names.join("\n") + "\n");
   const plan = selectSkills(dir, "routing", "planner", new Set(names));
   for (const kept of ["product-thinking", "to-spec", "prototype"]) {

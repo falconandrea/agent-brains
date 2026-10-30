@@ -10,7 +10,10 @@ Centralized repository for AI agent configurations, skills, and project template
 Planned cross-harness centralization and project-context alignment are tracked
 in the [adoption roadmap](docs/plans/pi-plugin-adoption-roadmap.md#cross-harness-workflow-migration-m)
 and its [detailed migration plan](docs/plans/cross-harness-workflow-migration.md).
-The migration is not implemented; the setup instructions below describe the current system.
+M1 (portable skill references, the `feature` → `spec-and-tasks` skill rename,
+planning/implementation/review boundaries) is implemented in this repository;
+global distribution and consumer migration have not started, so the setup
+instructions below describe the current system.
 
 ## Repository structure
 
@@ -120,7 +123,7 @@ one has an OpenCode pointer and a workflow link:
 |---|---|---|
 | `start` | `.opencode/agents/start.md` | `.agents/workflows/start.md` |
 | `setup` | `.opencode/agents/setup.md` | `.agents/workflows/setup.md` |
-| `feature` | `.opencode/agents/feature.md` | `.agents/workflows/feature.md` |
+| `spec-and-tasks` | `.opencode/agents/spec-and-tasks.md` | `.agents/workflows/spec-and-tasks.md` |
 | `laravel` | `.opencode/agents/laravel.md` | `.agents/workflows/laravel.md` |
 | `nextjs` | `.opencode/agents/nextjs.md` | `.agents/workflows/nextjs.md` |
 | `astro` | `.opencode/agents/astro.md` | `.agents/workflows/astro.md` |
@@ -128,18 +131,25 @@ one has an OpenCode pointer and a workflow link:
 
 | Tool | Syntax | Example |
 |---|---|---|
-| OpenCode | slash command | `/feature` |
-| Codex (CLI / IDE) | `$` mention or `/skills` | `$feature` |
+| OpenCode | slash command | `/spec-and-tasks` |
+| Codex (CLI / IDE) | `$` mention or `/skills` | `$spec-and-tasks` |
+| Pi | `/skill:spec-and-tasks` (documentary skill) — `/feature` remains the orchestrated runtime command | `$spec-and-tasks` / `/feature <idea>` |
 
-Profile membership: `start` / `feature` / `setup` / `solution-capture` are in
-`common.list` (every profile); `laravel` / `nextjs` / `astro` are in their own
-profile manifest.
+Profile membership: `start` / `spec-and-tasks` / `setup` / `solution-capture`
+are in `common.list` (every profile); `laravel` / `nextjs` / `astro` are in
+their own profile manifest. The documentary skill was renamed from `feature`
+to `spec-and-tasks` (M1): it now covers planning only — explore, clarify,
+produce an approved `spec.md` + `tasks.md`, hand off. The Pi `/feature`
+**command** (the orchestrated runtime workflow with its own planner,
+developer, verify and reviewer roles) is a separate mechanism and keeps its
+name, its `prd-<slug>.md` / `tasks-<slug>.md` documents and resume
+compatibility with historical runs.
 
-**Explicit-only activation.** In Codex, the invasive workflows (`feature`,
-`setup`, `laravel`, `nextjs`, `astro`) and the gated `solution-capture` workflow
-carry `agents/openai.yaml` with
+**Explicit-only activation.** In Codex, the invasive workflows
+(`spec-and-tasks`, `setup`, `laravel`, `nextjs`, `astro`) and the gated
+`solution-capture` workflow carry `agents/openai.yaml` with
 `allow_implicit_invocation: false`, so Codex will **not** auto-trigger them from a
-prompt — you must type `$feature` or `$solution-capture`. `start` keeps implicit
+prompt — you must type `$spec-and-tasks` or `$solution-capture`. `start` keeps implicit
 activation on (useful to auto-suggest when you ask "what's the status").
 
 Pi `/feature` filters skills by role: the `laravel`, `nextjs` and `astro`
@@ -163,7 +173,8 @@ How you update depends on the tool:
 - **`npx skills`** (mattpocock, anthropics, vercel, …) runs **here**, in this repo —
   it downloads from GitHub and needs no project context. It may only update
   skills still listed in `skills-lock.json`. A skill whose `SKILL.md` declares
-  `metadata.management: local` (including `grill-with-docs`, `research`, `tdd` and
+  `metadata.management: local` (including `grill-with-docs`, `research`,
+  `code-review`, `to-spec`, `tdd` and
   `verification-before-completion`) is
   locally authoritative — never update it through `npx skills`. Reviewed
   workflow, one skill at a time:
@@ -362,12 +373,44 @@ place it under `extra/skills/<name>/` instead. Do not add it to a profile or run
 
 ### Feature lifecycle (pre → during → post)
 
-2. **`feature`**: collaborative design with a HARD-GATE — no code until a PRD is presented and approved. Produces a PRD at `.ai/features/[name]/prd-*.md` and a TDD task list at `.ai/features/[name]/tasks-*.md`.
-   - optional: **`grill-with-docs`** to stress-test the PRD against the glossary/ADRs.
-3. **Framework agents** (`/laravel`, `/nextjs`, `/astro`): implement the task list task-by-task using **`tdd`** (red-green-refactor). Switch to a fresh chat and reference the task file path.
-   - optional: **`to-tickets`** to publish each task as a tracer-bullet issue on the tracker.
-   - optional: **`to-spec`** if a formal, shareable PRD is needed on the tracker.
-4. **Verification**: follow the project's `AGENTS.md` policy. Run the smallest
+Planning procedures — one job each, no duplicate interviews or approvals:
+
+- **`spec-and-tasks`**: the standard planning skill for non-trivial work —
+  repository exploration, one-batch clarification, approved
+  `.ai/features/<slug>/spec.md` + `tasks.md`, explicit handoff. It never
+  implements and never reviews; approval ends planning.
+- **`grilling`**: quick stress-test of a plan or decision in batched rounds;
+  no artifacts. Use it for ordinary brainstorming, not for producing documents.
+- **`grill-with-docs`**: documentation-backed stress test, one decision at a
+  time with a persisted checkpoint; produces only explicitly approved
+  documents (e.g. edits to the draft spec after stressing it). Optional
+  detour before `spec-and-tasks`' approval gate.
+- **`to-spec`** / **`to-tickets`**: publish to the configured tracker — a
+  conversation-derived spec (`to-spec`, no interview) or the approved tasks as
+  tracer-bullet tickets (`to-tickets`). The local documents stay the source of
+  truth. `to-spec` never silently overwrites an existing `spec.md`: an
+  already-approved planning document is updated in place only on explicit
+  request, preserving its own contract (criteria, decisions, assumptions).
+
+Lifecycle:
+
+1. **`setup`**: bootstrap a new project (see Project setup above).
+2. Plan with **`spec-and-tasks`** (above). Historical `prd-<slug>.md` /
+   `tasks-<slug>.md` documents (including everything the Pi `/feature` runtime
+   writes) remain valid inputs — never mass-rename them.
+3. **Implementation, in a fresh session/agent that consumes the approved
+   documents**: framework agents (`/laravel`, `/nextjs`, `/astro`) implement
+   the task list task-by-task using **`tdd`** (red-green-refactor where
+   execution is available); reference the spec/tasks **by path**, without
+   repeating the planning discovery. For generic stacks, start a fresh
+   implementation session, reference the approved documents by path and apply
+   `tdd` plus the project's stack skills.
+4. **Review, separate from implementation and from fixing**: `code-review` (or
+   the project's review procedure) takes the approved requirements, the task
+   list and the diff, judges the observable acceptance criteria and returns
+   verifiable findings; corrections happen only after the review comes back —
+   the reviewer never repairs the code itself.
+5. **Verification**: follow the project's `AGENTS.md` policy. Run the smallest
    proportional check by default; use `verification-before-completion` when the
    user explicitly asks for verification.
 
@@ -413,9 +456,10 @@ The frontend skills are split by **intent**, not by "frontend" in general. Trigg
 
 ### Anti-patterns
 
-- Going straight to a framework agent (`/laravel`, `/nextjs`, …) without a PRD/task list → use `/feature` first.
+- Going straight to a framework agent (`/laravel`, `/nextjs`, …) without an approved spec/task list → plan with `spec-and-tasks` first (small fixes exempt).
 - Skipping TDD on individual tasks → every task goes through `tdd`.
 - Letting a chat grow too long without `/handoff` → compact and resume fresh.
+- Re-running the planning discovery in the implementation session, or "reviewing" by silently fixing — review reports findings; fixing is a separate step.
 
 ## Notes
 

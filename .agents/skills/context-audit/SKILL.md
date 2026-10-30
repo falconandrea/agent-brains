@@ -65,10 +65,14 @@ operational instruction or link requires it.
 
 ### 2. Run the mechanical helper
 
-Run the bundled script for the deterministic part of the inventory:
+Run the bundled script for the deterministic part of the inventory. Resolve
+the path **relative to this skill's real directory**: resolve any symlink to
+this skill first (some harnesses load it through a workflow link that lives
+elsewhere), then take `scripts/context-audit.mjs` from the resolved directory.
+Do not assume the project contains a skills directory:
 
 ```bash
-node .agents/skills/context-audit/scripts/context-audit.mjs <project-root>
+node "<this-skill-real-dir>/scripts/context-audit.mjs" <project-root>
 ```
 
 It reports file inventory, line/byte counts, lesson-entry counts, progress

@@ -1,6 +1,6 @@
 # Piano di centralizzazione skills e workflow
 
-Data dell'inventario: 19 ottobre 2026. Riconciliazione: 22 ottobre 2026, rispetto a `cdf54f3`. Stato: piano da implementare.
+Data dell'inventario: 19 ottobre 2026. Riconciliazione: 22 ottobre 2026, rispetto a `cdf54f3`. Stato: M1 implementato in agent-brains (2026-10-30); prima review indipendente: 4 rilievi (P2), correzioni applicate lo stesso giorno, ri-approvazione richiesta prima di dichiarare M1 concluso. M2–M4 restano chiusi finché M1 non è approvato.
 
 Il piano è stato trasferito da `/Users/andreafalcon/dev/AI-WORKFLOW-MIGRATION.md` nel repository agent-brains. La [roadmap](pi-plugin-adoption-roadmap.md#cross-harness-workflow-migration-m) governa priorità e coordinamento con gli altri lavori; questo documento contiene la checklist dettagliata e lo stato per progetto. Non duplicare le checklist nella roadmap. I percorsi dei repository consumatori in questo documento sono relativi alla directory `dev`, non alla root di agent-brains.
 
@@ -60,42 +60,43 @@ Non iniziare con una rimozione di massa delle directory `.agents` o `.opencode`.
 
 ### A. Catalogo portabile
 
-- [ ] Inventariare skills, nomi dichiarati, licenze, provenienza, dipendenze, profili e metadati dei diversi harness.
-- [ ] Correggere i riferimenti tra skills: usare i percorsi delle skills scoperte dall'harness o una risoluzione documentata a partire dal catalogo; non presumere `.agents/skills` nel progetto corrente.
-- [ ] Distinguere esplicitamente percorsi relativi alla skill da percorsi relativi alla root del progetto.
-- [ ] Cercare riferimenti obsoleti in tutti i manifest, references, script, template, documenti operativi e test, inclusi `.agents/skills/designer.md` e `.agents/workflows`.
-- [ ] Aggiornare congiuntamente i test strutturali introdotti da `af37cf6`: sostituire le aspettative sul vecchio layout con le garanzie del nuovo sistema, senza eliminare la verifica di integrità dei workflow.
-- [ ] Verificare i nomi delle dipendenze e la presenza effettiva delle skills invocate.
-- [ ] Conservare `.ai/...` come percorsi del progetto su cui si lavora; verificare il comportamento quando l'harness parte da una sottocartella.
-- [ ] Preservare metadati di gestione locale, licenze e patch locali durante gli aggiornamenti upstream.
+- [ ] Inventariare skills, nomi dichiarati, licenze, provenienza, dipendenze, profili e metadati dei diversi harness. (L'inventario del 2026-10-19 e la revisione C5 del 2026-10-28 coprono catalogo e provenienza; i metadati per-harness restano input di M2.)
+- [x] Correggere i riferimenti tra skills: usare i percorsi delle skills scoperte dall'harness o una risoluzione documentata a partire dal catalogo; non presumere `.agents/skills` nel progetto corrente. (2026-10-30: `spec-and-tasks`, `laravel`, `nextjs`, `astro`, `context-audit` ora referenziano per nome e risolvono i file relativi alla skill stessa; guardato da `tests/repo.test.ts`.)
+- [x] Distinguere esplicitamente percorsi relativi alla skill da percorsi relativi alla root del progetto. (2026-10-30: sezione "Skill and path references" in `spec-and-tasks`; `.ai/...` resta relativo alla root del progetto lavorato.)
+- [x] Cercare riferimenti obsoleti in tutti i manifest, references, script, template, documenti operativi e test, inclusi `.agents/skills/designer.md` e `.agents/workflows`. (2026-10-30: sweep completo; i riferimenti rimasti sono meccanica di distribuzione o documenti storici. La costante `EXCLUDED_PATHS` in `context-audit.mjs` è un'esclusione di scansione, non un'istruzione.)
+- [x] Aggiornare congiuntamente i test strutturali introdotti da `af37cf6`: sostituire le aspettative sul vecchio layout con le garanzie del nuovo sistema, senza eliminare la verifica di integrità dei workflow. (2026-10-30: `tests/repo.test.ts` aggiunti — riferimenti sibling risolti, `name:` == directory, integrità dei link `.agents/workflows`; tabella README e profili invariati nei controlli.)
+- [x] Verificare i nomi delle dipendenze e la presenza effettiva delle skills invocate. (2026-10-30: test su profili→skill reali, skill richieste dal router, riferimenti sibling esistenti.)
+- [x] Conservare `.ai/...` come percorsi del progetto su cui si lavora. (2026-10-30: convenzione documentata nelle skill.)
+- [ ] Verificare il comportamento quando l'harness parte da una sottocartella. (Da fare: richiede sessioni reali su ciascun harness — M3/M4. La convenzione documentata non sostituisce questa verifica.)
+- [x] Preservare metadati di gestione locale, licenze e patch locali durante gli aggiornamenti upstream. (2026-10-30: nessun aggiornamento upstream eseguito; `code-review` adottato come `management: local` con provenienza e LICENSE MIT prima delle modifiche M1, rimosso da `skills-lock.json`; guardie test attive.)
 - [ ] Separare skills generiche da output generati per un progetto: verificare in particolare Laravel Boost, che oggi può scrivere attraverso i collegamenti nel catalogo comune. Contenuti dipendenti da pacchetti/versioni del singolo progetto non devono sovrascrivere automaticamente la fonte globale.
 
 ### B. Separare spec, implementazione e review
 
-- [ ] Rinominare la skill `feature` in `spec-and-tasks`: directory, `name`, descrizione, metadati UI, riferimenti, profili e adattatori. Non rinominare automaticamente il comando Pi `/feature`.
-- [ ] Limitare la skill a esplorazione del repository, brainstorming, decisioni, criteri di accettazione e produzione dei documenti.
-- [ ] Definire il contratto di `spec.md`: obiettivo, comportamento, confini, vincoli, casi limite, decisioni, criteri verificabili e assunzioni residue.
-- [ ] Preservare nella nuova skill documentale le indicazioni C2 su scenari osservabili e verifiche proporzionate; lasciare esecuzione e valutazione dei test ai rispettivi ruoli.
-- [ ] Definire il contratto di `tasks.md`: ID stabili, attività concrete, dipendenze, area/file interessati quando noti, verifiche e stato. Evitare pseudocodice vincolante e dettagli inventati.
-- [ ] Terminare con documenti approvati e handoff; nessuna implementazione avviata implicitamente dalla skill di pianificazione.
-- [ ] Leggere e armonizzare `grilling`, `grill-with-docs`, `to-spec` e `to-tickets`: evitare procedure concorrenti per gli stessi output.
-- [ ] Risolvere il conflitto attuale tra intervista a gruppi di domande di `grilling` e intervista a domanda singola/checkpoint di `grill-with-docs`. La seconda contiene anche una descrizione del comportamento della prima che non coincide con il contenuto attuale.
-- [ ] Scegliere e documentare quale procedura usare per brainstorming ordinario e stress test documentale; evitare interviste e approvazioni duplicate per la medesima decisione.
-- [ ] Non obbligare piccoli fix o manutenzioni a passare da una nuova spec.
-- [ ] Rivedere le skills di implementazione `laravel`, `nextjs`, `astro`: consumano documenti approvati e non ripetono l'intera discovery. Definire anche il percorso per stack generici.
-- [ ] Rivedere `code-review`: input spec/task/diff, verifica dei criteri, rilievi prioritizzati e distinzione tra review e correzione.
-- [ ] Conservare le indicazioni C2 già presenti nel reviewer Pi; trasferire eventuali parti pertinenti alla review condivisa senza introdurre un reviewer obbligatorio aggiuntivo.
-- [ ] Documentare passaggi manuali tra sessioni e possibilità di delega per harness, senza promettere automazione non implementata.
+- [x] Rinominare la skill `feature` in `spec-and-tasks`: directory, `name`, descrizione, metadati UI, riferimenti, profili e adattatori. Non rinominare automaticamente il comando Pi `/feature`. (2026-10-30: directory, SKILL.md, `agents/openai.yaml` invariato, symlink `.agents/workflows/`, puntatore `.opencode/agents/`, `common.list`, `skill-router.ts`, README, test.)
+- [x] Limitare la skill a esplorazione del repository, brainstorming, decisioni, criteri di accettazione e produzione dei documenti. (2026-10-30: SKILL.md riscritto planning-only, HARD-GATE contro codice implementativo, handoff esplicito finale.)
+- [x] Definire il contratto di `spec.md`: obiettivo, comportamento, confini, vincoli, casi limite, decisioni, criteri verificabili e assunzioni residue. (2026-10-30: nella skill e in `templates/.ai/features/_TEMPLATE.md`.)
+- [x] Preservare nella nuova skill documentale le indicazioni C2 su scenari osservabili e verifiche proporzionate; lasciare esecuzione e valutazione dei test ai rispettivi ruoli. (2026-10-30: criteri osservabili e verifiche proporzionate nel contratto spec/tasks; proprietà dell'esecuzione esplicita — developer Pi senza shell consegna l'esecuzione all'orchestratore.)
+- [x] Definire il contratto di `tasks.md`: ID stabili, attività concrete, dipendenze, area/file interessati quando noti, verifiche e stato. Evitare pseudocodice vincolante e dettagli inventati.
+- [x] Terminare con documenti approvati e handoff; nessuna implementazione avviata implicitamente dalla skill di pianificazione.
+- [x] Leggere e armonizzare `grilling`, `grill-with-docs`, `to-spec` e `to-tickets`: evitare procedure concorrenti per gli stessi output. (2026-10-30: ripartizione documentata in README e in `grill-with-docs`; nessuna skill eliminata o fusa; `grilling`/`to-tickets` restano lock-managed e intatte; `to-spec` adottata localmente al round di correzione per il guard sulla spec esistente.)
+- [x] Risolvere il conflitto attuale tra intervista a gruppi di domande di `grilling` e intervista a domanda singola/checkpoint di `grill-with-docs`. La seconda contiene anche una descrizione del comportamento della prima che non coincide con il contenuto attuale. (2026-10-30: `grill-with-docs` ora descrive `grilling` come intervista a round con frontier — comportamento attuale — e si distingue come variante checkpoint a domanda singola.)
+- [x] Scegliere e documentare quale procedura usare per brainstorming ordinario e stress test documentale; evitare interviste e approvazioni duplicate per la medesima decisione. (2026-10-30: `grilling` per stress test ordinario senza artefatti; `grill-with-docs` per stress test documentato; `spec-and-tasks` per la pianificazione delle feature; il test di `grill-with-docs` avviene solo prima del gate di approvazione.)
+- [x] Non obbligare piccoli fix o manutenzioni a passare da una nuova spec. (Fast path nella skill; template AGENTS aggiornato.)
+- [x] Rivedere le skills di implementazione `laravel`, `nextjs`, `astro`: consumano documenti approvati e non ripetono l'intera discovery. Definire anche il percorso per stack generici. (2026-10-30: Specification Detection riconosce `spec.md`+`tasks.md` e i nomi storici `prd-`/`tasks-`; percorso generico definito in README e handoff della skill.)
+- [x] Rivedere `code-review`: input spec/task/diff, verifica dei criteri, rilievi prioritizzati e distinzione tra review e correzione. (2026-10-30: sorgenti spec estese ai nuovi documenti, copertura dei task, criteri di accettazione, rilievi verificabili, sezione "review is not fixing".)
+- [x] Conservare le indicazioni C2 già presenti nel reviewer Pi; trasferire eventuali parti pertinenti alla review condivisa senza introdurre un reviewer obbligatorio aggiuntivo. (2026-10-30: prompt reviewer Pi invariato; le tre domande C2 trasferite in `code-review` come sezione condivisa.)
+- [x] Documentare passaggi manuali tra sessioni e possibilità di delega per harness, senza promettere automazione non implementata. (2026-10-30: handoff della skill e README descrivono sessioni fresche per implementazione e review; nessuna automazione promessa.)
 
 ### C. Compatibilità del motore Pi
 
-- [ ] Conservare `/feature`, `/flow`, `/stack` e la configurazione globale del pacchetto.
-- [ ] Verificare se planner, context router, skill router, replay/resume e log dipendono dal nome `feature` o dai nomi dei documenti. Non confondere il nome del workflow con quello della skill.
-- [ ] Aggiornare profili e policy dei ruoli per la rinomina della skill senza rimuovere accidentalmente istruzioni necessarie a planner/developer/reviewer.
-- [ ] Allineare il planner Pi ai contratti spec/task dove possibile; se produce ancora nomi storici, documentare e mantenere compatibilità prima di cambiare formato.
-- [ ] Garantire lettura di run interrotti e documenti esistenti; non rinominare in massa gli artefatti necessari al resume.
-- [ ] Verificare che il developer riceva documenti approvati e il reviewer riceva requisiti e diff, con verifiche e ruoli separati come previsto dal motore.
-- [ ] Preservare e verificare la politica dei verdetti incoerenti di C1 durante eventuali modifiche a workflow e review; non riscriverla come parte della rinomina.
+- [x] Conservare `/feature`, `/flow`, `/stack` e la configurazione globale del pacchetto. (2026-10-30: nessuna modifica a `extensions/pi-brain.ts`, `src/workflows/`, `src/run-launcher.ts`; suite 449/449.)
+- [x] Verificare se planner, context router, skill router, replay/resume e log dipendono dal nome `feature` o dai nomi dei documenti. Non confondere il nome del workflow con quello della skill. (2026-10-30: il workflow `/feature` e il marker `<!-- pi-brain:feature -->` sono del runtime e restano; solo il nome della skill è cambiato in `skill-router.ts`.)
+- [x] Aggiornare profili e policy dei ruoli per la rinomina della skill senza rimuovere accidentalmente istruzioni necessarie a planner/developer/reviewer. (2026-10-30: `common.list` e `skill-router.ts` rinominati; `full.list` copre via `@include`; policy dei ruoli invariate.)
+- [x] Allineare il planner Pi ai contratti spec/task dove possibile; se produce ancora nomi storici, documentare e mantenere compatibilità prima di cambiare formato. (2026-10-30: il planner continua a produrre `prd-<slug>.md`/`tasks-<slug>.md`; compatibilità documentata in README e nella skill; cambio formato rimandato, non è parte di M1.)
+- [x] Garantire lettura di run interrotti e documenti esistenti; non rinominare in massa gli artefatti necessari al resume. (2026-10-30: nessun artefatto rinominato; `tests/resume.test.ts` e `tests/feature-workflow.test.ts` passano.)
+- [x] Verificare che il developer riceva documenti approvati e il reviewer riceva requisiti e diff, con verifiche e ruoli separati come previsto dal motore. (2026-10-30: comportamento invariato, coperto dai test esistenti di `feature-workflow`; nessuna modifica al motore.)
+- [x] Preservare e verificare la politica dei verdetti incoerenti di C1 durante eventuali modifiche a workflow e review; non riscriverla come parte della rinomina. (2026-10-30: politica e test invariati.)
 
 ### D. Installazione globale e manutenzione
 
@@ -113,7 +114,7 @@ Non iniziare con una rimozione di massa delle directory `.agents` o `.opencode`.
 
 ### E. Template e scaffold
 
-- [ ] Aggiornare `templates/AGENTS.md`, `templates/.ai`, `scaffold.sh` e tracker locale secondo le convenzioni del piano.
+- [x] Aggiornare `templates/AGENTS.md`, `templates/.ai`, `scaffold.sh` e tracker locale secondo le convenzioni del piano. (2026-10-30, per la parte M1: direttiva `spec-and-tasks` in `templates/AGENTS.md`; `templates/.ai/features/_TEMPLATE.md` riscritto con i contratti `spec.md`+`tasks.md`. `scaffold.sh` invariato: `copy_if_missing` è già idempotente e conservativo.)
 - [ ] Non imporre la creazione di ogni documento di contesto in ogni progetto; distinguere nucleo minimo e documenti per area.
 - [ ] Rendere lo scaffold idempotente e conservativo: aggiungere solo file necessari e mancanti, senza sovrascrivere contenuti.
 - [ ] Garantire che regole UI non obblighino a leggere un `DESIGN_SYSTEM.md` inesistente o privo di contenuti.
@@ -216,6 +217,12 @@ Per altre sottocartelle e repository annidati non emersi nell'inventario, effett
 - [ ] Eseguire i test significativi del motore e degli script modificati, compreso `npm test` e `npm run typecheck` quando si modifica il codice Pi. Non avviare suite applicative complete per sole modifiche documentali prive di effetti eseguibili.
 - [ ] Nessun contenuto locale o di terze parti è stato perso; rollback dell'installazione globale documentato e verificato.
 
+> **Stato 2026-10-30 (M1):** nessuno dei criteri sopra è ancora verificato su
+> harness reali — richiedono l'installazione globale (M2/M3) o la migrazione
+> consumatori (M4). M1 ha reso il catalogo indipendente dai collegamenti
+> locali a livello di file e test strutturali; la verifica di discovery e
+> invocazione nelle sessioni reali resta aperta e non va data per acquisita.
+
 ## 9. Riferimenti
 
 - Codex: https://learn.chatgpt.com/docs/build-skills — scoperta globale in `~/.agents/skills`, collegamenti, invocazione e metadati.
@@ -231,3 +238,5 @@ Per altre sottocartelle e repository annidati non emersi nell'inventario, effett
 |---|---|---|---|---|
 | 2026-10-19 | Piano | Creato inventario e piano trasversale | Ispezione in lettura di strutture, configurazioni e skills rilevanti | Implementazione non iniziata; configurazioni harness non provate in sessione |
 | 2026-10-22 | Documentazione | Trasferito il piano nel repository e collegato alla roadmap; integrate le garanzie dei commit fino a cdf54f3 | Confronto dei commit e controllo dei collegamenti documentali | Solo documentazione; migrazione e configurazione del Mac non iniziate |
+| 2026-10-30 | M1 in agent-brains | Skill `feature` rinominata `spec-and-tasks` (planning-only, contratti `spec.md`/`tasks.md`, handoff finale); riferimenti tra skill portabili in `spec-and-tasks`/`laravel`/`nextjs`/`astro`/`context-audit`; `code-review` adottato localmente con input spec/task/diff e review≠fix; `grill-with-docs` riarmonizzato; profili, router, adattatori, template e README aggiornati; Pi `/feature`, `/flow`, resume e artefatti storici invariati | `npm test` 449/449 (4 nuovi test strutturali in `tests/repo.test.ts`), `npm run typecheck`, `git diff --check` | Solo file, non sessioni reali: discovery/invocazione su Codex/OpenCode/Pi NON verificate (M3/M4); consumo da sottocartella non provato; Laravel Boost separazione non affrontata; consumatori con symlink `feature` pendenti finché non si rilancia `setup.sh` (M4); diff non committato, in attesa di review |
+| 2026-10-30 | M1 — correzioni review round 1 | Review indipendente: 4 rilievi P2, tutti corretti. (1) `setup/SKILL.md` era tornato al vecchio riferimento `feature` per un revert accidentale durante i check — riapplicato con distinzione del comando Pi `/feature`. (2) `to-spec` adottata localmente (LICENSE + provenienza upstream `5c89081d`, rimossa dal lock) con guard: nessuna sovrascrittura silenziosa di `spec.md` esistente; documento approvato aggiornato in place solo su richiesta, preservando il proprio contratto. (3) Prescritta ovunque la risoluzione del symlink alla directory reale della skill prima dei percorsi relativi (le skill sono caricate anche via link `.agents/workflows/<name>.md`); nuovo test che verifica la risoluzione dalla directory reale. (4) Voce "sottocartella" separata: convenzione documentata [x], comportamento verificato [ ]. | `npm test` 450/450, `npm run typecheck`, `git diff --check`; verifica manuale del reviewer confermata (workflow link → destinazione inesistente risolvendo dal percorso del link; corretta dalla directory fisica) | M1 resta in attesa di ri-approvazione; nessuna verifica su harness reali |
