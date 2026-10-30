@@ -1,157 +1,156 @@
-# JEV model router e Pi-Bifrost
+# JEV model router and Pi-Bifrost
 
 Date: 2026-10-11
 Mode: research
 
-## Esito
+## Assessment
 
-Sì: l’idea generale era già stata analizzata nel report del 2026-09-21 sul
-free-form Pi e sull’entry router. Il thread Reddit e Pi-Bifrost aggiungono però
-un’implementazione concreta e due vincoli da tenere espliciti: il pin della
-sessione principale preserva meglio la locality della cache, mentre i child che
-caricano Bifrost possono perdere un assegnamento esplicito di modello. Bifrost
-può essere un adapter di classificazione/routing, ma non sostituisce la policy
-locale dei workflow.
+Yes: the general idea was already assessed in the 2026-09-21 report on
+free-form Pi and entry routing. The Reddit thread and Pi-Bifrost add a concrete
+implementation and two constraints to keep explicit: pinning the main session
+better preserves cache locality, while children that load Bifrost can lose an
+explicit model assignment. Bifrost can be a classification/routing adapter,
+but it does not replace local workflow policy.
 
-## Cosa propone il thread
+## What the thread proposes
 
-L’autore propone `prompt → JEV → modello`, usando JEV per scegliere fra opzioni
-limitate e codice deterministico per applicare la scelta. Nei commenti emerge
-il workflow più interessante per questo repository: modello principale fissato
-con `/bifrost pin`, child/subagent instradati separatamente, e un eventuale
-router più costoso solo per i casi ambigui. La preoccupazione corretta è la
-prompt cache: cambiare provider/modello a ogni turno può frammentare la cache.
-Queste sono affermazioni della discussione, non una verifica indipendente
+The author proposes `prompt → JEV → model`, using JEV to choose among limited
+options and deterministic code to apply the choice. The comments suggest the
+workflow most relevant to this repository: pin the main model with `/bifrost pin`, route children/subagents separately, and use a more expensive router only
+for ambiguous cases. The valid concern is the prompt cache: changing
+provider/model every turn can fragment the cache. These are claims from the
+discussion, not an independent verification
 ([thread Reddit](https://www.reddit.com/r/PiCodingAgent/comments/1wlczow/i_think_i_found_the_best_use_case_for_jev_and_pi/)).
 
-## Fatti upstream verificati
+## Verified upstream facts
 
-### Bifrost separa classificazione e selezione
+### Bifrost separates classification from selection
 
-Pi-Bifrost è un’estensione Pi, non un proxy: configura tier come `quick`,
-`general` e `frontier`, filtra i modelli non sani e applica una strategia
-(`first`, prezzo, contesto o `random`) al pool del tier. Un classificatore sceglie
-solo il tier; non vede il pool provider e non sceglie il modello esatto. La
-pipeline sorgente esegue, in ordine, override/regole dirette, cache locale,
-classificatore diretto, classificatore prompt, regole regex e default
+Pi-Bifrost is a Pi extension, not a proxy: it configures tiers such as `quick`,
+`general`, and `frontier`, filters unhealthy models, and applies a strategy
+(`first`, price, context, or `random`) to the tier pool. A classifier chooses
+only the tier; it does not see the provider pool or select the exact model. The
+source pipeline runs, in order, overrides/direct rules, local cache, direct
+classifier, prompt classifier, regex rules, and default
 ([README](https://github.com/iamaamir/pi-bifrost/blob/main/README.md),
 [configuration](https://github.com/iamaamir/pi-bifrost/blob/main/docs/guide/configuration.md),
 [classification-pipeline.ts](https://github.com/iamaamir/pi-bifrost/blob/main/classification-pipeline.ts)).
 
-Questo conferma la formula architetturale che avevamo già usato: il giudizio
-probabilistico propone una categoria, mentre Bifrost e il codice locale
-mantengono eleggibilità, policy e scelta eseguibile.
+This confirms the architectural formula already used: probabilistic judgment
+proposes a category, while Bifrost and local code preserve eligibility, policy,
+and executable selection.
 
-### Cosa riceve JEV e cosa restituisce
+### What JEV receives and returns
 
-Il backend TypeSafe/Jev riceve il prompt corrente e i criteri dei tier; restituisce
-un tier configurato, le probabilità per i tier e una confidence. Non riceve per
-default cronologia, file, output dei tool o pool dei modelli. È un endpoint
-TypeSafe hosted con credenziale; l’implementazione upstream non espone un
-trasporto locale o un base URL OpenRouter generico
+The TypeSafe/Jev backend receives the current prompt and tier criteria; it
+returns a configured tier, probabilities for the tiers, and a confidence
+score. By default, it does not receive history, files, tool output, or the
+model pool. It is a hosted TypeSafe endpoint that requires a credential; the
+upstream implementation does not expose local transport or a generic OpenRouter
+base URL
 ([classifier guide](https://github.com/iamaamir/pi-bifrost/blob/main/docs/guide/classifiers.md),
 [typesafe-classifier.ts](https://github.com/iamaamir/pi-bifrost/blob/main/typesafe-classifier.ts)).
 
-La confidence misura quanto la distribuzione è concentrata, non la correttezza.
-La documentazione Bifrost riporta una valutazione esplorativa con giudizi stabili
-su prompt chiari ma anche casi di under-routing ad alta confidence per task
-meccanicamente piccoli e ad alta conseguenza. È un limite materiale per una
-policy `quick` basata soltanto sulla confidence; i criteri vanno versionati e
-provati su casi rappresentativi
-([classifier guide, sezione TypeSafe/Jev](https://github.com/iamaamir/pi-bifrost/blob/main/docs/guide/classifiers.md)).
+Confidence measures how concentrated the distribution is, not correctness.
+Bifrost documentation reports an exploratory evaluation with stable judgments
+on clear prompts, but also high-confidence under-routing for mechanically small
+tasks with high consequences. This is a material limitation for a `quick`
+policy based only on confidence; criteria should be versioned and tested on
+representative cases
+([classifier guide, TypeSafe/Jev section](https://github.com/iamaamir/pi-bifrost/blob/main/docs/guide/classifiers.md)).
 
-### Fallback, timeout e circuit breaker
+### Fallback, timeouts, and circuit breaker
 
-La configurazione prevede una soglia di confidence, tipicamente `0.8`, e un
-fallback `prompt` o `regex`. Una risposta sotto soglia diventa un “miss” e la
-pipeline può proseguire verso il classificatore prompt, le regole e il default.
-Credenziale mancante, timeout, errore di rete, risposta invalida, rate limit o
-circuito aperto seguono lo stesso percorso di fallback; il trasporto diretto
-usa retry limitati e non ripete automaticamente il prompt utente su un altro
-modello. I circuiti di affidabilità persistono e servono a evitare nuovi
-tentativi sul backend/modello guasto
+The configuration sets a confidence threshold, typically `0.8`, and a
+`prompt` or `regex` fallback. A response below the threshold becomes a “miss,”
+and the pipeline can continue to the prompt classifier, rules, and default.
+Missing credentials, timeouts, network errors, invalid responses, rate limits,
+or an open circuit follow the same fallback path; direct transport uses limited
+retries and does not automatically resend the user prompt to another model.
+Reliability circuits persist to prevent further attempts against the failed
+backend/model
 ([classifiers guide](https://github.com/iamaamir/pi-bifrost/blob/main/docs/guide/classifiers.md),
 [typesafe-classifier.ts](https://github.com/iamaamir/pi-bifrost/blob/main/typesafe-classifier.ts),
 [reliability guide](https://github.com/iamaamir/pi-bifrost/blob/main/docs/guide/reliability-and-cache.md)).
 
-### Cache: due meccanismi diversi
+### Cache: two different mechanisms
 
-Bifrost ha una cache locale della classificazione: conserva termini normalizzati
-del prompt e tier scelto per evitare di riclassificare. Non conserva risposte e
-non mostra hit, durata o risparmio della provider prompt cache; i termini
-normalizzati possono comunque essere sensibili.
+Bifrost has a local classification cache: it stores normalized prompt terms and
+the selected tier to avoid reclassification. It does not store responses or
+report hits, duration, or provider prompt-cache savings; normalized terms may
+still be sensitive.
 
-La prompt/prefix cache del provider resta gestita da Pi e dal provider. Ogni
-coppia provider/modello ha una storia indipendente: nel percorso `A → B → A`, A
-può riusare il prefisso ancora valido della propria richiesta precedente, mentre
-il contenuto aggiunto durante B è una coda non cached. Bifrost non garantisce hit,
-risparmio o minore latenza. Il pin è quindi la scelta giusta per una lunga
-sessione iterativa dove la continuità conta più del task-fit
+The provider prompt/prefix cache remains managed by Pi and the provider. Each
+provider/model pair has an independent history: in the `A → B → A` sequence, A
+can reuse the still-valid prefix from its previous request, while content
+added during B is an uncached tail. Bifrost does not guarantee cache hits,
+savings, or lower latency. Pinning is therefore the right choice for a long,
+iterative session where continuity matters more than task fit
 ([prompt-caching guide](https://github.com/iamaamir/pi-bifrost/blob/main/docs/guide/prompt-caching.md)).
 
-Il pattern documentato è precisamente quello del thread: `main session → pinned
-model`, child non assegnati → routing proprio. Il pin è locale alla sessione e
-non si propaga ai child. Un child che carica Bifrost parte unpinned e Bifrost
-non sa distinguere il suo modello iniziale da un assegnamento esplicito per ruolo;
-se il modello del child deve restare fisso, quel child non deve caricare Bifrost
+The documented pattern is exactly the one from the thread: `main session → pinned
+model`, unassigned children → their own routing. The pin is local to the session
+and does not propagate to children. A child that loads Bifrost starts unpinned,
+and Bifrost cannot distinguish its initial model from an explicit role
+assignment; if a child model must stay fixed, that child must not load Bifrost
 ([routing controls](https://github.com/iamaamir/pi-bifrost/blob/main/docs/guide/routing-controls.md),
 [prompt-caching guide](https://github.com/iamaamir/pi-bifrost/blob/main/docs/guide/prompt-caching.md)).
 
-## Evidenza locale
+## Local evidence
 
-L’analisi precedente aveva già proposto un `EntryDecision` con intent, scope,
-rischio, ambiguità e confidence, policy deterministica, shadow mode, evaluation
-set e un `runQuickWorkflow`; Jev era indicato come adapter opzionale dopo aver
-definito policy e casi di prova
+The previous analysis had already proposed an `EntryDecision` with intent,
+scope, risk, ambiguity, and confidence, along with deterministic policy, shadow
+mode, an evaluation set, and a `runQuickWorkflow`; Jev was suggested as an
+optional adapter after defining policy and test cases
 ([dynamic harness assessment](./dynamic-harness-and-seo-integration-assessment.md)).
 
-Il report più recente aveva inoltre separato entry routing e semantic discovery
-degli strumenti: autorizzazione e policy devono restare locali, mentre un
-classificatore può solo classificare o ordinare candidati
-([web chat package assessment](./web-chat-pi-packages-assessment.md)). Non ho
-trovato codice o dipendenza JEV/Bifrost nel repository; il lockfile usa Pi
-`@earendil-works/pi-coding-agent` `0.84.2`
+The more recent report also separated entry routing from semantic discovery of
+tools: authorization and policy must remain local, while a classifier can only
+classify or rank candidates ([web chat package assessment](./web-chat-pi-packages-assessment.md)).
+I found no JEV/Bifrost code or dependency in the repository; the lockfile uses
+Pi `@earendil-works/pi-coding-agent` `0.84.2`
 ([package-lock.json](../../package-lock.json#L544)).
 
-Questo crea un vincolo di compatibilità immediato: Bifrost `0.4.5` dichiara Pi
-minimo `1.0.1`, quindi non è un trial installabile sull’attuale Pi senza una
-tranche separata di upgrade e spike
+This creates an immediate compatibility constraint: Bifrost `0.4.5` declares
+Pi `1.0.1` as its minimum, so it cannot be installed for a trial on the current
+Pi without a separate upgrade and spike
 ([pi-bifrost package.json](https://raw.githubusercontent.com/iamaamir/pi-bifrost/main/package.json)).
 
-Inoltre `PiAgentRunner` crea child session isolate, applica skill e tool
-allowlist e risolve esplicitamente provider/modello per ruolo. Un provider
-assegnato deve rimanere quel provider per conservare, fra l’altro, l’indipendenza
-della review; il resource loader viene costruito per ogni child
-([pi-agent-runner.ts](../../src/pi/pi-agent-runner.ts#L167)). Un’estensione Bifrost
-caricata indiscriminatamente nei child potrebbe interferire con quel contratto,
-quindi il pattern “main pinned, child routed” è applicabile solo ai child senza
-assegnamento rigido, oppure richiede esclusione esplicita di Bifrost.
+In addition, `PiAgentRunner` creates isolated child sessions, applies skill and
+tool allowlists, and explicitly resolves provider/model by role. An assigned
+provider must remain assigned to preserve, among other things, review
+independence; the resource loader is built for each child
+([pi-agent-runner.ts](../../src/pi/pi-agent-runner.ts#L167)). A Bifrost extension
+loaded indiscriminately in children could interfere with that contract, so the
+“main pinned, child routed” pattern applies only to children without a fixed
+assignment, or requires explicitly excluding Bifrost.
 
-## Alternative citate nel thread
+## Alternatives mentioned in the thread
 
-[Von](https://github.com/wfzyx/von) è un decision model locale Apache-2.0,
-compatibile con il wire protocol `/v1/systemone`, ma il README avverte che è
-English-only e che fuori distribuzione la confidence può degradare. [Laya](https://github.com/NandhaKishorM/laya)
-è un decision engine Apache-2.0 dichiarato multilingue con router fra checkpoint.
-Sono alternative interessanti per una futura interfaccia `ClassifierBackend`, ma
-Bifrost oggi punta all’endpoint TypeSafe fisso: nessuno dei due è un cambio di
-configurazione già supportato dal package.
+[Von](https://github.com/wfzyx/von) is a local Apache-2.0 decision model,
+compatible with the `/v1/systemone` wire protocol, but its README warns that it
+is English-only and confidence may degrade outside its distribution. [Laya](https://github.com/NandhaKishorM/laya)
+is an Apache-2.0 decision engine described as multilingual, with a router
+between checkpoints. These are interesting alternatives for a future
+`ClassifierBackend` interface, but Bifrost currently targets the fixed TypeSafe
+endpoint: neither is a configuration change the package already supports.
 
-## Implicazioni per il progetto
+## Project implications
 
-1. Il nuovo materiale rafforza, non cambia, la direzione già scelta: definire
-   prima policy, evaluation set e fallback; poi provare JEV in shadow mode come
-   adapter opzionale.
-2. Non usare JEV per autorizzare workflow, tool, scritture, approvazioni o azioni
-   distruttive. Un tier `quick` deve essere bloccato dalla policy locale quando
-   compaiono rischio, conseguenza o ambiguità, anche con confidence alta.
-3. Il primo esperimento utile deve misurare separatamente main session e child:
-   modello effettivo, cache-read/cache-write se disponibili, latenza, costo,
-   route scelta, under-routing e fallback. Il solo risparmio di token non basta.
-4. Per il caso concreto dei nostri child, mantenere Bifrost fuori dai ruoli con
-   modello provider-specifico (in particolare review indipendente) finché non
-   esiste un’integrazione che preservi assegnamenti espliciti.
-5. Considerare l’upgrade Pi come prerequisito tecnico indipendente, non come
-   parte nascosta di un’eventuale prova JEV.
+1. The new material reinforces, but does not change, the chosen direction:
+   define policy, an evaluation set, and fallback first; then try JEV in shadow
+   mode as an optional adapter.
+2. Do not use JEV to authorize workflows, tools, writes, approvals, or
+   destructive actions. Local policy must block the `quick` tier when risk,
+   consequence, or ambiguity is present, even with high confidence.
+3. The first useful experiment should measure the main session and children
+   separately: effective model, cache reads/writes if available, latency, cost,
+   selected route, under-routing, and fallback. Token savings alone are not
+   enough.
+4. For our specific child roles, keep Bifrost out of roles with a
+   provider-specific model (especially independent review) until an integration
+   preserves explicit assignments.
+5. Treat the Pi upgrade as an independent technical prerequisite, not as a
+   hidden part of any JEV trial.
 
-Nessuna installazione, modifica al codice o trial live è stata eseguita.
+No installation, code change, or live trial was performed.

@@ -1,33 +1,34 @@
-# Valutazione di Cloudflare `security-audit`
+# Assessment of Cloudflare `security-audit`
 
 Mode: assessment  
-Data: 2026-10-22  
-Checkout locale: `f065e5a970554b91fd86427a7e123c2fbc4caa7b`  
+Date: 2026-10-22
+Local checkout: `f065e5a970554b91fd86427a7e123c2fbc4caa7b`
 Snapshot upstream: `c1c8a8c1471069fb0e188eeaff69b8e8db6564a8` (2026-09-14)
 
-## Stato aggiornato dopo la revisione locale (2026-10-22)
+## Status updated after local review (2026-10-22)
 
-Riconfrontato con `af37cf6`: U9–U11 (puntatori workflow, avviso OpenCode e
-ignore runtime Pi) sono completati e committati. Non cambiano le evidenze
-tecniche pertinenti qui. Le fonti upstream restano agli snapshot originali:
-questa revisione non è una nuova verifica upstream o un nuovo benchmark.
-La [roadmap concordata](../plans/pi-plugin-adoption-roadmap.md#agreed-consolidation-sequence-2026-10-22)
-possiede ordine e stato del lavoro futuro; questa ricerca conserva le evidenze.
+Reconciled against `af37cf6`: U9–U11 (workflow pointers, OpenCode warning, and
+Pi runtime ignore rules) are complete and committed. They do not change the
+technical evidence relevant here. Upstream sources remain at the original
+snapshots: this review is not a new upstream check or benchmark. The [agreed
+roadmap](../plans/pi-plugin-adoption-roadmap.md#agreed-consolidation-sequence-2026-10-22)
+owns the order and status of future work; this research preserves the evidence.
 
-Decisione: C3 migliora soltanto `security-reviewer` con i principi applicabili
-oggi. L'utente esclude sandbox OS e installazione completa: nessun bundle extra,
-ledger o orchestratore Cloudflare in coda. Le parti che richiedono nuova
-infrastruttura si scartano. La revisione indipendente è riservata agli
-approfondimenti espliciti, non aggiunge una fase automatica a `/feature`.
+Decision: C3 improves only `security-reviewer` with principles that are
+applicable today. The user excludes an OS sandbox and full installation: no
+additional bundle, ledger, or Cloudflare orchestrator is queued. Parts that
+require new infrastructure are discarded. Independent review is reserved for
+explicit deep dives; it does not add an automatic `/feature` phase.
 
-## Perimetro e fonti
+## Scope and sources
 
-Ho letto il checkout upstream al commit fissato, le skill locali `security-reviewer` e
-`code-review`, il router e i profili rilevanti. Non ho eseguito un audit di sicurezza
-del repository, installato la skill o modificato skill, codice o configurazione. Ho
-eseguito solo i 65 test dei due validator upstream: tutti passano.
+I read the pinned upstream checkout, the local `security-reviewer` and
+`code-review` skills, the router, and relevant profiles. I did not audit this
+repository's security, install the skill, or modify skills, code, or
+configuration. I ran only the 65 tests for the two upstream validators; all
+passed.
 
-Fonti primarie: [README upstream](https://github.com/cloudflare/security-audit-skill/blob/c1c8a8c1471069fb0e188eeaff69b8e8db6564a8/README.md),
+Primary sources: [upstream README](https://github.com/cloudflare/security-audit-skill/blob/c1c8a8c1471069fb0e188eeaff69b8e8db6564a8/README.md),
 [SKILL.md](https://github.com/cloudflare/security-audit-skill/blob/c1c8a8c1471069fb0e188eeaff69b8e8db6564a8/skills/security-audit/SKILL.md),
 [RECONNAISSANCE.md](https://github.com/cloudflare/security-audit-skill/blob/c1c8a8c1471069fb0e188eeaff69b8e8db6564a8/skills/security-audit/RECONNAISSANCE.md),
 [HUNTING.md](https://github.com/cloudflare/security-audit-skill/blob/c1c8a8c1471069fb0e188eeaff69b8e8db6564a8/skills/security-audit/HUNTING.md),
@@ -35,111 +36,119 @@ Fonti primarie: [README upstream](https://github.com/cloudflare/security-audit-s
 [schema](https://github.com/cloudflare/security-audit-skill/blob/c1c8a8c1471069fb0e188eeaff69b8e8db6564a8/skills/security-audit/report-schema.json),
 [validator tests](https://github.com/cloudflare/security-audit-skill/blob/c1c8a8c1471069fb0e188eeaff69b8e8db6564a8/skills/security-audit/validate-findings.test.cjs).
 
-## Fatti upstream
+## Upstream facts
 
-Cloudflare non offre una checklist corta: il bundle contiene 22 file e circa 5.400
-righe. Il workflow completo ha sei fasi: ricognizione, hunting guidato dalla
-copertura, validazione avversariale dei candidati, output JSON validato, verifica
-indipendente dei record e report derivati. Distingue inoltre una modalità guidance
-da una full audit, quindi il caricamento della skill non dovrebbe avviare da solo
-un audit o creare file.
+Cloudflare does not provide a short checklist: the bundle contains 22 files and
+about 5,400 lines. The full workflow has six phases: reconnaissance,
+coverage-guided hunting, adversarial validation of candidates, validated JSON
+output, independent record verification, and derived reports. It also
+distinguishes guidance mode from full audit mode, so loading the skill should
+not start an audit or create files by itself.
 
-Il modello di evidenza richiede un principale a bassa fiducia, il controllo atteso,
-il confine attraversato, la risorsa colpita e un risultato osservato. I record sono
-`confirmed`, `needs_validation` o `rejected`; solo il primo riceve severità. La
-severità deve seguire l'impatto dimostrato, mentre un fatto di deployment mancante
-resta un blocco esplicito.
+The evidence model requires a low-trust principal, the expected control, the
+boundary crossed, the affected resource, and an observed result. Records are
+`confirmed`, `needs_validation`, or `rejected`; only the first receives a
+severity. Severity must follow demonstrated impact, while a missing deployment
+fact remains an explicit blocker.
 
-La copertura è persistita in `coverage-ledger.json`, con profili `quick`, `standard`
-e `deep`, budget di invocazioni, riuso prudente dei run precedenti e critic separati.
-Il verificatore deve essere fresco rispetto all'hunter; una sostituzione materiale
-richiede un'altra verifica. `findings.json` e il ledger hanno validator zero-dependency
-con limiti di input e controlli di struttura.
+Coverage is persisted in `coverage-ledger.json`, with `quick`, `standard`, and
+`deep` profiles, invocation budgets, cautious reuse of previous runs, and
+separate critics. The verifier must be fresh relative to the hunter; a material
+replacement requires another verification. `findings.json` and the ledger have
+zero-dependency validators with input limits and structural checks.
 
-Le istruzioni impongono un sandbox OS-enforced per eseguire codice del target:
-rete esterna disabilitata, ambiente allowlist, target read-only, scratch isolato e
-limiti di risorse. La promozione degli artefatti è parent-only e descritta con
-controlli no-follow, link count, dimensioni e race safety. Senza queste garanzie il
-risultato deve rimanere `needs_validation`; questo è un contratto operativo, non una
-garanzia che ogni host lo applichi.
+The instructions require an OS-enforced sandbox for running target code:
+external network disabled, allowlisted environment, read-only target, isolated
+scratch space, and resource limits. Artifact promotion is parent-only and
+described with no-follow, link-count, size, and race-safety checks. Without
+these guarantees the result must remain `needs_validation`; this is an
+operational contract, not a guarantee that every host enforces it.
 
-Il bundle include lenti specialistiche per web/auth, client, cloud, supply chain,
-LLM, protocolli, disponibilità, isolamento dati e IPC. La licenza è MIT, ma il
+The bundle includes specialist lenses for web/auth, clients, cloud, supply
+chain, LLMs, protocols, availability, data isolation, and IPC. The license is
+MIT, but the
 [LICENSE upstream](https://github.com/cloudflare/security-audit-skill/blob/c1c8a8c1471069fb0e188eeaff69b8e8db6564a8/LICENSE)
-richiede di conservare copyright e notice nelle copie o porzioni sostanziali.
+requires preserving copyright and notice in copies or substantial portions.
 
-## Evidenza locale
+## Local evidence
 
-La [skill locale `security-reviewer`](../../.agents/skills/security-reviewer/SKILL.md)
-copre già scope e autorizzazione, SAST, dependency e secret scanning, review manuale,
-proof of concept limitato, classificazione CVSS, posizione file/linea, remediation e
-report con executive summary e findings table. È quindi una base reale per la parte
-generica dell'upstream.
+The [local `security-reviewer` skill](../../.agents/skills/security-reviewer/SKILL.md)
+already covers scope and authorization, SAST, dependency and secret scanning,
+manual review, limited proof of concept, CVSS classification, file/line
+location, remediation, and reports with an executive summary and findings
+table. It is therefore a real basis for the generic parts of the upstream
+skill.
 
-La [skill `code-review`](../../.agents/skills/code-review/SKILL.md) ha un perimetro
-diverso: confronta un diff con un punto fisso su due assi indipendenti, Standards e
-Spec. L'indipendenza dei due reviewer è affine, ma non sostituisce un audit del
-repository, una coverage ledger o la validazione di una vulnerabilità.
+The [`code-review` skill](../../.agents/skills/code-review/SKILL.md) has a
+different scope: it compares a diff against a fixed point on two independent
+axes, Standards and Spec. The independence of its two reviewers is related, but
+it does not replace a repository audit, a coverage ledger, or vulnerability
+validation.
 
-`security-reviewer` è presente nei profili `full` e `nodejs-ai-backend`
+`security-reviewer` appears in the `full` and `nodejs-ai-backend` profiles
 ([full.list](../../profiles/full.list), [nodejs-ai-backend.list](../../profiles/nodejs-ai-backend.list));
-il router lo classifica come `review` e il suo ruolo accetta `review`, `craft` e
-`stack` ([skill-router.ts](../../src/skill-router.ts)). La configurazione predefinita
-lo lascia però disabilitato ([config.ts](../../src/config.ts)). Le occorrenze locali
-del ruolo sono router, configurazione e test: il workflow feature corrente chiama
-planner, developer e reviewer, senza una fase security-reviewer automatica.
+the router classifies it as `review`, and its role accepts `review`, `craft`, and
+`stack` ([skill-router.ts](../../src/skill-router.ts)). The default configuration
+still leaves it disabled ([config.ts](../../src/config.ts)). Local occurrences
+of the role are in the router, configuration, and tests: the current feature
+workflow calls planner, developer, and reviewer, without an automatic
+security-reviewer phase.
 
-L'inventario verificato dal parent non mostra `security-audit` nel catalogo locale o
-globale, in `skills-lock.json` o nello script di installazione. L'assenza dal lock
-significa anche che l'updater non ne governa la provenienza o gli aggiornamenti.
-Per skill manuali e tool-specifiche il repository prescrive invece `extra/skills/`
+The inventory checked by the parent does not show `security-audit` in the local
+or global catalog, in `skills-lock.json`, or in the installation script. Its
+absence from the lock also means the updater does not manage its provenance or
+updates. For manual and tool-specific skills, the repository instead prescribes
+`extra/skills/`
 ([README](../../README.md#L327)).
 
-## Confronto e compatibilità
+## Comparison and compatibility
 
-| Dimensione | Cloudflare | Locale | Conseguenza |
+| Dimension | Cloudflare | Local | Consequence |
 |---|---|---|---|
-| Intento | Audit completo o guidance focalizzata | Review security generica | Sovrapposizione sui casi ordinari, valore nuovo sui run completi |
-| Evidenza | Boundary/result, tre verdict, severità separata dalla certezza | Finding con CVSS e remediation | Importare il gate e `needs_validation` riduce overclaim |
-| Copertura | Ledger, critic, run additivi e budget | Nessun ledger di audit | Nuova capacità, ma anche stato persistente da progettare |
-| Indipendenza | Hunter, verifier e final record verifier distinti | `code-review` separa Standards/Spec | Riutilizzare il principio, senza fondere i due perimetri |
-| Esecuzione | Sandbox OS-enforced e artefatti isolati | Bash ammesso nella skill locale; nessun contratto equivalente | Incompatibilità operativa da risolvere prima della full audit |
-| Distribuzione | Skills CLI, 22 file, companion docs e script | Store centrale, profili e router propri | Installazione diretta bypasserebbe il lifecycle locale |
+| Intent | Full audit or focused guidance | Generic security review | Overlap on ordinary cases; new value on full runs |
+| Evidence | Boundary/result, three verdicts, severity separate from confidence | Findings with CVSS and remediation | Importing the gate and `needs_validation` reduces overclaiming |
+| Coverage | Ledger, critics, additive runs, and budget | No audit ledger | New capability, but also persistent state to design |
+| Independence | Separate hunter, verifier, and final-record verifier | `code-review` separates Standards/Spec | Reuse the principle without merging the two scopes |
+| Execution | OS-enforced sandbox and isolated artifacts | Bash allowed in the local skill; no equivalent contract | Operational incompatibility to resolve before a full audit |
+| Distribution | CLI skills, 22 files, companion docs, and scripts | Central store, profiles, and its own router | Direct installation would bypass the local lifecycle |
 
-Il valore aggiuntivo è metodologico e verificabile: confine concreto, severità solo
-dopo evidenza, blocchi nominati, verifica indipendente, ledger e schema macchina.
-SAST, secret scanning, OWASP/CWE, CVSS e reportistica di base sono invece già coperti
-dalla skill locale. Il bundle non va quindi trattato come una sostituzione completa
-o come un'estensione di `code-review`.
+The additional value is methodological and verifiable: a concrete boundary,
+severity only after evidence, named blockers, independent verification, a
+ledger, and a machine-readable schema. SAST, secret scanning, OWASP/CWE, CVSS,
+and basic reporting are already covered by the local skill. The bundle should
+therefore not be treated as a full replacement or an extension of `code-review`.
 
-## Costi, rischi e gestione upstream
+## Costs, risks, and upstream maintenance
 
-Importare tutto aggiungerebbe 22 file, migliaia di righe di prompt e due validator da
-manutenere, oltre a un orchestratore di hunter/verifier, run directory esterne,
-ledger, budget e promozione sicura. Il codice locale espone un `AgentRunner` per
-chiamata e un ruolo security disabilitato; non c'è evidenza di un sandbox descriptor
-aware né di una pipeline che possieda i file condivisi richiesti dall'upstream.
+Importing everything would add 22 files, thousands of prompt lines, and two
+validators to maintain, as well as a hunter/verifier orchestrator, external run
+directories, a ledger, budgets, and safe promotion. The local code exposes an
+`AgentRunner` per call and has a disabled security role; there is no evidence
+of a sandbox-aware descriptor or a pipeline that owns the shared files required
+upstream.
 
-Aggiungere semplicemente `security-audit` a un profilo sarebbe ambiguo: gli skill
-sconosciuti al router ricadono su `craft`, quindi finirebbero potenzialmente in più
-ruoli. Una full audit richiede invece un ingresso esplicito e il solo ruolo security,
-con output fuori dal target e capacità di delega/isolamento dichiarate.
+Simply adding `security-audit` to a profile would be ambiguous: skills unknown to
+the router fall back to `craft`, so it could end up in multiple roles. A full
+audit instead requires an explicit entrypoint and the security role alone, with
+output outside the target and stated delegation/isolation capabilities.
 
-La strada scelta è adattare selettivamente il metodo dentro `security-reviewer`,
-senza installazione globale o bundle manuale aggiuntivo. Occorre mantenere il notice MIT,
-registrare commit e provenienza e fissare un controllo upstream dedicato: oggi il
-repository non lo aggiorna tramite lockfile.
+The chosen path is to selectively adapt the method within `security-reviewer`,
+without global installation or an additional manual bundle. Preserve the MIT
+notice, record the commit and provenance, and establish a dedicated upstream
+check: the repository does not currently update it through a lockfile.
 
-## Decisione
+## Decision
 
-**Verdict: selectively import.** Conservare `security-reviewer` come entrypoint per
-le review ordinarie e recuperare da Cloudflare, in un cambiamento futuro separato,
-questi elementi: boundary/result gate, `needs_validation` senza severità, calibrazione
-impact/likelihood, schema minimo dei finding, verifica indipendente e hardening notes.
-Non importare automaticamente companion, coverage ledger, six-phase orchestration
-o promozione di artefatti. Il sandbox OS è escluso dal lavoro concordato.
+**Verdict: selectively import.** Keep `security-reviewer` as the entrypoint for
+ordinary reviews and recover these Cloudflare elements in a separate future
+change: boundary/result gate, `needs_validation` without severity,
+impact/likelihood calibration, a minimal findings schema, independent
+verification, and hardening notes. Do not automatically import companion
+files, the coverage ledger, six-phase orchestration, or artifact promotion. The
+OS sandbox is excluded from the agreed work.
 
-Il pilot dovrebbe misurare su un audit locale reale finding unici, duplicati, blocchi
-di validazione, token/invocazioni e tempo; va considerato positivo solo se aggiunge
-evidenza o coverage senza moltiplicare report generici. L'integrazione completa non è in coda; richiederebbe una futura nuova decisione
-dell'utente, non il semplice avanzamento di questa proposta.
+The pilot should measure unique findings, duplicates, validation blockers,
+tokens/invocations, and time on a real local audit; count it as positive only
+if it adds evidence or coverage without multiplying generic reports. Full
+integration is not queued; it would require a future user decision, not merely
+advancing this proposal.

@@ -56,6 +56,12 @@ instructions below describe the current system.
 └── unlink.sh               # Remove symlinks
 ```
 
+## Documentation language
+
+Write repository-authored documentation and maintenance comments in English.
+Preserve verbatim user input, captured output, test fixtures, and language
+examples when their original language is part of the evidence or behavior.
+
 ## Quick Start
 
 ### 1. New project — full setup

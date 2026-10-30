@@ -12,11 +12,11 @@
   the pilot without waiting technically for M1. No implementation, tool
   installation or new runtime contract started; full video claims unverified.
 
-- **Next: M1 re-approval, then M2 (global distribution)** — M1 (portable
-  skills and planning/implementation/review boundaries) is implemented in
-  agent-brains, left uncommitted for review; review round 1 returned four P2
-  findings, all corrected 2026-10-30 (see Done). M1 is not closed until the
-  corrected diff is re-approved; M2 starts only after that. Per-item status
+- **Next: M2 (global distribution)** — M1 (portable skills and
+  planning/implementation/review boundaries) was re-reviewed after correction
+  of four P2 findings, approved by the user, and committed as `6567873` on
+  2026-10-30. M1 is complete within agent-brains; live-harness verification
+  and consumer migration remain open for M3/M4. Per-item status
   and limits live in the
   [migration plan](../../docs/plans/cross-harness-workflow-migration.md).
   C5 is closed as a bounded assessment; no broad efficacy or savings claim.
@@ -101,6 +101,22 @@
   `changes_requested` policy option B is implemented (U15).
 
 ## Done
+
+- 2026-10-30 **M1 approved and committed** as `6567873` after the independent
+  re-review confirmed the four P2 corrections and the user authorized the
+  commit. Verification: 450/450 tests, typecheck and diff checks passed.
+  M2 is next; this closes the repository implementation only, without
+  claiming live-harness discovery, global installation or consumer migration.
+  Earlier same-day entries below preserve the implementation/review history.
+
+- 2026-10-30 English-language consistency pass: translated repository-authored
+  Italian prose in the migration plan, architecture audit, and four research
+  notes; documented the English-language convention in the README. Preserved
+  verbatim evaluation evidence, fixtures, user inputs, and intentional runtime
+  markers. Removed the fixed Italian label from the ask-user recommendation
+  display to preserve language-neutral chrome. Verification: full test suite
+  450/450, typecheck clean, and `git diff --check` clean. No live harness checks were performed
+  as part of this documentation-language pass.
 
 - 2026-10-30 **M1 implemented in agent-brains** (portable skills and
   planning/implementation/review boundaries; uncommitted, left for independent

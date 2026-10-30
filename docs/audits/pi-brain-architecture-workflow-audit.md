@@ -1,323 +1,318 @@
-# Audit architetturale e del workflow di pi-brain
+# pi-brain architecture and workflow audit
 
-**Data:** 2026-09-21  
+**Date:** 2026-09-21
 **Repository:** `falconandrea/agent-brains`  
-**Branch analizzato:** `pi-brain`  
-**Tipo:** audit read-only dell'implementazione, dei contratti e della documentazione
+**Branch analyzed:** `pi-brain`
+**Type:** read-only audit of the implementation, contracts, and documentation
 
 ## 1. Executive summary
 
-Il harness è già maturo e coerente con l'architettura desiderata: il modello
-svolge il lavoro fuzzy, mentre transizioni, limiti, freeze della spec, verifica
-e principali proprietà di sicurezza sono governati dal codice.
+The harness is already mature and consistent with the intended architecture: the
+model handles fuzzy work, while code governs transitions, limits, spec freezing,
+verification, and the main security properties.
 
-Le modifiche a maggior valore sono:
+The highest-value changes are:
 
-1. Aggiungere un comando canonico `npm run check` e una CI che esegua
-   esattamente quel comando.
-2. Aggiungere un gate umano post-review molto ristretto per modifiche ad alto
-   rischio o con evidenza incompleta, senza introdurre un nuovo agente.
-3. Eliminare le contraddizioni tra task ID `U*` e `T*`, e aggiornare
-   documentazione evidentemente obsoleta.
-4. Estendere `lessons-gardener` con una classificazione `PROMOTE`, solo
-   propositiva e sempre approvata dall'utente.
+1. Add a canonical `npm run check` command and CI that runs exactly that command.
+2. Add a narrow post-review human gate for high-risk changes or incomplete
+   evidence, without introducing a new agent.
+3. Resolve contradictions between `U*` and `T*` task IDs, and update
+   documentation that is clearly outdated.
+4. Extend `lessons-gardener` with a `PROMOTE` classification that only makes
+   suggestions and always requires user approval.
 
-Non è consigliata una riscrittura, un motore di policy generico, un
-security-reviewer obbligatorio o una nuova infrastruttura di knowledge
-management.
+A rewrite, a generic policy engine, a mandatory security reviewer, or new
+knowledge-management infrastructure is not recommended.
 
-L'audit è stato eseguito sul working tree locale `pi-brain` a `763387a`, un
-commit avanti rispetto a `origin/pi-brain`. Erano presenti modifiche locali
-preesistenti, ma nessun file centrale del workflow risultava modificato. Non
-sono stati eseguiti test o comandi mutanti durante l'audit.
+The audit was performed on the local `pi-brain` working tree at `763387a`, one
+commit ahead of `origin/pi-brain`. Pre-existing local changes were present, but
+no central workflow files appeared modified. No tests or mutating commands were
+run during the audit.
 
 ## 2. Findings
 
-### F1 — Manca un comando canonico di salute del repository e manca la CI
+### F1 — No canonical repository health command or CI
 
 - **Status:** `missing`
-- **Evidenza:** `package.json` espone soltanto `test` e `typecheck`.
-  `.pi/pi-brain.json` e `docs/pi-brain/README.md` duplicano manualmente i due
-  comandi. Non risultano workflow GitHub Actions o altra CI tracciata.
-- **Perché conta:** oggi “repository sano” significa ricordarsi due comandi.
-  Documentazione, configurazione del workflow e futura CI possono divergere.
-- **Modifica minima:** aggiungere:
+- **Evidence:** `package.json` exposes only `test` and `typecheck`.
+  `.pi/pi-brain.json` and `docs/pi-brain/README.md` manually duplicate the two
+  commands. No GitHub Actions workflows or other tracked CI are present.
+- **Why it matters:** “healthy repository” currently means remembering two
+  commands. Documentation, workflow configuration, and future CI can diverge.
+- **Smallest change:** add:
   - `check: "npm run typecheck && npm test"` in `package.json`;
-  - CI con Node 24, `npm ci`, `npm run check`;
-  - `.pi/pi-brain.json` con `verify: ["npm run check"]`;
-  - README che presenti `npm run check` come comando canonico.
-- **Cosa deve controllare la CI:** soltanto typecheck e test. Non esiste un
-  linter configurato, non c'è build e non emerge valore nell'aggiungerli
-  soltanto per riempire la pipeline.
-- **Rapporto con `src/verify.ts`:** nessun conflitto. `resolveVerifyCommands`
-  deve continuare a risolvere test/typecheck per i repository generici. Solo
-  questo repository dovrebbe configurare esplicitamente `npm run check`.
-- **File coinvolti:** `package.json`, `.pi/pi-brain.json`,
-  `docs/pi-brain/README.md`, nuovo `.github/workflows/ci.yml`.
-- **Rischi:** CI più lenta di un controllo mirato locale; download dei peer
-  dependency. Non giustifica introdurre caching o matrix multi-versione
-  inizialmente.
+  - CI with Node 24, `npm ci`, and `npm run check`;
+  - `.pi/pi-brain.json` with `verify: ["npm run check"]`;
+  - a README that presents `npm run check` as the canonical command.
+- **What CI should check:** only typecheck and tests. No linter is configured,
+  there is no build, and adding them just to fill the pipeline offers no clear
+  value.
+- **Relationship to `src/verify.ts`:** no conflict. `resolveVerifyCommands`
+  should continue resolving test/typecheck for generic repositories. Only this
+  repository should explicitly configure `npm run check`.
+- **Files involved:** `package.json`, `.pi/pi-brain.json`,
+  `docs/pi-brain/README.md`, and a new `.github/workflows/ci.yml`.
+- **Risks:** CI is slower than a focused local check and must download peer
+  dependencies. This does not initially justify caching or a multi-version
+  matrix.
 
-### F2 — I gate umani basati sul rischio sono solo parzialmente coperti
-
-- **Status:** `partial`
-- **Evidenza già robusta:**
-  - i submodule non osservabili causano `needs_human` prima del reviewer;
-  - modifiche a ignore rules sono rilevate;
-  - spec alterata dopo l'approvazione causa escalation;
-  - non esiste auto-commit e il developer non ha shell;
-  - il reviewer è strutturato e indipendente.
-- **Gap reale:** un reviewer può restituire `approved` e il workflow può
-  completare anche quando il diff modifica migration, dipendenze, CI/CD,
-  infrastruttura, auth o pagamenti. Le ignore rules sono ancora più
-  problematiche: il reviewer viene avvisato, ma alcuni nuovi file potrebbero
-  essere diventati invisibili proprio a causa della modifica.
-- **Valutazione delle alternative:**
-  - **Changed paths:** miglior segnale deterministico disponibile, ma
-    sufficiente solo per superfici convenzionali o configurate.
-  - **Classificazione task/spec:** utile come contesto, non abbastanza
-    affidabile per un gate deterministico perché prodotta dal planner.
-  - **Categorie stack-aware:** ragionevoli per migration e manifest, ma
-    rischiano di crescere rapidamente.
-  - **Metadata del reviewer:** non soddisfa il requisito di indipendenza
-    dall'opinione del reviewer.
-  - **Configurazione esplicita:** miglior meccanismo per cartelle specifiche
-    del progetto, come auth e pagamenti.
-  - **Nessun nuovo gate:** difendibile grazie al no-auto-commit, ma lascia che
-    `completed` comunichi un livello di autonomia e sicurezza eccessivo.
-- **Modifica minima consigliata:**
-  1. rendere immediatamente `needs_human` una modifica alle ignore rules,
-     perché l'evidenza può essere incompleta;
-  2. dopo un review verde, valutare una piccola lista built-in di superfici ad
-     alta precisione: manifest/lockfile, migration, CI workflow,
-     `.gitmodules`, IaC;
-  3. permettere una lista configurabile di path sensibili per auth, pagamenti
-     o convenzioni locali;
-  4. se scatta, conservare il review ma terminare come `needs_human` con le
-     categorie/path rilevate.
-- **File coinvolti:** `src/workflows/feature.ts`, `src/config.ts`, test in
-  `tests/feature-workflow.test.ts`; eventualmente un piccolo helper puro, ma
-  non un nuovo sottosistema.
-- **Rischi:** falsi positivi e manutenzione dei pattern. Per questo vanno
-  evitate classificazione semantica generica e keyword matching sul testo.
-
-### F3 — La promozione delle lesson avviene già, ma solo implicitamente
+### F2 — Risk-based human gates are only partially covered
 
 - **Status:** `partial`
-- **Evidenza:** un incidente reale in cui il developer ha creato commit è
-  documentato in `docs/pi-brain/IDEAS.md`. Successivamente il divieto è
-  diventato una allowlist meccanica senza shell in
-  `src/workflows/feature.ts`, coperta anche da test. Questo è già il ciclo
-  “incidente → lesson → guardrail”, ma non viene nominato come tale.
-- **Gap:** `lessons-gardener` conosce solo `KEEP`, `COMPRESS`, `MERGE`, `DROP`.
-  Non può distinguere una lesson che dovrebbe diventare test, invariant,
-  direttiva o ADR.
-- **Modifica minima:** aggiungere `PROMOTE` alla classificazione del gardener:
-  - deve indicare il target consigliato: test, invariant, AGENTS, ADR o skill;
-  - non deve implementarlo automaticamente;
-  - la lesson resta finché il guardrail non esiste;
-  - dopo promozione verificata può essere rimossa o ridotta a contesto
-    residuo.
-- **Automazione:** solo suggerita dall'agente; applicazione sempre approvata
-  dall'utente. Nessuna workflow phase aggiuntiva.
-- **Contenimento della crescita:** mantenere l'attuale admission rule, soglia
-  di circa 50 entry, formato monoriga e pruning. `PROMOTE` non deve significare
-  “copia anche in AGENTS.md”.
-- **File coinvolti:** `.agents/skills/lessons-gardener/SKILL.md`,
-  eventualmente `templates/.ai/memory/lessons.md`.
-- **Rischi:** promuovere troppo presto incidenti una tantum. Il criterio
-  dovrebbe essere “ricorrente oppure grave e meccanicamente prevenibile”, non
-  semplicemente “importante”.
+- **Evidence already in place:**
+  - unobservable submodules cause `needs_human` before review;
+  - changes to ignore rules are detected;
+  - a spec changed after approval triggers escalation;
+  - there is no auto-commit, and the developer has no shell;
+  - the reviewer is structured and independent.
+- **Real gap:** a reviewer can return `approved` and the workflow can complete
+  even when the diff changes migrations, dependencies, CI/CD, infrastructure,
+  authentication, or payments. Ignore rules are more problematic: the reviewer
+  is notified, but some new files may have become invisible because of the
+  change itself.
+- **Alternatives considered:**
+- **Changed paths:** the best deterministic signal available, but sufficient
+  only for conventional or configured surfaces.
+- **Task/spec classification:** useful context, but not reliable enough for a
+  deterministic gate because the planner produces it.
+- **Stack-aware categories:** reasonable for migrations and manifests, but
+  could grow quickly.
+- **Reviewer metadata:** does not satisfy the requirement for independence
+  from the reviewer's own opinion.
+- **Explicit configuration:** the best mechanism for project-specific folders,
+  such as authentication and payments.
+- **No new gate:** defensible because there is no auto-commit, but it lets
+  `completed` communicate too much autonomy and safety.
+- **Recommended smallest change:**
+  1. immediately make changes to ignore rules end in `needs_human`, because
+     evidence may be incomplete;
+  2. after a passing review, consider a small built-in list of high-precision
+     surfaces: manifests/lockfiles, migrations, CI workflows, `.gitmodules`,
+     and IaC;
+  3. allow a configurable list of sensitive paths for authentication, payments,
+     or local conventions;
+  4. if triggered, retain the review but end as `needs_human` with the detected
+     categories/paths.
+- **Files involved:** `src/workflows/feature.ts`, `src/config.ts`, tests in
+  `tests/feature-workflow.test.ts`, and possibly a small pure helper, but not a
+  new subsystem.
+- **Risks:** false positives and pattern maintenance. Avoid generic semantic
+  classification and keyword matching against text for this reason.
 
-### F4 — Il contratto degli ID task è contraddittorio
+### F3 — Lessons are already promoted, but only implicitly
+
+- **Status:** `partial`
+- **Evidence:** a real incident in which the developer created a commit is
+  documented in `docs/pi-brain/IDEAS.md`. The prohibition later became a
+  mechanical no-shell allowlist in `src/workflows/feature.ts`, also covered by
+  tests. This is already the “incident → lesson → guardrail” cycle, but it is
+  not named as such.
+- **Gap:** `lessons-gardener` knows only `KEEP`, `COMPRESS`, `MERGE`, and
+  `DROP`. It cannot identify a lesson that should become a test, invariant,
+  directive, or ADR.
+- **Smallest change:** add `PROMOTE` to the gardener's classification:
+  - identify the recommended target: test, invariant, AGENTS, ADR, or skill;
+  - never implement it automatically;
+  - keep the lesson until the guardrail exists;
+  - after verified promotion, allow it to be removed or reduced to residual
+    context.
+- **Automation:** suggested by the agent only; application always requires
+  user approval. No additional workflow phase.
+- **Growth control:** keep the current admission rule, threshold of about 50
+  entries, one-line format, and pruning. `PROMOTE` must not mean “also copy it
+  into AGENTS.md.”
+- **Files involved:** `.agents/skills/lessons-gardener/SKILL.md`,
+  and possibly `templates/.ai/memory/lessons.md`.
+- **Risks:** promoting one-off incidents too early. The criterion should be
+  “recurring or severe and mechanically preventable,” not merely “important.”
+
+### F4 — The task ID contract is contradictory
 
 - **Status:** `missing`
-- **Evidenza:** il planner Pi richiede `T1`, `T2` in
-  `src/workflows/feature-prompts.ts`, e il parser accetta deterministicamente
-  soltanto `T\d+` in `src/workflows/feature.ts`. La feature reale usa
-  `T1…T8`. La skill standalone richiede invece `U1`, `U2`. Anche `SPEC.md`
-  conserva esempi `U*`.
-- **Perché conta:** gli artifact `.ai/features` sono condivisi tra modalità
-  manuale e Pi. Un task file valido per la skill può essere rifiutato dal
-  workflow.
-- **Modifica minima:** standardizzare su `T*`, perché è già il contratto
-  eseguibile e testato. Aggiornare skill ed esempi; non ampliare il parser per
-  accettare due formati.
-- **Fonte autorevole:** parser e test per la sintassi; prompt e skill devono
-  documentare quel contratto.
-- **File coinvolti:** `.agents/skills/feature/SKILL.md`,
-  `docs/pi-brain/SPEC.md`, eventuali esempi.
-- **Rischi:** vecchi task file con `U*` non saranno retrocompatibili, ma già
-  oggi non sono accettati dal planner contract Pi.
+- **Evidence:** the Pi planner requires `T1`, `T2` in
+  `src/workflows/feature-prompts.ts`, and the parser deterministically accepts
+  only `T\d+` in `src/workflows/feature.ts`. The real feature uses `T1…T8`.
+  The standalone skill instead requires `U1`, `U2`. `SPEC.md` also retains
+  `U*` examples.
+- **Why it matters:** `.ai/features` artifacts are shared between manual and Pi
+  modes. A task file valid for the skill may be rejected by the workflow.
+- **Smallest change:** standardize on `T*`, which is already the executable,
+  tested contract. Update skills and examples; do not expand the parser to
+  accept two formats.
+- **Source of truth:** parser and tests for syntax; prompts and skills must
+  document that contract.
+- **Files involved:** `.agents/skills/feature/SKILL.md`,
+  `docs/pi-brain/SPEC.md`, and any examples.
+- **Risks:** old task files with `U*` will not be backward-compatible, but they
+  are already rejected by the Pi planner contract.
 
-### F5 — Alcuna documentazione operativa è verificabilmente obsoleta
+### F5 — Some operational documentation is demonstrably outdated
 
 - **Status:** `partial`
-- **Evidenza:**
-  - `ARCHITECTURE.md` dice che developer → verify → reviewer non è mai stato
-    eseguito, mentre il README documenta run complete;
-  - `ARCHITECTURE.md` dice che resume è ancora mancante; il modulo resume e il
-    README lo documentano come implementato;
-  - `src/pi/pi-agent-runner.ts` dice “nothing here has executed”, contraddetto
-    dai run reali documentati;
-  - il README rimanda a `ROLE_POLICIES`, ma l'implementazione usa
+- **Evidence:**
+  - `ARCHITECTURE.md` says developer → verify → reviewer has never been
+    executed, while the README documents complete runs;
+  - `ARCHITECTURE.md` says resume is still missing; the resume module and the
+    README document it as implemented;
+  - `src/pi/pi-agent-runner.ts` says “nothing here has executed”, contradicted
+    by the documented real runs;
+  - the README refers to `ROLE_POLICIES`, but the implementation uses
     `ROLE_CATEGORIES`.
-- **Perché conta:** le “known gaps” guidano decisioni architetturali; se
-  obsolete possono provocare lavoro duplicato.
-- **Modifica minima:** aggiornare soltanto le affermazioni contraddette.
-  Etichettare `SPEC.md` come design storico/iniziale, non come stato corrente.
-- **Fonte autorevole:** codice e test per lo stato implementativo;
-  `ARCHITECTURE.md` per decisioni; README per uso corrente; `SPEC.md` per
-  intenti e storia.
-- **File coinvolti:** `docs/pi-brain/ARCHITECTURE.md`,
+- **Why it matters:** “known gaps” guide architectural decisions; if outdated,
+  they can cause duplicate work.
+- **Smallest change:** update only claims that are contradicted. Label
+  `SPEC.md` as historical/initial design, not current status.
+- **Source of truth:** code and tests for implementation status;
+  `ARCHITECTURE.md` for decisions; README for current usage; `SPEC.md` for
+  intent and history.
+- **Files involved:** `docs/pi-brain/ARCHITECTURE.md`,
   `docs/pi-brain/README.md`, `docs/pi-brain/SPEC.md`,
   `src/pi/pi-agent-runner.ts`.
-- **Rischi:** nessuno tecnico; il rischio è trasformare nuovamente la
-  documentazione in un changelog. Va mantenuta sintetica.
+- **Risks:** none technical; the risk is turning the documentation into a
+  changelog again. Keep it concise.
 
-### F6 — Il repository contiene una direttiva scoped incompatibile con il proprio stack
+### F6 — The repository contains a scoped directive incompatible with its stack
 
 - **Status:** `missing`
-- **Evidenza:** `.agents/AGENTS.md` impone Pint, PHPStan e
-  `php artisan boost:update`, ma questo branch è un package Node/TypeScript e
-  non contiene il relativo stack Laravel.
-- **Perché conta:** un agente che modifica skill sotto `.agents/` può ricevere
-  istruzioni non eseguibili o aggiornare file di memoria inesistenti.
-- **Modifica minima:** sostituire quel file con direttive realmente scoped alla
-  manutenzione delle skill, oppure eliminarlo se non ha più una funzione.
-- **Fonte autorevole:** un eventuale root `AGENTS.md` per policy di repository;
-  `.agents/AGENTS.md` soltanto per regole specifiche dell'albero skill.
-- **File coinvolti:** `.agents/AGENTS.md`.
-- **Rischi:** verificare prima se il file serve ancora al percorso
-  `main`/OpenCode; non va cancellato alla cieca.
+- **Evidence:** `.agents/AGENTS.md` requires Pint, PHPStan, and
+  `php artisan boost:update`, but this branch is a Node/TypeScript package and
+  does not contain the corresponding Laravel stack.
+- **Why it matters:** an agent editing skills under `.agents/` may receive
+  instructions it cannot execute or update nonexistent memory files.
+- **Smallest change:** replace that file with directives genuinely scoped to
+  skill maintenance, or remove it if it no longer serves a purpose.
+- **Source of truth:** a root `AGENTS.md`, if present, for repository policy;
+  `.agents/AGENTS.md` only for rules specific to the skills tree.
+- **Files involved:** `.agents/AGENTS.md`.
+- **Risks:** first check whether the file is still used on `main`/OpenCode; do
+  not delete it blindly.
 
-### F7 — Il lifecycle delle lesson contiene una piccola contraddizione di ammissione
+### F7 — The lesson lifecycle has a small admission-rule contradiction
 
 - **Status:** `partial`
-- **Evidenza:** la feature skill dice di aggiungere una lesson per qualsiasi
-  bug, pattern o gotcha. Il template esclude invece typo, one-off e problemi
-  già catturati dal tooling.
-- **Perché conta:** la regola più permissiva alimenta esattamente la crescita
-  che il gardener deve poi ripulire.
-- **Modifica minima:** far deferire la feature skill all'admission rule del
-  template: solo informazione non ovvia, project-specific, riutilizzabile e
-  non già codificata.
-- **Fonte autorevole:** `templates/.ai/memory/lessons.md` per admission e
-  formato; gardener per manutenzione.
-- **File coinvolti:** `.agents/skills/feature/SKILL.md`, forse correzione degli
-  esempi nel template.
-- **Rischi:** criteri troppo severi potrebbero perdere contesto utile; in
-  dubbio si può mantenere la lesson fino al prossimo gardening.
+- **Evidence:** the feature skill says to add a lesson for any
+  bug, pattern, or gotcha. The template instead excludes typos, one-off issues,
+  and problems already caught by tooling.
+- **Why it matters:** the more permissive rule fuels exactly the growth the
+  gardener must later prune.
+- **Smallest change:** make the feature skill defer to the template's admission
+  rule: only non-obvious, project-specific, reusable information that is not
+  already encoded.
+- **Source of truth:** `templates/.ai/memory/lessons.md` for admission and
+  format; the gardener for maintenance.
+- **Files involved:** `.agents/skills/feature/SKILL.md`, perhaps with an update
+  to the template examples.
+- **Risks:** criteria that are too strict could lose useful context; when
+  uncertain, a lesson can stay until the next gardening pass.
 
-### F8 — Le invariant fondamentali sono già molto più robuste del solo prompt
+### F8 — Core invariants are already much stronger than prompts alone
 
 - **Status:** `already covered`
-- **Evidenza:**
-  - planner read-only tramite allowlist;
-  - approvazione umana obbligatoria e freeze hash;
-  - struttura planner validata prima della scrittura;
-  - developer senza shell;
-  - verifica prima del reviewer e retry separati;
-  - reviewer forzatamente read-only anche se la config chiede il contrario;
-  - risultato reviewer validato;
-  - blocking issue prevale su un verdict `approved`, limite round e
-    no-progress;
-  - submodule non osservabile → escalation.
-- **Perché conta:** queste protezioni non vanno sostituite con prompt più
-  lunghi o nuovi agenti.
-- **Modifica consigliata:** nessuna, salvo mantenere i test.
-- **Rischi di cambiarle:** aumento di token, dipendenza da disciplina del
-  modello e perdita della fail-safe behavior.
+- **Evidence:**
+  - planner is read-only through an allowlist;
+  - human approval is required and the spec is hash-frozen;
+  - planner output structure is validated before writing;
+  - developer has no shell;
+  - verification runs before review, with separate retries;
+  - reviewer is forced to be read-only even if configuration says otherwise;
+  - reviewer result is validated;
+  - blocking issues override an `approved` verdict, with round limits and
+    no-progress detection;
+  - unobservable submodule → escalation.
+- **Why it matters:** these protections should not be replaced by longer
+  prompts or new agents.
+- **Recommended change:** none, apart from keeping the tests.
+- **Risks of changing them:** more tokens, dependence on model discipline, and
+  loss of fail-safe behavior.
 
-### Classificazione delle principali regole prompt-only
+### Classification of the main prompt-only rules
 
-1. **Già meccanicamente enforced:** read-only planner/reviewer, no shell
-   developer, spec freeze, schema planner/reviewer, ordine
-   verify-before-review, retry/round bounds, no-progress, submodule gate,
-   one-writer lock, no auto-commit del workflow.
-2. **Prompt-only ma accettabile:** mantenere il cambiamento focalizzato,
-   seguire pattern esistenti, lingua, granularità semantica dei task, quando
-   una domanda è davvero materiale, severità appropriata delle issue, massimo
-   due batch del planner.
-3. **Da trasformare in invariant:** ignore-rule change quando rende incompleta
-   l'evidenza; gate finale per superfici sensibili ad alta precisione o
-   configurate. Non è utile rendere invariant ogni dettaglio Markdown o il
-   `submit_review` esattamente una volta: la validazione del risultato finale
-   offre già il beneficio sostanziale.
+1. **Already mechanically enforced:** read-only planner/reviewer, developer
+   without shell, spec freeze, planner/reviewer schemas, verify-before-review
+   order, retry/round bounds, no-progress detection, submodule gate, one-writer
+   lock, and workflow no-auto-commit.
+2. **Prompt-only but acceptable:** keep changes focused, follow existing
+   patterns, preserve language, use appropriate semantic granularity for
+   tasks, ask only materially relevant questions, assign appropriate finding
+   severity, and use no more than two planner batches.
+3. **Convert to invariants:** ignore-rule changes that make evidence
+   incomplete; a final gate for high-precision or configured sensitive
+   surfaces. It is not useful to make every Markdown detail or exactly one
+   `submit_review` an invariant: final-result validation already provides the
+   substantial benefit.
 
 ## 3. Things I should NOT change
 
-- Non aggiungere un security-reviewer automatico o una review swarm. Il
-  reviewer esistente è indipendente, strutturato e bounded.
-- Non creare un risk engine generico, una tassonomia estesa o classificazione
-  LLM-based per decidere il gate.
-- Non creare nuovi file di memoria, database di lesson o una fase workflow
-  “knowledge promotion”.
-- Non promuovere automaticamente una lesson in AGENTS, skill o ADR.
-- Non aggiungere lint, formatter, build o audit dependency alla CI senza
-  un'esigenza concreta.
-- Non modificare `resolveVerifyCommands()` affinché preferisca globalmente
-  `npm run check`: è un resolver per repository eterogenei.
-- Non rendere rigidamente validabili tutti i contenuti del PRD/task file. ID
-  univoci e sezioni non vuote sono invariant sensate; qualità, granularità e
-  “WHAT over HOW” restano giudizi fuzzy.
-- Non introdurre worktree, rollback automatico o auto-commit per risolvere il
-  rischio: il lock one-writer, gli snapshot Git e il no-auto-commit sono già
-  una soluzione semplice e solida.
-- Non sostituire il JSONL run log o il resume logic: sono più robusti della
-  proposta generica di “salvare stato”.
-- Non caricare più contesto “per sicurezza”: il context router implementa già
-  routing progressivo e role-aware.
+- Do not add an automatic security reviewer or review swarm. The existing
+  reviewer is independent, structured, and bounded.
+- Do not create a generic risk engine, an extended taxonomy, or LLM-based gate
+  classification.
+- Do not create new memory files, a lesson database, or a “knowledge promotion”
+  workflow phase.
+- Do not automatically promote a lesson into AGENTS, a skill, or an ADR.
+- Do not add lint, a formatter, a build, or a dependency audit to CI without a
+  concrete need.
+- Do not change `resolveVerifyCommands()` to prefer `npm run check` globally:
+  it is a resolver for heterogeneous repositories.
+- Do not make every PRD/task-file detail rigidly validatable. Unique IDs and
+  nonempty sections are sensible invariants; quality, granularity, and “WHAT
+  over HOW” remain fuzzy judgments.
+- Do not introduce worktrees, automatic rollback, or auto-commit to address
+  risk: the one-writer lock, Git snapshots, and no-auto-commit are already a
+  simple, solid solution.
+- Do not replace the JSONL run log or resume logic: they are more robust than
+  the generic proposal to “save state.”
+- Do not load more context “for safety”: the context router already implements
+  progressive, role-aware routing.
 
 ## 4. Inconsistencies / sources of truth
 
-| Contratto | Inconsistenza | Fonte autorevole consigliata |
+| Contract | Inconsistency | Recommended source of truth |
 |---|---|---|
-| Task ID | Skill usa `U*`; planner/parser usano `T*` | `validateTaskList` + test; documentare `T*` ovunque |
-| Stato implementativo | ARCHITECTURE e commenti dicono pipeline/resume non provati | Codice e test; README come riepilogo corrente |
-| Spec iniziale vs comportamento corrente | `SPEC.md` conserva discovery one-by-one ed esempi `U*`; implementazione usa batch e `T*` | Codice/prompts/test per l'esecuzione; SPEC etichettato come design storico |
-| Verifica manuale vs `/feature` | AGENTS template preferisce il minimo check mirato; Pi esegue gate completi configurati dopo ogni pass | AGENTS per lavoro manuale/per-task; `src/verify.ts` e `.pi/pi-brain.json` per il workflow |
-| Stato corrente | `progress.md` rivendica “current phase”, mentre Pi usa run log e `/flow status` | Run log per fase runtime; `progress.md` solo per snapshot progettuale e prossime azioni |
-| Lesson admission | Feature skill registra quasi ogni bug; template esclude one-off/tool-caught | Template lessons per admission; gardener per pruning/promozione |
-| Reviewer read-only | Campo di config appare configurabile, ma il codice ignora `false` | Codice come invariant; esempi/config dovrebbero chiarire che non è disattivabile |
-| Security reviewer | Presente in config e routing ma non viene invocato da `/feature` | Rimuovere o marcare esplicitamente come riservato/futuro; non presentarlo come capacità attiva |
-| Role policy | README cita `ROLE_POLICIES`, codice usa `ROLE_CATEGORIES` | `src/skill-router.ts` |
-| Regole sotto `.agents/` | Direttive Laravel in un repository Node | Root policy del repository; scoped file solo per skill |
+| Task ID | Skill uses `U*`; planner/parser use `T*` | `validateTaskList` + tests; document `T*` everywhere |
+| Implementation status | ARCHITECTURE and comments say the pipeline/resume has not been tested | Code and tests; README as the current summary |
+| Initial spec vs current behavior | `SPEC.md` retains one-by-one discovery and `U*` examples; implementation uses batches and `T*` | Code/prompts/tests for execution; label SPEC as historical design |
+| Manual verification vs `/feature` | AGENTS template prefers the smallest targeted check; Pi runs configured full gates after each pass | AGENTS for manual/per-task work; `src/verify.ts` and `.pi/pi-brain.json` for the workflow |
+| Current status | `progress.md` claims the “current phase,” while Pi uses the run log and `/flow status` | Run log for runtime phase; `progress.md` only for project snapshots and next steps |
+| Lesson admission | Feature skill records almost every bug; template excludes one-off/tool-caught issues | Lessons template for admission; gardener for pruning/promotion |
+| Read-only reviewer | Config field appears configurable, but code ignores `false` | Code as invariant; examples/config should clarify that it cannot be disabled |
+| Security reviewer | Present in config and routing but not invoked by `/feature` | Remove or explicitly mark as reserved/future; do not present it as an active capability |
+| Role policy | README cites `ROLE_POLICIES`; code uses `ROLE_CATEGORIES` | `src/skill-router.ts` |
+| Rules under `.agents/` | Laravel directives in a Node repository | Repository root policy; scoped file only for skills |
 
 ## 5. Proposed implementation order
 
-1. Aggiungere `npm run check` e CI che esegue lo stesso comando.
-2. Uniformare i contratti documentali: `T*`, stato resume/runtime,
-   `ROLE_CATEGORIES`, `.agents/AGENTS.md`.
-3. Aggiungere il gate di rischio ristretto: ignore rules fail-safe, superfici
-   built-in ad alta precisione e override configurabile.
-4. Aggiungere `PROMOTE` a `lessons-gardener` e armonizzare l'admission rule
-   della feature skill.
-5. Solo dopo utilizzo reale, rivalutare falsi positivi dei risk pattern; non
-   espandere preventivamente la tassonomia.
+1. Add `npm run check` and CI that runs the same command.
+2. Align the documentation contracts: `T*`, resume/runtime status,
+   `ROLE_CATEGORIES`, and `.agents/AGENTS.md`.
+3. Add a narrow risk gate: fail-safe handling of ignore rules, high-precision
+   built-in surfaces, and configurable overrides.
+4. Add `PROMOTE` to `lessons-gardener` and align the feature skill's admission
+   rule.
+5. Reassess risk-pattern false positives only after real use; do not expand the
+   taxonomy preemptively.
 
 ## 6. First change
 
-La prima modifica da implementare è il comando canonico di verifica con CI.
+The first change to implement is the canonical verification command with CI.
 
-### Comportamento previsto
+### Expected behavior
 
-- `npm run check` esegue `npm run typecheck` e poi `npm test`.
-- La CI usa Node 24, installa tramite `npm ci` ed esegue soltanto
-  `npm run check`.
-- La configurazione locale di pi-brain usa `verify: ["npm run check"]`.
-- Il README presenta `npm run check` come prova completa della salute del
-  repository; i due comandi singoli restano disponibili per diagnosi locale.
-- Nessun lint, build o dependency audit viene aggiunto.
+- `npm run check` runs `npm run typecheck` and then `npm test`.
+- CI uses Node 24, installs with `npm ci`, and runs only `npm run check`.
+- The local pi-brain configuration uses `verify: ["npm run check"]`.
+- The README presents `npm run check` as the complete repository health check;
+  the two individual commands remain available for local diagnosis.
+- No lint, build, or dependency audit is added.
 
-### Criteri di accettazione
+### Acceptance criteria
 
-- Esiste un solo comando documentato come gate completo.
-- `npm run check` fallisce se fallisce typecheck oppure qualsiasi test.
-- GitHub Actions esegue esattamente `npm run check`, senza ricostruire
-  manualmente la lista.
-- `/feature` su questo repository esegue lo stesso comando tramite
+- Exactly one command is documented as the full gate.
+- `npm run check` fails if typecheck or any test fails.
+- GitHub Actions runs exactly `npm run check`, without rebuilding the command
+  list manually.
+- `/feature` in this repository runs the same command through
   `.pi/pi-brain.json`.
-- `src/verify.ts` resta invariato per gli altri repository.
-- `npm run check` passa localmente prima di dichiarare completata la modifica.
+- `src/verify.ts` remains unchanged for other repositories.
+- `npm run check` passes locally before the change is declared complete.
 

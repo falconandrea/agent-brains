@@ -76,7 +76,7 @@ export function renderBatchQuestions(questions: BatchQuestion[]): string {
           return `   ${letter}. ${option}${letter === q.recommendedOption ? " ★" : ""}`;
         })
         .join("\n");
-      return `${i + 1}. ${q.question}\n${options}\n   ↳ Perché ${q.recommendedOption}: ${q.recommendationReason}`;
+      return `${i + 1}. ${q.question}\n${options}\n   ↳ ${q.recommendedOption}: ${q.recommendationReason}`;
     })
     .join("\n");
 }
@@ -84,7 +84,7 @@ export function renderBatchQuestions(questions: BatchQuestion[]): string {
 /**
  * Placeholder shown in the freeform dialog (askFromChild uses `reason`).
  * Language-neutral: the prompt puts question and recommendation text in the
- * user's language, so the fixed chrome must not be English.
+ * user's language, so the fixed chrome remains language-neutral.
  */
 export const BATCH_ANSWER_HINT = "1: A, 2: B";
 

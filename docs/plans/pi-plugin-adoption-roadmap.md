@@ -2,7 +2,7 @@
 
 **Created:** 2026-09-08
 
-**Status:** R0 and C1–C5 closed; C4 retains an inconclusive full-workflow comparison and C5 is a bounded assessment, not full-collection efficacy validation. M1 is implemented in agent-brains (2026-10-30); the first independent review returned four P2 findings, corrected the same day — M1 awaits re-approval and M2–M4 do not start until then. External extension trials still require an explicit request (updated 2026-10-30).
+**Status:** R0 and C1–C5 closed; C4 retains an inconclusive full-workflow comparison and C5 is a bounded assessment, not full-collection efficacy validation. M1 is approved and committed in agent-brains as `6567873` (2026-10-30), after correction and re-review of four P2 findings. M2 is next; global installation, live-harness verification and consumer migration remain open. External extension trials still require an explicit request (updated 2026-10-30).
 
 **Source of truth for execution status:** this document
 
@@ -264,12 +264,11 @@ was a tentative preference for expanded-guidance Version 1 on the real UI task.
 Unexecuted interview/tooling/reference/trigger cases remain explicitly unmeasured.
 C3-V remains pending the next requested real security review.
 
-**Current next action: M1 re-approval.** M1 (portable skill references and
-explicit planning/implementation/review boundaries) is implemented in
-agent-brains (2026-10-30) and left uncommitted for review; the first
-independent review returned four P2 findings, all corrected the same day (see
-the M1 bullet above and the migration plan's progress log). M1 is not closed
-until the corrected diff is re-approved; **M2 does not start before that**.
+**Current next action: M2 — global distribution.** M1 (portable skill
+references and explicit planning/implementation/review boundaries) was
+re-reviewed after correction of four P2 findings, approved by the user and
+committed in agent-brains as `6567873` (2026-10-30). M1 is complete within
+the repository; live-harness and consumer checks remain open for M3/M4.
 Global machine/consumer migration have not started. Preserved: C1/C2/C3
 behavior, Pi `/feature`, `/flow`, resume compatibility and historical
 artifacts. R1 trials remain available only on explicit request; W2/W3/R2/S3
@@ -281,11 +280,11 @@ Supporting evidence: [TDD assessment](../research/tdd-agent-loop-assessment.md),
 
 ## Cross-harness workflow migration (M)
 
-**Status:** planned, implementation not started (recorded 2026-10-22).
+**Original status (2026-10-22):** planned, implementation not started.
 At recording time the next action was C3; C3 completed 2026-10-23, U16 completed
 2026-10-24, and S2 instrumentation/protocol completed 2026-10-24 with the
-definitive baseline recorded 2026-10-25. C4 and C5 are now closed; M1 is the
-next selected work. Recording M does not itself start a migration,
+definitive baseline recorded 2026-10-25. C4 and C5 are now closed; M1 is
+approved and committed, and M2 is next. Recording M does not itself start a migration,
 reorder C1–C5 or activate extension trials. This roadmap owns coordination and
 priority; the [migration plan](cross-harness-workflow-migration.md) owns detailed
 checklists, acceptance criteria and consumer-project status. It was moved from
@@ -300,7 +299,7 @@ OpenCode, expose skills globally once per machine, and retain project-owned
   `spec-and-tasks`; define spec/task handoff to implementation and independent
   review. Keep Pi `/feature` as the existing runtime workflow and preserve
   historical artifacts and resume compatibility.
-  **Implemented in agent-brains (2026-10-30, uncommitted pending review):**
+  **Implemented and approved in agent-brains (2026-10-30, `6567873`):**
   skill rename with planning-only contract and handoff, portable skill
   references (name + skill-relative resolution), `spec.md`/`tasks.md`
   document contracts, planning-procedure harmonization
@@ -823,8 +822,7 @@ A future session should:
 4. Change exactly one item to `IN PROGRESS`.
 5. Record evidence and the promote/reject decision here when the item ends.
 
-**Next action:** obtain re-approval of the corrected M1 diff (review round 1
-returned four P2 findings, corrected 2026-10-30); only then M2, per the
+**Next action:** M2, following approval and commit of M1 (`6567873`), per the
 [cross-harness migration plan](cross-harness-workflow-migration.md), whose
 section 4 and progress log record per-item status. C1–C5 are
 closed with their documented limits; no further evaluation run,

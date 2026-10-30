@@ -1,242 +1,242 @@
-# Piano di centralizzazione skills e workflow
+# Cross-harness skill and workflow centralization plan
 
-Data dell'inventario: 19 ottobre 2026. Riconciliazione: 22 ottobre 2026, rispetto a `cdf54f3`. Stato: M1 implementato in agent-brains (2026-10-30); prima review indipendente: 4 rilievi (P2), correzioni applicate lo stesso giorno, ri-approvazione richiesta prima di dichiarare M1 concluso. M2–M4 restano chiusi finché M1 non è approvato.
+Inventory date: 2026-10-19. Reconciled: 2026-10-22, against `cdf54f3`. Current status: M1 approved and committed in agent-brains as `6567873` (2026-10-30), after correction and re-review of four P2 findings. M2 is next; global installation, live-harness verification, and consumer migration remain open.
 
-Il piano è stato trasferito da `/Users/andreafalcon/dev/AI-WORKFLOW-MIGRATION.md` nel repository agent-brains. La [roadmap](pi-plugin-adoption-roadmap.md#cross-harness-workflow-migration-m) governa priorità e coordinamento con gli altri lavori; questo documento contiene la checklist dettagliata e lo stato per progetto. Non duplicare le checklist nella roadmap. I percorsi dei repository consumatori in questo documento sono relativi alla directory `dev`, non alla root di agent-brains.
+The plan was moved from `/Users/andreafalcon/dev/AI-WORKFLOW-MIGRATION.md` into the agent-brains repository. The [roadmap](pi-plugin-adoption-roadmap.md#cross-harness-workflow-migration-m) governs priorities and coordination with other work; this document contains the detailed checklist and status for each project. Do not duplicate the checklists in the roadmap. Consumer repository paths in this document are relative to the `dev` directory, not the agent-brains root.
 
-Questo documento coordina il lavoro tra repository e configurazione del Mac. La sua creazione non modifica le skills, i progetti o le configurazioni globali. Spuntare le attività solo dopo averle implementate e verificate nel relativo ambito.
+This document coordinates work across repositories and the Mac configuration. Creating it does not modify skills, projects, or global configuration. Check off tasks only after implementing and verifying them in the relevant scope.
 
-### Raccordo con le modifiche del 22 ottobre
+### Relationship to the October 22 changes
 
-Le modifiche `af37cf6`, `201ba14`, `cc05d97` e `cdf54f3` non cambiano l'obiettivo della migrazione. Sono parte della base da preservare, non attività di migrazione da ripetere:
+The changes in `af37cf6`, `201ba14`, `cc05d97`, and `cdf54f3` do not change the migration goal. They are part of the baseline to preserve, not migration work to repeat:
 
-- C1/C2 sono completati nella roadmap; non riaprire consolidamento TDD o politica dei verdetti come nuove attività di questo piano.
-- La futura `spec-and-tasks` deve mantenere i criteri osservabili e le verifiche proporzionate introdotti in `feature`: stato/input, evento, risultato, invarianti quando rilevanti, riuso di copertura adeguata.
-- Preservare la distinzione tra red/green osservato con accesso ai comandi e verifica differita del developer Pi senza shell. L'orchestratore esegue i controlli; l'agente non dichiara esiti non osservati.
-- `tdd`, `test-master` e `verification-before-completion` sono a gestione locale: mantenere provenienza/licenze e protezioni contro reinstallazione o aggiornamento upstream. La separazione spec/sviluppo/review deve conservare le nuove domande su contratto, fonte del risultato atteso e regressione plausibile.
-- Il nuovo adattatore OpenCode e il workflow link di `solution-capture` completano il sistema attuale. `tests/repo.test.ts` verifica ora la tabella README, i pointer e i link: migrare insieme documentazione, adattatori e test quando cambia il modello di distribuzione.
-- Conservare le correzioni di `setup.sh` per newline del `.gitignore`, esclusioni runtime Pi e avviso della modalità OpenCode-only. Il nuovo installer non deve perdere queste garanzie dove ancora applicabili.
-- Mantenere `needs_human` per `changes_requested` senza problemi bloccanti, senza un altro fix round; le review approvate con soli warning possono completare.
-- C4 misura contesto e costi prima di ottimizzare; prima di esporre globalmente il catalogo completo registrare una baseline coordinata con C4. C5 possiede la valutazione di utilità/overlap delle skills: questo piano non autorizza eliminazioni autonome.
+- C1/C2 are complete on the roadmap; do not reopen TDD consolidation or verdict policy as new tasks in this plan.
+- The future `spec-and-tasks` skill must retain the observable criteria and proportionate checks introduced in `feature`: state/input, event, result, invariants when relevant, and reuse of adequate coverage.
+- Preserve the distinction between observed red/green with command access and deferred verification by the Pi developer without shell access. The orchestrator runs checks; the agent does not claim outcomes it did not observe.
+- `tdd`, `test-master`, and `verification-before-completion` are locally managed: preserve provenance, licenses, and protections against reinstall or upstream updates. The spec/implementation/review split must retain the new questions about the contract, source of the expected result, and plausible regression.
+- The new OpenCode adapter and `solution-capture` workflow link complete the current system. `tests/repo.test.ts` now checks the README table, pointers, and links: migrate documentation, adapters, and tests together when the distribution model changes.
+- Preserve the `setup.sh` fixes for `.gitignore` newlines, Pi runtime exclusions, and the OpenCode-only mode warning. The new installer must retain these safeguards where they still apply.
+- Keep `needs_human` for `changes_requested` without blocking issues, with no further fix round; reviews approved with warnings only may complete.
+- C4 measures context and costs before optimization; record a baseline coordinated with C4 before exposing the full catalog globally. C5 owns the skill usefulness/overlap assessment: this plan does not authorize independent removals.
 
-La centralizzazione globale, la rinomina di `feature` e la migrazione dei consumatori non risultano implementate nei commit esaminati. Le checklist sotto restano aperte.
+At the October 22 reconciliation, global centralization, the `feature` rename, and consumer migration were not implemented in the commits examined. Later M1 work is recorded in the checklist and progress log below.
 
-## 1. Obiettivo e decisioni condivise
+## 1. Goal and shared decisions
 
-- `agent-brains` rimane la fonte unica delle skills e delle procedure condivise, indipendente dall'harness.
-- Pi carica globalmente il pacchetto locale `agent-brains`; Codex e OpenCode accedono al catalogo globale condiviso.
-- Nessun nuovo collegamento alle skills è necessario per ogni progetto.
-- Ogni progetto mantiene documenti e stato propri in `.ai/`, con regole stabili in `AGENTS.md`.
-- La skill oggi chiamata `feature` diventa `spec-and-tasks`: brainstorming, chiarimento dei requisiti, specifica e task. Non implementa e non esegue la review del codice.
-- L'implementazione passa a un agente/sessione dedicato; la review a un altro agente/sessione. L'automazione del passaggio dipende dall'harness.
-- Pi `/feature` rimane il comando dell'orchestratore programmato. Pi `/skill:spec-and-tasks` richiama invece la procedura documentale condivisa.
-- Convenzione proposta per i nuovi lavori: `.ai/features/<slug>/spec.md` e `tasks.md`. Conservare leggibili i documenti storici `prd-<slug>.md` / `tasks-<slug>.md`.
+- `agent-brains` remains the single source for shared skills and procedures, independent of the harness.
+- Pi loads the local `agent-brains` package globally; Codex and OpenCode access the shared global catalog.
+- Projects do not need new skill links individually.
+- Each project keeps its own documents and status in `.ai/`, with stable rules in `AGENTS.md`.
+- The skill currently called `feature` becomes `spec-and-tasks`: brainstorming, requirements clarification, specification, and tasks. It does not implement or review code.
+- Implementation moves to a dedicated agent/session, and review to another agent/session. Handoff automation depends on the harness.
+- Pi `/feature` remains the programmed orchestrator command. Pi `/skill:spec-and-tasks` invokes the shared documentation procedure instead.
+- Proposed convention for new work: `.ai/features/<slug>/spec.md` and `tasks.md`. Keep historical `prd-<slug>.md` / `tasks-<slug>.md` documents readable.
 
-## 2. Risultati dell'ispezione e limiti
+## 2. Inspection findings and limits
 
-- Il catalogo `agent-brains/.agents/skills` contiene 64 directory di skills, tutte dotate di `SKILL.md`.
-- I progetti esistenti espongono selezioni differenti tramite collegamenti per skill: ad esempio linkedin-analytics 44, craftcv.online 42, appuntidalgiappone 34, careguru-brain 33. Non sono cataloghi completi.
-- Nella scansione dei collegamenti delle configurazioni AI, limitata alla profondità esaminata, non sono emerse destinazioni rotte. Questo non dimostra il corretto caricamento da parte degli harness.
-- `~/.agents/skills` contiene `diagnose`, `find-skills`, `i-have-adhd`; non espone il catalogo di agent-brains.
-- `~/.config/opencode/skills` contiene anche `react-doctor`: controllare duplicazioni prima della migrazione.
-- `~/.pi/agent/settings.json` registra già il pacchetto locale `../../dev/agent-brains`; il percorso risolve correttamente. Il manifest espone estensioni e skills. Il caricamento in una sessione Pi non è stato provato durante questo inventario.
-- Cinque manifest di skills contengono riferimenti locali a `.agents/skills/`: `context-audit`, `feature`, `nextjs`, `astro`, `laravel`. Estendere la ricerca a riferimenti, script e template durante l'implementazione.
-- Gli adattatori in `.opencode/agents/*.md` rimandano a `.agents/workflows/*.md` nel progetto. Globalizzarli senza correggerli lascerebbe una dipendenza locale.
-- L'ispezione delle `.ai` ha controllato struttura, nomi e riferimenti nelle regole; non ha verificato l'accuratezza di tutti i documenti rispetto al codice.
-- L'assenza di un file dal nucleo proposto non è automaticamente un difetto: valutare necessità e attività del progetto prima di crearlo.
+- The `agent-brains/.agents/skills` catalog contains 64 skill directories, each with a `SKILL.md`.
+- Existing projects expose different selections through per-skill links: for example, linkedin-analytics 44, craftcv.online 42, appuntidalgiappone 34, and careguru-brain 33. These are not complete catalogs.
+- The scan of AI configuration links, limited to the depth examined, found no broken destinations. This does not prove that the harnesses load them correctly.
+- `~/.agents/skills` contains `diagnose`, `find-skills`, and `i-have-adhd`; it does not expose the agent-brains catalog.
+- `~/.config/opencode/skills` also contains `react-doctor`; check for duplicates before migration.
+- `~/.pi/agent/settings.json` already registers the local `../../dev/agent-brains` package, and the path resolves correctly. The manifest exposes extensions and skills. Loading in a Pi session was not tested during this inventory.
+- Five skill manifests contain local references to `.agents/skills/`: `context-audit`, `feature`, `nextjs`, `astro`, and `laravel`. Extend the search to references, scripts, and templates during implementation.
+- Adapters in `.opencode/agents/*.md` point to `.agents/workflows/*.md` in the project. Making them global without correcting them would leave a local dependency.
+- The `.ai` inspection checked structure, names, and references in the rules; it did not verify every document's accuracy against the code.
+- A file's absence from the proposed core is not automatically a defect: assess the project's needs and activity before creating it.
 
-## 3. Ordine di esecuzione
+## 3. Execution order
 
-1. Sistemare portabilità e separazione delle responsabilità in agent-brains.
-2. Preparare installazione globale, inventario, verifica e rollback.
-3. Configurare il Mac preservando contenuti e configurazioni esistenti.
-4. Provare i tre harness in un progetto pilota senza dipendenze dai vecchi collegamenti.
-5. Allineare e migrare ogni progetto separatamente, iniziando dai boilerplate.
-6. Rimuovere gli adattatori storici solo dopo aver verificato che nessun flusso attivo li richieda.
+1. Fix portability and separation of responsibilities in agent-brains.
+2. Prepare global installation, inventory, verification, and rollback.
+3. Configure the Mac while preserving existing content and configuration.
+4. Try all three harnesses in a pilot project with no dependencies on the old links.
+5. Align and migrate each project separately, starting with the boilerplates.
+6. Remove historical adapters only after verifying that no active workflow needs them.
 
-Non iniziare con una rimozione di massa delle directory `.agents` o `.opencode`.
+Do not start by bulk-removing `.agents` or `.opencode` directories.
 
-## 4. Lavoro in agent-brains
+## 4. Work in agent-brains
 
-### A. Catalogo portabile
+### A. Portable catalog
 
-- [ ] Inventariare skills, nomi dichiarati, licenze, provenienza, dipendenze, profili e metadati dei diversi harness. (L'inventario del 2026-10-19 e la revisione C5 del 2026-10-28 coprono catalogo e provenienza; i metadati per-harness restano input di M2.)
-- [x] Correggere i riferimenti tra skills: usare i percorsi delle skills scoperte dall'harness o una risoluzione documentata a partire dal catalogo; non presumere `.agents/skills` nel progetto corrente. (2026-10-30: `spec-and-tasks`, `laravel`, `nextjs`, `astro`, `context-audit` ora referenziano per nome e risolvono i file relativi alla skill stessa; guardato da `tests/repo.test.ts`.)
-- [x] Distinguere esplicitamente percorsi relativi alla skill da percorsi relativi alla root del progetto. (2026-10-30: sezione "Skill and path references" in `spec-and-tasks`; `.ai/...` resta relativo alla root del progetto lavorato.)
-- [x] Cercare riferimenti obsoleti in tutti i manifest, references, script, template, documenti operativi e test, inclusi `.agents/skills/designer.md` e `.agents/workflows`. (2026-10-30: sweep completo; i riferimenti rimasti sono meccanica di distribuzione o documenti storici. La costante `EXCLUDED_PATHS` in `context-audit.mjs` è un'esclusione di scansione, non un'istruzione.)
-- [x] Aggiornare congiuntamente i test strutturali introdotti da `af37cf6`: sostituire le aspettative sul vecchio layout con le garanzie del nuovo sistema, senza eliminare la verifica di integrità dei workflow. (2026-10-30: `tests/repo.test.ts` aggiunti — riferimenti sibling risolti, `name:` == directory, integrità dei link `.agents/workflows`; tabella README e profili invariati nei controlli.)
-- [x] Verificare i nomi delle dipendenze e la presenza effettiva delle skills invocate. (2026-10-30: test su profili→skill reali, skill richieste dal router, riferimenti sibling esistenti.)
-- [x] Conservare `.ai/...` come percorsi del progetto su cui si lavora. (2026-10-30: convenzione documentata nelle skill.)
-- [ ] Verificare il comportamento quando l'harness parte da una sottocartella. (Da fare: richiede sessioni reali su ciascun harness — M3/M4. La convenzione documentata non sostituisce questa verifica.)
-- [x] Preservare metadati di gestione locale, licenze e patch locali durante gli aggiornamenti upstream. (2026-10-30: nessun aggiornamento upstream eseguito; `code-review` adottato come `management: local` con provenienza e LICENSE MIT prima delle modifiche M1, rimosso da `skills-lock.json`; guardie test attive.)
-- [ ] Separare skills generiche da output generati per un progetto: verificare in particolare Laravel Boost, che oggi può scrivere attraverso i collegamenti nel catalogo comune. Contenuti dipendenti da pacchetti/versioni del singolo progetto non devono sovrascrivere automaticamente la fonte globale.
+- [ ] Inventory skills, declared names, licenses, provenance, dependencies, profiles, and metadata for the different harnesses. (The 2026-10-19 inventory and 2026-10-28 C5 review cover the catalog and provenance; per-harness metadata remains an M2 input.)
+- [x] Fix cross-skill references: use paths discovered by the harness or a documented resolution from the catalog; do not assume `.agents/skills` exists in the current project. (2026-10-30: `spec-and-tasks`, `laravel`, `nextjs`, `astro`, and `context-audit` now reference skills by name and resolve files relative to the skill itself; checked by `tests/repo.test.ts`.)
+- [x] Explicitly distinguish paths relative to a skill from paths relative to the project root. (2026-10-30: "Skill and path references" section in `spec-and-tasks`; `.ai/...` remains relative to the root of the project being worked on.)
+- [x] Search all manifests, references, scripts, templates, operational documents, and tests for obsolete references, including `.agents/skills/designer.md` and `.agents/workflows`. (2026-10-30: full sweep; remaining references are distribution mechanics or historical documents. The `EXCLUDED_PATHS` constant in `context-audit.mjs` is a scan exclusion, not an instruction.)
+- [x] Update together the structural tests introduced by `af37cf6`: replace expectations about the old layout with guarantees for the new system without removing workflow integrity checks. (2026-10-30: added checks in `tests/repo.test.ts` for resolved sibling references, `name:` == directory, and `.agents/workflows` link integrity; README table and profiles remain covered.)
+- [x] Verify dependency names and that invoked skills exist. (2026-10-30: tests cover profiles → real skills, skills required by the router, and existing sibling references.)
+- [x] Keep `.ai/...` paths relative to the project being worked on. (2026-10-30: convention documented in the skills.)
+- [ ] Verify behavior when the harness starts from a subdirectory. (Pending: requires real sessions on each harness — M3/M4. Documented convention does not replace this verification.)
+- [x] Preserve local-management metadata, licenses, and local patches during upstream updates. (2026-10-30: no upstream update performed; `code-review` was adopted with `management: local`, provenance, and an MIT LICENSE before M1 changes, then removed from `skills-lock.json`; test guards are active.)
+- [ ] Separate generic skills from output generated for a project: check Laravel Boost in particular, which can currently write through links in the shared catalog. Content tied to a single project's packages/versions must not automatically overwrite the global source.
 
-### B. Separare spec, implementazione e review
+### B. Separate specification, implementation, and review
 
-- [x] Rinominare la skill `feature` in `spec-and-tasks`: directory, `name`, descrizione, metadati UI, riferimenti, profili e adattatori. Non rinominare automaticamente il comando Pi `/feature`. (2026-10-30: directory, SKILL.md, `agents/openai.yaml` invariato, symlink `.agents/workflows/`, puntatore `.opencode/agents/`, `common.list`, `skill-router.ts`, README, test.)
-- [x] Limitare la skill a esplorazione del repository, brainstorming, decisioni, criteri di accettazione e produzione dei documenti. (2026-10-30: SKILL.md riscritto planning-only, HARD-GATE contro codice implementativo, handoff esplicito finale.)
-- [x] Definire il contratto di `spec.md`: obiettivo, comportamento, confini, vincoli, casi limite, decisioni, criteri verificabili e assunzioni residue. (2026-10-30: nella skill e in `templates/.ai/features/_TEMPLATE.md`.)
-- [x] Preservare nella nuova skill documentale le indicazioni C2 su scenari osservabili e verifiche proporzionate; lasciare esecuzione e valutazione dei test ai rispettivi ruoli. (2026-10-30: criteri osservabili e verifiche proporzionate nel contratto spec/tasks; proprietà dell'esecuzione esplicita — developer Pi senza shell consegna l'esecuzione all'orchestratore.)
-- [x] Definire il contratto di `tasks.md`: ID stabili, attività concrete, dipendenze, area/file interessati quando noti, verifiche e stato. Evitare pseudocodice vincolante e dettagli inventati.
-- [x] Terminare con documenti approvati e handoff; nessuna implementazione avviata implicitamente dalla skill di pianificazione.
-- [x] Leggere e armonizzare `grilling`, `grill-with-docs`, `to-spec` e `to-tickets`: evitare procedure concorrenti per gli stessi output. (2026-10-30: ripartizione documentata in README e in `grill-with-docs`; nessuna skill eliminata o fusa; `grilling`/`to-tickets` restano lock-managed e intatte; `to-spec` adottata localmente al round di correzione per il guard sulla spec esistente.)
-- [x] Risolvere il conflitto attuale tra intervista a gruppi di domande di `grilling` e intervista a domanda singola/checkpoint di `grill-with-docs`. La seconda contiene anche una descrizione del comportamento della prima che non coincide con il contenuto attuale. (2026-10-30: `grill-with-docs` ora descrive `grilling` come intervista a round con frontier — comportamento attuale — e si distingue come variante checkpoint a domanda singola.)
-- [x] Scegliere e documentare quale procedura usare per brainstorming ordinario e stress test documentale; evitare interviste e approvazioni duplicate per la medesima decisione. (2026-10-30: `grilling` per stress test ordinario senza artefatti; `grill-with-docs` per stress test documentato; `spec-and-tasks` per la pianificazione delle feature; il test di `grill-with-docs` avviene solo prima del gate di approvazione.)
-- [x] Non obbligare piccoli fix o manutenzioni a passare da una nuova spec. (Fast path nella skill; template AGENTS aggiornato.)
-- [x] Rivedere le skills di implementazione `laravel`, `nextjs`, `astro`: consumano documenti approvati e non ripetono l'intera discovery. Definire anche il percorso per stack generici. (2026-10-30: Specification Detection riconosce `spec.md`+`tasks.md` e i nomi storici `prd-`/`tasks-`; percorso generico definito in README e handoff della skill.)
-- [x] Rivedere `code-review`: input spec/task/diff, verifica dei criteri, rilievi prioritizzati e distinzione tra review e correzione. (2026-10-30: sorgenti spec estese ai nuovi documenti, copertura dei task, criteri di accettazione, rilievi verificabili, sezione "review is not fixing".)
-- [x] Conservare le indicazioni C2 già presenti nel reviewer Pi; trasferire eventuali parti pertinenti alla review condivisa senza introdurre un reviewer obbligatorio aggiuntivo. (2026-10-30: prompt reviewer Pi invariato; le tre domande C2 trasferite in `code-review` come sezione condivisa.)
-- [x] Documentare passaggi manuali tra sessioni e possibilità di delega per harness, senza promettere automazione non implementata. (2026-10-30: handoff della skill e README descrivono sessioni fresche per implementazione e review; nessuna automazione promessa.)
+- [x] Rename the `feature` skill to `spec-and-tasks`: directory, `name`, description, UI metadata, references, profiles, and adapters. Do not automatically rename the Pi `/feature` command. (2026-10-30: directory, SKILL.md, unchanged `agents/openai.yaml`, `.agents/workflows/` symlink, `.opencode/agents/` pointer, `common.list`, `skill-router.ts`, README, and tests.)
+- [x] Limit the skill to repository exploration, brainstorming, decisions, acceptance criteria, and document creation. (2026-10-30: SKILL.md rewritten as planning-only, with a HARD GATE against implementation code and an explicit final handoff.)
+- [x] Define the `spec.md` contract: goal, behavior, boundaries, constraints, edge cases, decisions, verifiable criteria, and remaining assumptions. (2026-10-30: in the skill and `templates/.ai/features/_TEMPLATE.md`.)
+- [x] Preserve C2 guidance on observable scenarios and proportionate checks in the new documentation skill; leave test execution and evaluation to their respective roles. (2026-10-30: observable criteria and proportionate checks are in the spec/tasks contract; execution ownership is explicit — the Pi developer without shell access hands execution to the orchestrator.)
+- [x] Define the `tasks.md` contract: stable IDs, concrete tasks, dependencies, affected areas/files when known, checks, and status. Avoid prescriptive pseudocode and invented details.
+- [x] End with approved documents and a handoff; the planning skill must not implicitly start implementation.
+- [x] Read and harmonize `grilling`, `grill-with-docs`, `to-spec`, and `to-tickets` to avoid competing procedures for the same outputs. (2026-10-30: division documented in the README and `grill-with-docs`; no skills removed or merged; `grilling`/`to-tickets` remain lock-managed and untouched; `to-spec` was adopted locally in the correction round to guard existing specs.)
+- [x] Resolve the current conflict between `grilling`'s batched-question interview and `grill-with-docs`' single-question/checkpoint interview. The latter also described the former's behavior inaccurately. (2026-10-30: `grill-with-docs` now describes `grilling` as a batched interview with a frontier — its current behavior — and distinguishes itself as the single-question checkpoint variant.)
+- [x] Choose and document which procedure to use for ordinary brainstorming and document stress tests; avoid duplicate interviews and approvals for the same decision. (2026-10-30: `grilling` for ordinary stress tests without artifacts; `grill-with-docs` for documented stress tests; `spec-and-tasks` for feature planning; test `grill-with-docs` only before the approval gate.)
+- [x] Do not require small fixes or maintenance to go through a new spec. (Fast path in the skill; AGENTS template updated.)
+- [x] Review the `laravel`, `nextjs`, and `astro` implementation skills: they consume approved documents and do not repeat discovery. Also define the path for generic stacks. (2026-10-30: Specification Detection recognizes `spec.md`+`tasks.md` and historical `prd-`/`tasks-` names; the generic path is defined in the README and skill handoff.)
+- [x] Review `code-review`: spec/task/diff inputs, criteria checks, prioritized findings, and separation of review from fixes. (2026-10-30: spec sources extended to new documents, task coverage and acceptance criteria added, findings made verifiable, and the "review is not fixing" section added.)
+- [x] Preserve C2 guidance already present in the Pi reviewer; move any relevant parts into shared review without adding another mandatory reviewer. (2026-10-30: Pi reviewer prompt unchanged; the three C2 questions were moved into `code-review` as shared guidance.)
+- [x] Document manual handoffs between sessions and harness-specific delegation options without promising unimplemented automation. (2026-10-30: the skill handoff and README describe fresh sessions for implementation and review; no automation is promised.)
 
-### C. Compatibilità del motore Pi
+### C. Pi engine compatibility
 
-- [x] Conservare `/feature`, `/flow`, `/stack` e la configurazione globale del pacchetto. (2026-10-30: nessuna modifica a `extensions/pi-brain.ts`, `src/workflows/`, `src/run-launcher.ts`; suite 449/449.)
-- [x] Verificare se planner, context router, skill router, replay/resume e log dipendono dal nome `feature` o dai nomi dei documenti. Non confondere il nome del workflow con quello della skill. (2026-10-30: il workflow `/feature` e il marker `<!-- pi-brain:feature -->` sono del runtime e restano; solo il nome della skill è cambiato in `skill-router.ts`.)
-- [x] Aggiornare profili e policy dei ruoli per la rinomina della skill senza rimuovere accidentalmente istruzioni necessarie a planner/developer/reviewer. (2026-10-30: `common.list` e `skill-router.ts` rinominati; `full.list` copre via `@include`; policy dei ruoli invariate.)
-- [x] Allineare il planner Pi ai contratti spec/task dove possibile; se produce ancora nomi storici, documentare e mantenere compatibilità prima di cambiare formato. (2026-10-30: il planner continua a produrre `prd-<slug>.md`/`tasks-<slug>.md`; compatibilità documentata in README e nella skill; cambio formato rimandato, non è parte di M1.)
-- [x] Garantire lettura di run interrotti e documenti esistenti; non rinominare in massa gli artefatti necessari al resume. (2026-10-30: nessun artefatto rinominato; `tests/resume.test.ts` e `tests/feature-workflow.test.ts` passano.)
-- [x] Verificare che il developer riceva documenti approvati e il reviewer riceva requisiti e diff, con verifiche e ruoli separati come previsto dal motore. (2026-10-30: comportamento invariato, coperto dai test esistenti di `feature-workflow`; nessuna modifica al motore.)
-- [x] Preservare e verificare la politica dei verdetti incoerenti di C1 durante eventuali modifiche a workflow e review; non riscriverla come parte della rinomina. (2026-10-30: politica e test invariati.)
+- [x] Preserve `/feature`, `/flow`, `/stack`, and the package's global configuration. (2026-10-30: no changes to `extensions/pi-brain.ts`, `src/workflows/`, or `src/run-launcher.ts`; suite 449/449.)
+- [x] Check whether the planner, context router, skill router, replay/resume, and log depend on the `feature` name or document names. Do not confuse the workflow name with the skill name. (2026-10-30: the `/feature` workflow and `<!-- pi-brain:feature -->` marker belong to the runtime and remain; only the skill name changed in `skill-router.ts`.)
+- [x] Update profiles and role policies for the skill rename without accidentally removing instructions needed by the planner/developer/reviewer. (2026-10-30: `common.list` and `skill-router.ts` renamed; `full.list` includes it through `@include`; role policies unchanged.)
+- [x] Align the Pi planner with the spec/task contracts where possible; if it still produces historical names, document and preserve compatibility before changing formats. (2026-10-30: the planner still produces `prd-<slug>.md`/`tasks-<slug>.md`; compatibility documented in the README and skill; format change deferred and outside M1.)
+- [x] Preserve readability of interrupted runs and existing documents; do not bulk-rename artifacts needed for resume. (2026-10-30: no artifacts renamed; `tests/resume.test.ts` and `tests/feature-workflow.test.ts` pass.)
+- [x] Verify that the developer receives approved documents and the reviewer receives requirements and diff, with checks and roles separated as the engine expects. (2026-10-30: behavior unchanged and covered by existing `feature-workflow` tests; no engine changes.)
+- [x] Preserve and verify C1's inconsistent-verdict policy during any workflow or review changes; do not rewrite it as part of the rename. (2026-10-30: policy and tests unchanged.)
 
-### D. Installazione globale e manutenzione
+### D. Global installation and maintenance
 
-- [ ] Introdurre un'operazione di installazione globale distinta dallo scaffold del progetto, con anteprima, rilevamento conflitti e rollback.
-- [ ] Esporre il catalogo completo in `~/.agents/skills` mediante un collegamento della directory, preservando prima le skills personali esistenti.
-- [ ] Coordinare con C4 la baseline del catalogo scoperto prima del cambiamento e il confronto successivo; eventuali fusioni/rimozioni di skills restano decisioni motivate di C5.
-- [ ] Verificare il riconoscimento del collegamento di directory con le versioni installate di Codex e OpenCode.
-- [ ] Configurare eventuali agenti/comandi OpenCode globali senza collegare l'intera `.opencode` del repository: contiene anche dipendenze e altri file non necessari.
-- [ ] Verificare l'esposizione di `/spec-and-tasks` in OpenCode tramite metadati supportati dalla versione installata oppure un adattatore globale minimale.
-- [ ] Conservare i profili per selezione per ruoli/stack nel motore Pi; non usarli più per limitare il catalogo interattivo di ogni progetto.
-- [ ] Trasformare `setup.sh` nel percorso nuovo o dichiarare esplicitamente deprecata la modalità di collegamento per progetto. Aggiornare `unlink.sh` per la migrazione preservando contenuti non gestiti.
-- [ ] Verificare `install-global-skills.sh`: oggi il nome suggerisce installazione globale, ma scrive nel repository. Chiarire nome, destinazione e responsabilità.
-- [ ] Aggiornare README e guida Pi con installazione per computer, invocazioni, aggiornamenti, diagnosi e rollback.
-- [ ] Prevedere un controllo diagnostico di catalogo, manifest, dipendenze, duplicati, collegamenti e configurazione; riportare solo verifiche realmente eseguite.
+- [ ] Introduce a global installation operation separate from project scaffolding, with preview, conflict detection, and rollback.
+- [ ] Expose the full catalog in `~/.agents/skills` through a directory link, first preserving existing personal skills.
+- [ ] Coordinate with C4 on a baseline of the discovered catalog before the change and a comparison afterward; any skill merges/removals remain reasoned C5 decisions.
+- [ ] Verify directory-link discovery in the installed versions of Codex and OpenCode.
+- [ ] Configure any global OpenCode agents/commands without linking the repository's entire `.opencode` directory, which also contains dependencies and other unnecessary files.
+- [ ] Verify that `/spec-and-tasks` is exposed in OpenCode through metadata supported by the installed version or a minimal global adapter.
+- [ ] Keep profiles for role/stack selection in the Pi engine; stop using them to limit each project's interactive catalog.
+- [ ] Convert `setup.sh` to the new path or explicitly deprecate per-project linking. Update `unlink.sh` for migration while preserving unmanaged content.
+- [ ] Review `install-global-skills.sh`: its name currently suggests global installation, but it writes to the repository. Clarify its name, destination, and responsibility.
+- [ ] Update the README and Pi guide with computer-level installation, invocation, updates, diagnosis, and rollback.
+- [ ] Add a diagnostic check for the catalog, manifests, dependencies, duplicates, links, and configuration; report only checks actually run.
 
-### E. Template e scaffold
+### E. Templates and scaffold
 
-- [x] Aggiornare `templates/AGENTS.md`, `templates/.ai`, `scaffold.sh` e tracker locale secondo le convenzioni del piano. (2026-10-30, per la parte M1: direttiva `spec-and-tasks` in `templates/AGENTS.md`; `templates/.ai/features/_TEMPLATE.md` riscritto con i contratti `spec.md`+`tasks.md`. `scaffold.sh` invariato: `copy_if_missing` è già idempotente e conservativo.)
-- [ ] Non imporre la creazione di ogni documento di contesto in ogni progetto; distinguere nucleo minimo e documenti per area.
-- [ ] Rendere lo scaffold idempotente e conservativo: aggiungere solo file necessari e mancanti, senza sovrascrivere contenuti.
-- [ ] Garantire che regole UI non obblighino a leggere un `DESIGN_SYSTEM.md` inesistente o privo di contenuti.
-- [ ] Allineare anche la `.ai` di agent-brains: al momento manca `context/TECH_STACK.md`; aggiungerlo se richiesto dalle nuove regole.
+- [x] Update `templates/AGENTS.md`, `templates/.ai`, `scaffold.sh`, and the local tracker according to the plan's conventions. (2026-10-30, for M1: `spec-and-tasks` directive in `templates/AGENTS.md`; `templates/.ai/features/_TEMPLATE.md` rewritten with the `spec.md`+`tasks.md` contracts. `scaffold.sh` unchanged: `copy_if_missing` is already idempotent and conservative.)
+- [ ] Do not require every project to create every context document; distinguish the minimum core from area-specific documents.
+- [ ] Make scaffolding idempotent and conservative: add only required, missing files without overwriting content.
+- [ ] Ensure UI rules do not require reading a missing or empty `DESIGN_SYSTEM.md`.
+- [ ] Align agent-brains' own `.ai` as well: it currently lacks `context/TECH_STACK.md`; add it if required by the new rules.
 
-## 5. Configurazione del Mac
+## 5. Mac configuration
 
-- [ ] Inventariare le configurazioni rilevanti di Codex, OpenCode e Pi senza includere credenziali nel report o nei backup versionati.
-- [ ] Salvare una copia recuperabile delle configurazioni e dei contenuti che verranno modificati.
-- [ ] Confrontare e adottare in agent-brains `diagnose`, `find-skills`, `i-have-adhd`, con licenza/provenienza e senza sovrascrivere omonimi.
-- [ ] Confrontare `~/.config/opencode/skills/react-doctor` con la versione centrale e rimuovere duplicazioni solo dopo la verifica.
-- [ ] Configurare `~/.agents/skills` verso il catalogo centrale, usando l'installer preparato sopra.
-- [ ] Verificare esclusioni di skills in Codex e permessi, agenti o configurazioni che nascondono skills in OpenCode.
-- [ ] Mantenere il pacchetto Pi globale già registrato; non reinstallarlo senza necessità.
-- [ ] Verificare aggiornamento/ricaricamento nelle sessioni nuove e in quelle già aperte; documentare quando serve riavviare.
-- [ ] Documentare come ripristinare la configurazione precedente e come ripetere l'installazione su un altro computer.
+- [ ] Inventory relevant Codex, OpenCode, and Pi configuration without including credentials in reports or versioned backups.
+- [ ] Save a recoverable copy of the configuration and content that will be changed.
+- [ ] Compare and adopt `diagnose`, `find-skills`, and `i-have-adhd` in agent-brains, with license/provenance and without overwriting existing copies with the same names.
+- [ ] Compare `~/.config/opencode/skills/react-doctor` with the central version and remove duplicates only after verification.
+- [ ] Point `~/.agents/skills` to the central catalog using the installer prepared above.
+- [ ] Check skill exclusions in Codex and permissions, agents, or settings that hide skills in OpenCode.
+- [ ] Keep the already registered global Pi package; do not reinstall it without need.
+- [ ] Check update/reload behavior in new and already-open sessions; document when a restart is needed.
+- [ ] Document how to restore the previous configuration and repeat installation on another computer.
 
-La fonte dei contenuti resta agent-brains. Il collegamento globale è un punto di accesso locale, non uno spostamento della fonte in un harness. Per ambienti remoti o container servirà un'installazione equivalente nel loro filesystem.
+agent-brains remains the source of the content. The global link is a local access point, not a move of the source into a harness. Remote environments or containers will need an equivalent installation in their filesystem.
 
-## 6. Struttura comune dei progetti
+## 6. Common project structure
 
 ```text
-AGENTS.md                         # policy stabili e context routing
+AGENTS.md                         # stable policies and context routing
 .ai/
   context/
-    TECH_STACK.md                 # stack verificato sul progetto
+    TECH_STACK.md                 # stack verified against the project
   agents/
-    issue-tracker.md              # convenzione dei documenti di lavoro
+    issue-tracker.md              # work-document convention
   features/
     <slug>/
       spec.md
       tasks.md
   memory/
-    progress.md                   # stato, task corrente e blocchi
-    lessons.md                    # lezioni concrete e riutilizzabili
+    progress.md                   # status, current task, and blockers
+    lessons.md                    # concrete, reusable lessons
 ```
 
-Il nucleo è una destinazione per i progetti attivi, non un obbligo di creare placeholder in repository inattivi. `AGENTS.md` deve descrivere file realmente presenti.
+The core is a target for active projects, not a requirement to create placeholders in inactive repositories. `AGENTS.md` must describe files that actually exist.
 
-Estensioni da mantenere quando utili: `context/PROJECT.md`, `PRD.md` di prodotto, `APP_FLOW.md`, `GLOSSARY.md`, `DESIGN_SYSTEM.md`, contratti API, schema DB, `adr/`, `memory/solutions/`, `knowledge/`, `inbox/`, `research/`, `reviews/`. Una struttura comune non richiede contenuti identici.
+Keep these extensions when useful: `context/PROJECT.md`, product `PRD.md`, `APP_FLOW.md`, `GLOSSARY.md`, `DESIGN_SYSTEM.md`, API contracts, DB schema, `adr/`, `memory/solutions/`, `knowledge/`, `inbox/`, `research/`, and `reviews/`. A common structure does not require identical content.
 
-Distinguere il PRD generale del prodotto dalla spec di una feature. Conservare eventuali convenzioni linguistiche locali: per esempio craftcv richiede documentazione AI in inglese, careguru-brain in italiano.
+Distinguish the product-wide PRD from a feature spec. Preserve any local language conventions: for example, craftcv requires AI documentation in English, while careguru-brain requires it in Italian.
 
-### Checklist da applicare a ogni repository migrato
+### Checklist for each migrated repository
 
-- [ ] Leggere istruzioni applicabili e stato git; inventariare `.ai`, `.agents`, `.opencode`, `.pi`, configurazioni e contenuti locali.
-- [ ] Verificare accuratezza del contesto essenziale rispetto al codice; classificare documenti attivi, storici e ridondanti.
-- [ ] Correggere riferimenti a file mancanti, vecchi percorsi e vecchia semantica di `feature`.
-- [ ] Aggiornare `AGENTS.md`, tracker locale ed eventuale `.ai/agents/agent-brains.md` senza duplicare la documentazione globale.
-- [ ] Gestire prompt PRD/task storici: adottare contenuti utili e archiviare solo quelli sostituiti, dopo aver aggiornato i riferimenti.
-- [ ] Mantenere i documenti storici leggibili; applicare `spec.md`/`tasks.md` ai nuovi lavori, senza rinomina massiva.
-- [ ] Verificare l'accesso globale alle skills prima di rimuovere i collegamenti locali gestiti da agent-brains.
-- [ ] Preservare skills, agenti, plugin e file locali/di terze parti; rimuovere directory soltanto se vuote.
-- [ ] Verificare eventuali configurazioni Pi e conservare gli override; escludere lock e run locali da nuovi commit.
-- [ ] Registrare risultato della migrazione, controlli effettuati e limitazioni. Commit separato per repository con Conventional Commits in inglese.
+- [ ] Read applicable instructions and git status; inventory `.ai`, `.agents`, `.opencode`, `.pi`, configuration, and local content.
+- [ ] Check the accuracy of essential context against the code; classify documents as active, historical, or redundant.
+- [ ] Fix references to missing files, old paths, and old `feature` semantics.
+- [ ] Update `AGENTS.md`, the local tracker, and any `.ai/agents/agent-brains.md` without duplicating global documentation.
+- [ ] Handle historical PRD/task prompts: adopt useful content and archive only what has been replaced, after updating references.
+- [ ] Keep historical documents readable; use `spec.md`/`tasks.md` for new work without bulk-renaming existing files.
+- [ ] Verify global skill access before removing local links managed by agent-brains.
+- [ ] Preserve local and third-party skills, agents, plugins, and files; remove directories only when empty.
+- [ ] Check any Pi configuration and preserve overrides; exclude local locks and runs from new commits.
+- [ ] Record the migration result, checks performed, and limitations. Use a separate Conventional Commit in English for each repository.
 
-## 7. Attività per progetto
+## 7. Tasks by project
 
-Le attività seguenti si aggiungono alla checklist comune. “Nucleo presente” significa che sono stati trovati TECH_STACK, progress, lessons e issue-tracker; non certifica l'accuratezza dei contenuti.
+The following tasks add to the common checklist. “Core present” means that TECH_STACK, progress, lessons, and issue-tracker were found; it does not certify that their content is accurate.
 
-| Stato | Repository | Situazione osservata e intervento specifico |
+| Status | Repository | Observed situation and specific action |
 |---|---|---|
-| [ ] | `agent-brains` | Implementare la sezione 4; applicare la migrazione anche alle proprie regole e alla propria `.ai`. |
-| [ ] | `_tests/laravel-ai-boilerplate` | Nucleo presente; contiene prompt storici e `.ai/agents/agent-brains.md`. Allinearlo presto per evitare nuovi progetti con convenzioni vecchie. Preservare le regole Laravel Zero rilevate. |
-| [ ] | `_tests/nextjs-ai-boilerplate` | Nucleo presente; conserva `guidelines`, `blockers.md` e prompt di setup. Allineare template e regole senza perdere indicazioni Next.js. |
-| [ ] | `linkedin-analytics` | Nucleo presente; prompt PRD/task/setup e istruzioni agent-brains locali. Consolidare le note duplicate in AGENTS e controllare le regole UI rispetto ai documenti realmente presenti. |
-| [ ] | `ga-analytics` | Nucleo presente, configurazione Pi, solutions e roadmap specialistiche. Buon candidato per verificare la coesistenza Pi/Codex/OpenCode dopo un primo test isolato; preservare run e compatibilità dei documenti. Consolidare prompt e note duplicate. |
-| [ ] | `craftcv.online` | Nucleo presente; contesto articolato, `FRONTEND_GUIDELINES.md`, `blockers.md`, prompt storici e più convenzioni task. Preservare l'inglese per la documentazione e il routing UI specifico. |
-| [ ] | `appuntidalgiappone` | Nucleo presente; aggiornare riferimenti a `/feature` e vecchi nomi PRD/task. Valutare classificazione di `.ai/SEO-STRATEGY.md` e `.ai/to.md` dopo lettura, senza spostarli automaticamente. |
-| [ ] | `careguru/carefinder-backend` | Nucleo presente; conservare `workflow-decisions.md`, override locali e regole Boost/Filament. Evitare che la generazione Boost sovrascriva policy manuali o catalogo centrale. |
-| [ ] | `careguru-brain` | Nucleo presente, sicurezza, guida KB, research e reviews. Preservare lingua italiana e routing SECURITY/KB; rimuovere la dipendenza dal profilo locale e aggiornare le istruzioni feature/to-spec. Nessun obbligo di design system per un backend senza UI. |
-| [ ] | `andreafalcon.dev` | Nucleo presente; AGENTS descrive esplicitamente il vecchio sistema di symlink. Aggiornarlo e preservare prompt OG, design system e documenti di redesign. |
-| [ ] | `itinerary-ai` | Nucleo presente e istruzioni locali agent-brains. Correggere il riferimento `.agents/skills/designer.md`; mantenere design system e regole Laravel specifiche. |
-| [ ] | `ardizio-design` | Nucleo presente; mantenere ADR, publishing pipeline, knowledge, inbox e research. Verificare `.ai/agents/legacy-skills` prima di archiviare. Correggere vecchi percorsi designer e semantica feature preservando il trattamento delle fonti inbox come dati non fidati. |
-| [ ] | `_tests/search-flights` | Presenti `.ai/features` e configurazione Pi; mancano i quattro file del nucleo. Ricostruire contesto minimo dal progetto se ancora attivo; non rinominare documenti necessari ai run Pi esistenti. |
-| [ ] | `_tests/meal-planner` | Contesto e memoria sono ancora sotto `.agents`, citati da AGENTS. Inventariare e migrare selettivamente in `.ai`, aggiornando tutti i riferimenti; non trattare `.agents` come directory composta soltanto da symlink. |
-| [ ] | `voicefully` | AGENTS presente, `.ai` assente. Valutare attività e istruzioni esistenti; predisporre il nucleo solo se il progetto è in uso. |
-| [ ] | `careguru/carefinder` | `.agents` presente, `.ai` non rilevata. Ispezionare contenuti e istruzioni ulteriori prima di scegliere migrazione o scaffold; preservare eventuali skills locali. |
-| [ ] | `careguru/carefinder-docker` | Nessuna configurazione AI tra quelle rilevate. Valutare contesto operativo minimo dedicato e collegamenti documentali al backend/frontend; non copiare i loro documenti. |
-| [ ] | `linkedinsights-extension` | Nessuna configurazione AI rilevata. Se attivo, documentare stack, contratti con linkedin-analytics e verifiche della sola estensione. |
-| [ ] | `_nerwo/nerwo-frontend` | Nessuna configurazione AI rilevata. Valutare attività e creare solo il contesto necessario. |
-| [ ] | `_nerwo/nerwo-landing` | Nessuna configurazione AI rilevata. Valutare attività e creare solo il contesto necessario. |
-| [ ] | `_tests/spacebooking` | AGENTS presente, `.ai` assente. Verificare convenzioni monorepo e scope delle istruzioni prima di aggiungere il nucleo. |
-| [ ] | `_tests/jointobuild` | Nessuna configurazione AI rilevata. Decidere se includerlo tra i progetti attivi prima dello scaffold. |
-| [ ] | `test-python-django` | Nessuna configurazione AI rilevata. Se attivo, adottare nucleo e verifiche coerenti con Python/Django. |
+| [ ] | `agent-brains` | Implement section 4; apply the migration to its own rules and `.ai` as well. |
+| [ ] | `_tests/laravel-ai-boilerplate` | Core present; contains historical prompts and `.ai/agents/agent-brains.md`. Align it early to avoid new projects inheriting old conventions. Preserve the Laravel Zero rules found there. |
+| [ ] | `_tests/nextjs-ai-boilerplate` | Core present; retains `guidelines`, `blockers.md`, and setup prompts. Align templates and rules without losing Next.js guidance. |
+| [ ] | `linkedin-analytics` | Core present; has PRD/task/setup prompts and local agent-brains instructions. Consolidate duplicate notes in AGENTS and check UI rules against documents that actually exist. |
+| [ ] | `ga-analytics` | Core present, with Pi configuration, solutions, and a specialist roadmap. Good candidate for checking Pi/Codex/OpenCode coexistence after an initial isolated test; preserve runs and document compatibility. Consolidate duplicate prompts and notes. |
+| [ ] | `craftcv.online` | Core present; detailed context, `FRONTEND_GUIDELINES.md`, `blockers.md`, historical prompts, and several task conventions. Preserve English documentation and project-specific UI routing. |
+| [ ] | `appuntidalgiappone` | Core present; update references to `/feature` and old PRD/task names. After reading, assess the classification of `.ai/SEO-STRATEGY.md` and `.ai/to.md` without moving them automatically. |
+| [ ] | `careguru/carefinder-backend` | Core present; preserve `workflow-decisions.md`, local overrides, and Boost/Filament rules. Prevent Boost generation from overwriting manual policies or the central catalog. |
+| [ ] | `careguru-brain` | Core present, with security, KB guidance, research, and reviews. Preserve Italian and SECURITY/KB routing; remove the local-profile dependency and update the feature/to-spec instructions. A design system is not required for a backend without a UI. |
+| [ ] | `andreafalcon.dev` | Core present; AGENTS explicitly describes the old symlink system. Update it while preserving OG prompts, design system, and redesign documents. |
+| [ ] | `itinerary-ai` | Core present with local agent-brains instructions. Fix the `.agents/skills/designer.md` reference; retain the design system and Laravel-specific rules. |
+| [ ] | `ardizio-design` | Core present; retain ADRs, publishing pipeline, knowledge, inbox, and research. Check `.ai/agents/legacy-skills` before archiving. Fix old designer paths and `feature` semantics while preserving the treatment of inbox sources as untrusted data. |
+| [ ] | `_tests/search-flights` | `.ai/features` and Pi configuration are present; the four core files are missing. Rebuild minimal context from the project if still active; do not rename documents needed by existing Pi runs. |
+| [ ] | `_tests/meal-planner` | Context and memory are still under `.agents` and referenced by AGENTS. Inventory and selectively migrate them to `.ai`, updating all references; do not treat `.agents` as a directory containing only symlinks. |
+| [ ] | `voicefully` | AGENTS exists; `.ai` is absent. Assess project activity and existing instructions; prepare the core only if the project is in use. |
+| [ ] | `careguru/carefinder` | `.agents` exists; `.ai` was not found. Inspect its contents and any additional instructions before choosing migration or scaffolding; preserve local skills if present. |
+| [ ] | `careguru/carefinder-docker` | No AI configuration was found. Assess a dedicated minimum operational context and documentation links to the backend/frontend; do not copy their documents. |
+| [ ] | `linkedinsights-extension` | No AI configuration was found. If active, document its stack, contracts with linkedin-analytics, and checks for the extension alone. |
+| [ ] | `_nerwo/nerwo-frontend` | No AI configuration was found. Assess project activity and create only the context needed. |
+| [ ] | `_nerwo/nerwo-landing` | No AI configuration was found. Assess project activity and create only the context needed. |
+| [ ] | `_tests/spacebooking` | AGENTS exists; `.ai` is absent. Check monorepo conventions and instruction scope before adding the core. |
+| [ ] | `_tests/jointobuild` | No AI configuration was found. Decide whether it is an active project before scaffolding. |
+| [ ] | `test-python-django` | No AI configuration was found. If active, adopt the core and checks appropriate for Python/Django. |
 
-Per altre sottocartelle e repository annidati non emersi nell'inventario, effettuare una ricerca dedicata prima di dichiarare completata la migrazione dell'intera directory dev. Non includere automaticamente archivi e dati di applicazioni nei progetti da migrare.
+Search separately for other subdirectories and nested repositories not found in the inventory before declaring the migration of the entire `dev` directory complete. Do not automatically include archives or application data among the projects to migrate.
 
-## 8. Verifiche e criteri di completamento
+## 8. Verification and completion criteria
 
-- [ ] In un progetto senza collegamenti locali, Codex trova e carica `$spec-and-tasks` dal catalogo centrale.
-- [ ] OpenCode scopre la stessa skill; verificare separatamente il comando `/spec-and-tasks`, che richiede esposizione supportata.
-- [ ] Pi trova `/skill:spec-and-tasks` e registra `/feature`, `/flow`, `/stack` dal pacchetto globale.
-- [ ] La skill documentale produce spec e task nella `.ai` del progetto corrente e non modifica codice applicativo.
-- [ ] Le dipendenze tra skills funzionano anche senza `.agents` nel progetto e partendo da una sottocartella.
-- [ ] Un passaggio a una nuova sessione di implementazione funziona leggendo i documenti, senza ricostruire la conversazione precedente.
-- [ ] Una review separata confronta requisiti e diff e restituisce rilievi verificabili.
-- [ ] Pi mantiene compatibilità dei run esistenti; eventuali prove complete di implementazione avvengono in un repository di prova, non su un progetto attivo per sola verifica del caricamento.
-- [ ] Una nuova skill e una modifica a una skill diventano disponibili senza rilanciare setup nei progetti; annotare eventuale necessità di reload/riavvio.
-- [ ] Eseguire i test significativi del motore e degli script modificati, compreso `npm test` e `npm run typecheck` quando si modifica il codice Pi. Non avviare suite applicative complete per sole modifiche documentali prive di effetti eseguibili.
-- [ ] Nessun contenuto locale o di terze parti è stato perso; rollback dell'installazione globale documentato e verificato.
+- [ ] In a project with no local links, Codex finds and loads `$spec-and-tasks` from the central catalog.
+- [ ] OpenCode discovers the same skill; check `/spec-and-tasks` separately because it requires supported exposure.
+- [ ] Pi finds `/skill:spec-and-tasks` and registers `/feature`, `/flow`, and `/stack` from the global package.
+- [ ] The documentation skill creates specs and tasks in the current project's `.ai` and does not modify application code.
+- [ ] Skill dependencies work without `.agents` in the project and when starting from a subdirectory.
+- [ ] Handoff to a new implementation session works by reading the documents, without reconstructing the previous conversation.
+- [ ] A separate review compares the requirements and diff and returns verifiable findings.
+- [ ] Pi remains compatible with existing runs; any full implementation trials happen in a test repository, not an active project merely to verify loading.
+- [ ] A new skill or a skill change becomes available without rerunning setup in projects; note any reload/restart requirement.
+- [ ] Run meaningful tests for the engine and modified scripts, including `npm test` and `npm run typecheck` when changing Pi code. Do not run full application suites for documentation-only changes with no executable effects.
+- [ ] No local or third-party content was lost; rollback for global installation is documented and verified.
 
-> **Stato 2026-10-30 (M1):** nessuno dei criteri sopra è ancora verificato su
-> harness reali — richiedono l'installazione globale (M2/M3) o la migrazione
-> consumatori (M4). M1 ha reso il catalogo indipendente dai collegamenti
-> locali a livello di file e test strutturali; la verifica di discovery e
-> invocazione nelle sessioni reali resta aperta e non va data per acquisita.
+> **Status 2026-10-30 (M1):** none of the criteria above has yet been verified in
+> real harness sessions — they require global installation (M2/M3) or consumer
+> migration (M4). M1 made the catalog independent of local links at the file and
+> structural-test level; discovery and invocation in real sessions remain open
+> and must not be assumed.
 
-## 9. Riferimenti
+## 9. References
 
-- Codex: https://learn.chatgpt.com/docs/build-skills — scoperta globale in `~/.agents/skills`, collegamenti, invocazione e metadati.
-- OpenCode: https://opencode.ai/docs/skills/ — scoperta globale, permessi e metadati per comandi slash; verificare versione installata.
-- Pi locale: `agent-brains/node_modules/@earendil-works/pi-coding-agent/docs/skills.md` e `docs/packages.md` — pacchetti locali e `/skill:<name>`.
-- Implementazione corrente: `agent-brains/package.json`, `extensions/pi-brain.ts`, `src/pi/`, `src/workflows/`, `docs/pi-brain/README.md`.
-- [Roadmap di coordinamento](pi-plugin-adoption-roadmap.md#cross-harness-workflow-migration-m) e [consolidamento C1–C5](pi-plugin-adoption-roadmap.md#agreed-consolidation-sequence-2026-10-22).
-- [Valutazione C2](../evals/tdd-review/C2-2026-10-22.md): evidenze e limiti del consolidamento TDD/review già completato.
+- Codex: https://learn.chatgpt.com/docs/build-skills — global discovery in `~/.agents/skills`, links, invocation, and metadata.
+- OpenCode: https://opencode.ai/docs/skills/ — global discovery, permissions, and slash-command metadata; check the installed version.
+- Local Pi: `agent-brains/node_modules/@earendil-works/pi-coding-agent/docs/skills.md` and `docs/packages.md` — local packages and `/skill:<name>`.
+- Current implementation: `agent-brains/package.json`, `extensions/pi-brain.ts`, `src/pi/`, `src/workflows/`, `docs/pi-brain/README.md`.
+- [Coordination roadmap](pi-plugin-adoption-roadmap.md#cross-harness-workflow-migration-m) and [C1–C5 consolidation](pi-plugin-adoption-roadmap.md#agreed-consolidation-sequence-2026-10-22).
+- [C2 assessment](../evals/tdd-review/C2-2026-10-22.md): evidence and limits of the completed TDD/review consolidation.
 
-## 10. Registro di avanzamento
+## 10. Progress log
 
-| Data | Ambito | Modifica completata | Verifica | Limitazioni / prossimo passo |
+| Date | Scope | Completed change | Verification | Limitations / next step |
 |---|---|---|---|---|
-| 2026-10-19 | Piano | Creato inventario e piano trasversale | Ispezione in lettura di strutture, configurazioni e skills rilevanti | Implementazione non iniziata; configurazioni harness non provate in sessione |
-| 2026-10-22 | Documentazione | Trasferito il piano nel repository e collegato alla roadmap; integrate le garanzie dei commit fino a cdf54f3 | Confronto dei commit e controllo dei collegamenti documentali | Solo documentazione; migrazione e configurazione del Mac non iniziate |
-| 2026-10-30 | M1 in agent-brains | Skill `feature` rinominata `spec-and-tasks` (planning-only, contratti `spec.md`/`tasks.md`, handoff finale); riferimenti tra skill portabili in `spec-and-tasks`/`laravel`/`nextjs`/`astro`/`context-audit`; `code-review` adottato localmente con input spec/task/diff e review≠fix; `grill-with-docs` riarmonizzato; profili, router, adattatori, template e README aggiornati; Pi `/feature`, `/flow`, resume e artefatti storici invariati | `npm test` 449/449 (4 nuovi test strutturali in `tests/repo.test.ts`), `npm run typecheck`, `git diff --check` | Solo file, non sessioni reali: discovery/invocazione su Codex/OpenCode/Pi NON verificate (M3/M4); consumo da sottocartella non provato; Laravel Boost separazione non affrontata; consumatori con symlink `feature` pendenti finché non si rilancia `setup.sh` (M4); diff non committato, in attesa di review |
-| 2026-10-30 | M1 — correzioni review round 1 | Review indipendente: 4 rilievi P2, tutti corretti. (1) `setup/SKILL.md` era tornato al vecchio riferimento `feature` per un revert accidentale durante i check — riapplicato con distinzione del comando Pi `/feature`. (2) `to-spec` adottata localmente (LICENSE + provenienza upstream `5c89081d`, rimossa dal lock) con guard: nessuna sovrascrittura silenziosa di `spec.md` esistente; documento approvato aggiornato in place solo su richiesta, preservando il proprio contratto. (3) Prescritta ovunque la risoluzione del symlink alla directory reale della skill prima dei percorsi relativi (le skill sono caricate anche via link `.agents/workflows/<name>.md`); nuovo test che verifica la risoluzione dalla directory reale. (4) Voce "sottocartella" separata: convenzione documentata [x], comportamento verificato [ ]. | `npm test` 450/450, `npm run typecheck`, `git diff --check`; verifica manuale del reviewer confermata (workflow link → destinazione inesistente risolvendo dal percorso del link; corretta dalla directory fisica) | M1 resta in attesa di ri-approvazione; nessuna verifica su harness reali |
+| 2026-10-19 | Plan | Created the inventory and cross-project plan | Read-only inspection of relevant structures, configuration, and skills | Implementation not started; harness configuration not tested in sessions |
+| 2026-10-22 | Documentation | Moved the plan into the repository and linked it to the roadmap; incorporated safeguards from commits through `cdf54f3` | Compared commits and checked documentation links | Documentation only; migration and Mac configuration not started |
+| 2026-10-30 | M1 in agent-brains | Renamed the `feature` skill to `spec-and-tasks` (planning-only, `spec.md`/`tasks.md` contracts, final handoff); made cross-skill references portable in `spec-and-tasks`/`laravel`/`nextjs`/`astro`/`context-audit`; adopted `code-review` locally with spec/task/diff inputs and review≠fix; harmonized `grill-with-docs`; updated profiles, router, adapters, templates, and README; Pi `/feature`, `/flow`, resume, and historical artifacts unchanged | `npm test` 449/449 (4 new structural tests in `tests/repo.test.ts`), `npm run typecheck`, `git diff --check` | Files only, not real sessions: discovery/invocation on Codex/OpenCode/Pi NOT verified (M3/M4); subdirectory use not tested; Laravel Boost separation not addressed; consumers with a `feature` symlink remain pending until `setup.sh` is rerun (M4); diff uncommitted, awaiting review |
+| 2026-10-30 | M1 — review round 1 corrections | Independent review: 4 P2 findings, all corrected. (1) `setup/SKILL.md` had reverted to the old `feature` reference after an accidental revert during checks — reapplied with the Pi `/feature` distinction. (2) `to-spec` adopted locally (LICENSE + upstream provenance `5c89081d`, removed from the lock) with a guard against silently overwriting an existing `spec.md`; an approved planning document is updated in place only on request, preserving its own contract. (3) Skill-relative paths now require resolving symlinks to the skill's real directory first (skills are also loaded through `.agents/workflows/<name>.md` links); a test checks resolution from the real directory. (4) The "subdirectory" item was split: convention documented [x], behavior verified [ ]. | `npm test` 450/450, `npm run typecheck`, `git diff --check`; reviewer manual check confirmed (workflow link → destination not found when resolving from link path; resolved from physical directory) | M1 still awaits re-approval; no real harness verification |
