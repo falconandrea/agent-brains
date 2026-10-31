@@ -12,13 +12,14 @@ in the [adoption roadmap](docs/plans/pi-plugin-adoption-roadmap.md#cross-harness
 and its [detailed migration plan](docs/plans/cross-harness-workflow-migration.md).
 M1 (portable skill references, the `feature` → `spec-and-tasks` skill rename,
 planning/implementation/review boundaries) is implemented in this repository;
-global distribution and consumer migration have not started, so the setup
-instructions below describe the current system.
+M2 prepares global distribution but does not apply it to this Mac. Machine
+installation and live harness discovery remain M3; consumer migration remains
+M4. Existing project-local setup stays available during that gradual rollout.
 
 ## Repository structure
 
 ```
-├── .opencode/              # → Symlinked to projects (OpenCode)
+├── .opencode/              # Project-local compatibility adapters
 │   ├── agents/             #   Agent definitions (markdown)
 │   └── skills/             #   Skill definitions (markdown)
 │
@@ -51,9 +52,11 @@ instructions below describe the current system.
 ├── extra/                  # Optional/manual extras, not linked by profiles
 │   └── skills/             # Tool-specific skills for manual use
 │
-├── setup.sh                # Create agent/skill symlinks (profile-aware)
+├── adapters/opencode/      # Standalone global OpenCode command adapters
+├── setup.sh                # Legacy project-local links (profile-aware)
 ├── scaffold.sh             # Copy .ai templates to a project
-└── unlink.sh               # Remove symlinks
+├── unlink.sh               # Remove project-local symlinks
+└── install-global-skills.sh # Preview/apply/diagnose/rollback global links
 ```
 
 ## Documentation language
@@ -62,9 +65,69 @@ Write repository-authored documentation and maintenance comments in English.
 Preserve verbatim user input, captured output, test fixtures, and language
 examples when their original language is part of the evidence or behavior.
 
-## Quick Start
+## Global skill distribution
 
-### 1. New project — full setup
+`agent-brains` remains the canonical source. The installer creates individual
+symlinks from the catalog into `~/.agents/skills`, which Codex and OpenCode
+both discover. Per-skill links allow existing personal skills to stay in the
+same directory and let name conflicts be skipped without replacing content.
+The installer also checks OpenCode's higher-priority global skills directory
+and skips a same-name collision there.
+The installer also exposes only the standalone OpenCode `/spec-and-tasks`
+command adapter under `~/.config/opencode/commands/`; it never links the whole
+`.opencode` directory.
+
+M2 adds and verifies this mechanism in isolated fixtures. It does not install
+anything in the real home directory. For the later M3 machine setup, review a
+read-only preview first, then explicitly apply:
+
+```bash
+./install-global-skills.sh                 # preview; no writes
+./install-global-skills.sh --doctor         # catalog, manifests, links, duplicates, config paths
+./install-global-skills.sh --apply          # explicit global installation
+./install-global-skills.sh --doctor         # inspect the resulting state
+./install-global-skills.sh --rollback       # remove only recorded unchanged links
+```
+
+`--apply` preserves existing files, directories and foreign symlinks at every
+skill/command destination and reports conflicts, including a same-name skill
+already defined in OpenCode's higher-priority global skill directory. It
+records only links it created. Rollback removes a recorded path only while it
+is still a symlink to the same canonical source; changed paths and personal
+content remain. The manifest is stored at
+`~/.agents/.agent-brains-global-manifest`. The catalog
+is not copied or moved. A global install is a live link to this checkout, so
+keep the checkout in a stable location and use `--doctor` after moving it.
+
+Codex reads user skills from `~/.agents/skills`, follows symlinked skill
+folders, and supports `$skill` invocation; the installed CLI is 0.166.0. See
+[Codex skill documentation](https://developers.openai.com/codex/skills/).
+OpenCode 2.2.4 uses global `SKILL.md` discovery and does not interpret skill
+metadata as slash-command definitions. The standalone command adapter supplies
+`/spec-and-tasks`; it invokes the skill by ID. See [OpenCode skills](https://docs.opencode.ai/docs/skills/)
+and [OpenCode commands](https://dev.opencode.ai/docs/commands/). Codex and
+OpenCode discovery have not yet been verified in live sessions; that is M3.
+
+### Update responsibilities
+
+- Edit local skills directly in this repository. `npx skills update <name>`
+  remains limited to reviewed upstream-managed skills listed in
+  `skills-lock.json`; local-managed skills are protected.
+- `update-upstream-skills.sh` retains the former selected upstream download
+  operation. The historical `install-global-skills.sh --update-upstream`
+  option is a compatibility route; invoking `install-global-skills.sh` with no
+  arguments now only previews the global distribution.
+- Laravel Boost output depends on one Laravel project's installed packages and
+  versions. Run `php artisan boost:update` in that project with its own real
+  `.agents/skills` directory. Do not run it through project links into this
+  repository or through global catalog links. Keep generated output project
+  local; review and deliberately adapt only genuinely reusable guidance into
+  the canonical `laravel` skill. The generic Laravel skill in this catalog is
+  not a container for Boost-generated project rules.
+
+## Project-local setup (migration compatibility)
+
+### Link project-local adapters (legacy migration path)
 
 ```bash
 # Link agents & skills with a PROFILE (curated subset per tech stack)
@@ -74,10 +137,12 @@ examples when their original language is part of the evidence or behavior.
 ./scaffold.sh /path/to/your-project
 ```
 
-Available profiles: `frontend`, `laravel`, `nextjs`, `astro`, `nodejs`, `nodejs-ai-backend`, `full` (all skills).
-Default (no arg) is `full`. See [Profiles](#profiles) below.
+Available profiles: `frontend`, `laravel`, `nextjs`, `astro`, `nodejs`, `nodejs-ai-backend`, `full` (all skills). Default (no arg) is `full`.
+These profile links are retained for gradual migration; they do not define the
+catalog available from a completed global install. Pi continues to use profiles
+for role/stack selection.
 
-### 2. Link .opencode only (no .agents)
+### Link .opencode only (no .agents)
 
 ```bash
 ./setup.sh /path/to/your-project opencode   # link .opencode only (no .agents)
@@ -89,7 +154,7 @@ Default (no arg) is `full`. See [Profiles](#profiles) below.
 > it: `./setup.sh /path/to/your-project full` (a curated profile such as
 > `laravel`, `nextjs`, `astro` or `nodejs` works too).
 
-### 3. Existing project (with local configurations)
+### Existing project (with local configurations)
 
 If your target project already has a physical `.agents` or `.opencode` directory (for example, skills generated by third-party tools like `laravel-boost` or custom configurations):
 
@@ -99,11 +164,9 @@ whose path is occupied is skipped with a warning and not counted as installed.
 To actually adopt existing local skills into the canonical store:
 
 1. **Migrate existing skills/workflows**: Check if there are local configurations you want to preserve, and copy them to the corresponding folders in this repository first (e.g. to `.agents/skills/` in `agent-brains`).
-2. **Remove the local physical folder** in the target project:
-   ```bash
-   rm -rf /path/to/your-project/.agents
-   ```
-3. **Run the link script** (with a profile, or `full` for everything):
+2. Preserve the local content and run the link script only after checking its
+   conflict report. Do not remove a physical `.agents` directory as a shortcut.
+3. **Run the project-local link script** (with a profile, or `full`):
    ```bash
    ./setup.sh /path/to/your-project laravel   # or: nextjs | astro | nodejs | full
    ```
@@ -119,7 +182,7 @@ repository — the link's name alone is never proof of ownership). Foreign
 symlinks and real files are preserved and reported; directories are removed
 only when left empty.
 
-## Workflow agents → Codex + OpenCode
+## Workflow skills → Codex + OpenCode + Pi
 
 The seven workflow skills live as native skills in
 `.agents/skills/<name>/SKILL.md` and are invoked the same way in both tools. Each
@@ -137,7 +200,7 @@ one has an OpenCode pointer and a workflow link:
 
 | Tool | Syntax | Example |
 |---|---|---|
-| OpenCode | slash command | `/spec-and-tasks` |
+| OpenCode | global command adapter `/spec-and-tasks`; skills are loaded by ID | `/spec-and-tasks` or `@spec-and-tasks` |
 | Codex (CLI / IDE) | `$` mention or `/skills` | `$spec-and-tasks` |
 | Pi | `/skill:spec-and-tasks` (documentary skill) — `/feature` remains the orchestrated runtime command | `$spec-and-tasks` / `/feature <idea>` |
 
@@ -194,9 +257,9 @@ How you update depends on the tool:
   Prefer a named update over bulk `npx skills update` — an unreviewed bulk
   update changes behaviour in every symlinked project at once.
 - **`php artisan boost:update`** (`laravel/boost`) must run **inside a Laravel project** —
-  it reads the project's composer/packages to generate project-relevant skills. Run it
-  in any Laravel project whose `.agents/skills/` links back here; the write flows through
-  the symlinks into this canonical store, so every other Laravel project sees it:
+  it reads that project's packages to generate project-relevant skills. Run it
+  only when that project's `.agents/skills/` is a real project-local directory;
+  never allow generated output to write through links into this canonical store:
   ```bash
   cd /path/to/laravel-project
   php artisan boost:update
@@ -233,13 +296,13 @@ uninstalled skills), missing tracker config, and profile orphans, then reports
 and asks before installing or committing anything. The remap is also documented
 in `.agents/AGENTS.md`.
 
-### Profiles → curated subset per project
+### Profiles → Pi role/stack selection and legacy project subsets
 
-A project does **not** get every skill. It gets only the skills listed in its
-profile manifest. `.opencode` is symlinked whole (agents are opt-in by
-invocation, with no always-on cost); only `.agents/skills/` is curated.
-
-Codex loads the shared skills directly from `.agents/skills/`.
+The global installer exposes every non-conflicting catalog skill regardless
+of profile. Pi uses the manifests to select the skills relevant to a stack and
+pipeline role. Projects still using the migration-compatible `setup.sh` path
+receive only the skills listed in their profile. `.opencode` is linked whole
+only in that legacy project-local mode.
 
 ```
 # full profile (escape hatch):
@@ -250,10 +313,9 @@ project-b/.agents/       →  real dir
 project-b/.agents/skills/  →  real dir of per-skill symlinks → this-repo/.agents/skills/<name>
 ```
 
-Each symlink points into the canonical store, so an edit/install here is
-immediately visible in every project whose profile includes that skill. Re-running
-`./setup.sh /path laravel` refreshes the symlinks (useful after editing a manifest
-or installing a new skill and adding it to a profile).
+Each symlink points into the canonical store. Re-running `setup.sh` refreshes
+legacy project links; rerunning `install-global-skills.sh --apply` links newly
+added catalog skills globally. Global links are not filtered by Pi profiles.
 
 **Ownership rule.** A symlink is agent-brains' only when its *resolved
 destination* is inside this repository (relative destinations are resolved
@@ -276,26 +338,14 @@ this-repo/templates/.ai/  ──copy──→  project-a/.ai/  (independent)
 
 Each project gets its own copy. PRD, roadmap, DB schema are unique per project.
 
-### Laravel Boost Skills
+### Laravel Boost content
 
-`php artisan boost:update` runs **in a Laravel project** (not in this repo — it
-needs Laravel context to detect packages and generate project-relevant skills).
-Run it in any Laravel project whose `.agents/skills/` is linked here; the write
-flows through the symlinks into the canonical store, and every other Laravel
-project whose profile includes those skills sees the update immediately.
-
-**Verify symlinks survive each `boost:update`** — boost may replace a symlink
-with a real folder when it reinstalls a skill:
-
-```bash
-# in the Laravel project, after boost:update:
-ls -la .agents/skills/ | grep laravel     # must show "->" (symlink)
-# if a skill shows as a real folder (no arrow), restore the link:
-cd /path/to/agent-brains && ./setup.sh /path/to/laravel-project laravel
-```
-
-If boost installs a brand-new skill, add it to `profiles/laravel.list` (or the
-relevant profile) and re-run `./setup.sh /path/to/project laravel`.
+Boost-generated files capture a particular project's package set and versions.
+They belong in that project's local `.agents/skills` directory. A symlinked
+project skill path can route writes into the canonical repository, so do not
+run Boost while that path points into agent-brains. To adopt reusable rules,
+review them separately and edit the canonical Laravel skill by hand; do not
+copy project-specific output into the shared catalog.
 
 ## Profiles
 
@@ -332,18 +382,20 @@ group with `@include <name>` when a project needs more than its default profile.
 
 ### Adding / editing a profile
 
-1. Edit `profiles/<name>.list` (create it for a new profile).
-2. Re-run `./setup.sh /path/to/project <name>` to refresh the project's symlinks.
+1. Edit `profiles/<name>.list` (create it for a new Pi stack profile).
+2. For projects that still use local links, re-run
+   `./setup.sh /path/to/project <name>` to refresh that project's symlinks.
 
 ### Making a skill available everywhere
 
-Add it to `profiles/common.list` — every profile that `@include common` (all of
-them) will pick it up on the next `./setup.sh`.
+Global installation links all canonical skills independent of profiles. Add a
+skill to `profiles/common.list` only when it should participate in every Pi
+stack profile; legacy linked projects still need a profile refresh.
 
 ### Adding a new agent skill — canonical workflow
 
-When you create a new agent skill folder under `.agents/skills/<name>/`, target
-projects will **not** see it until you do both steps below. Register skills in
+When you create a new agent skill folder under `.agents/skills/<name>/`, run
+`install-global-skills.sh --apply` once to add its global link. Register skills in
 the manifests instead of creating symlinks by hand inside project
 `.agents/skills/` directories: links pointing into this canonical store are
 refreshed (removed/recreated) by the next `setup.sh` run, so a hand-crafted
@@ -355,7 +407,7 @@ link into the store does not survive a refresh.
    - Frontend / motion / UI skill → the relevant `profiles/frontend-*.list` group (or `frontend.list` for every frontend profile; not nodejs)
    - Stack-specific skill → the relevant `profiles/<stack>.list`
    - Keep `profiles/full.list` aligned with the canonical catalog: Pi resolves this manifest before role filtering. `setup.sh full` links the whole directory directly.
-3. **Re-run setup.sh on each project** that should pick it up, with its profile:
+3. **Refresh legacy project links only where still needed**:
    ```bash
    ./setup.sh /path/to/project laravel   # or nextjs | astro | nodejs | full
    ```

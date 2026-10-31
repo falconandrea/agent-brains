@@ -1,6 +1,8 @@
 #!/bin/bash
 #
-# Remove the symlinks agent-brains owns from a target project.
+# Remove agent-brains-owned symlinks from one target project.
+# This intentionally does not change machine-global links; use
+# install-global-skills.sh --rollback for those.
 #
 # Usage:
 #   ./unlink.sh /path/to/your-project          # Remove both

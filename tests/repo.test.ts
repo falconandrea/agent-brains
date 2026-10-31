@@ -175,7 +175,7 @@ test("a skill declaring metadata.management local is never in skills-lock.json",
 });
 
 test("the bootstrap installer cannot replace locally managed skills", () => {
-  const installer = readFileSync(join(ROOT, "install-global-skills.sh"), "utf8");
+  const installer = readFileSync(join(ROOT, "update-upstream-skills.sh"), "utf8");
   const selected = [...installer.matchAll(/--skill\s+([a-z][a-z0-9-]*)/g)].map((m) => m[1]!);
   for (const skill of selected) {
     assert.doesNotMatch(frontmatterOf(skill), /^ {2}management:\s*local$/m,
@@ -193,7 +193,7 @@ interface WorkflowRow {
 
 /** Workflow rows from the README table (skill | OpenCode pointer | workflow link). */
 const readmeWorkflows = (): WorkflowRow[] => {
-  const section = README.match(/## Workflow agents[\s\S]*?(?=\n## )/)?.[0] ?? "";
+  const section = README.match(/## Workflow (?:agents|skills)[\s\S]*?(?=\n## )/)?.[0] ?? "";
   return [...section.matchAll(/^\| `([^`]+)` \| `([^`]+)` \| `([^`]+)` \|$/gm)].map((m) => ({
     skill: m[1]!,
     pointer: m[2]!,

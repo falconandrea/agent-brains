@@ -7,8 +7,10 @@ Local multi-agent workflow harness for [Pi](https://pi.dev), built on top of the
 deterministic checks → independent reviewer agent (different model) → bounded
 fix loop → summary. **It never commits.**
 
-Pi-brain is part of the repository's canonical `main` branch and coexists with
-the OpenCode/Codex setup managed through `setup.sh`.
+Pi-brain is part of the repository's canonical `main` branch. It shares the
+catalog with Codex and OpenCode; global distribution is prepared by
+`install-global-skills.sh`, while `setup.sh` remains a project-local migration
+path.
 
 ---
 
@@ -27,6 +29,30 @@ is the source of truth for the next action.
 
 The spike proves every Pi primitive pi-brain uses (including `ask_user` mid-run).
 Real runs have since covered the whole pipeline on real features.
+
+## Cross-harness catalog distribution
+
+`.agents/skills/` in agent-brains remains canonical. The global installer
+creates per-skill links in `~/.agents/skills`, a location supported by Codex
+and OpenCode; per-skill links preserve personal skill directories and avoid
+overwriting name conflicts. It also installs one standalone OpenCode
+`/spec-and-tasks` command adapter. It does not link the repository's `.opencode`
+directory, change Pi's global package registration, or install global files as
+part of Pi's own package flow.
+
+The installer defaults to preview. `--apply`, `--doctor`, and `--rollback` are
+documented in the [repository README](../../README.md#global-skill-distribution).
+M2's implementation and isolated fixture checks do not prove discovery in a
+live Codex/OpenCode/Pi session. That verification remains M3. Existing Pi
+`/feature`, `/flow`, `/stack`, role policies, profiles, resume behavior, and
+historical run documents remain in the Pi engine; profiles continue to select
+skills by stack and role there.
+
+Laravel Boost output is project-specific because it reflects the consuming
+project's installed packages and versions. Generate it only in that project's
+local `.agents/skills` directory, never through a link into the canonical
+catalog. Promote reviewed generic guidance manually into the shared Laravel
+skill.
 
 ---
 
@@ -300,7 +326,7 @@ src/                       everything else — no Pi, unit-tested
   context-router.ts        which .ai/ docs each role/task actually needs
   run-lock.ts              one writing run per repository
   workflows/feature.ts     the deterministic state machine
-profiles/*.list            skill lists per stack; setup.sh ships the same lists to OpenCode
+profiles/*.list            skill lists per stack; used by Pi role routing
 .agents/skills/            canonical skill store shared by Pi and OpenCode
 spike/                     capability spike, run before trusting src/pi/
 ```

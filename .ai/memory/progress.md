@@ -4,15 +4,13 @@
 
 - 2026-10-30 behavioral verification ideas from the pstack/video discussion
   are saved in the [roadmap follow-ups](../../docs/plans/pi-plugin-adoption-roadmap.md#behavioral-verification-follow-ups-recorded-2026-10-30).
-  M1 is now implemented in agent-brains (see Done 2026-10-30); the scheduling
-  priority for the pilot shifts to M2 preparation and the pilot itself.
-  Pending: a small project-local verification pilot (target
-  unselected), explicit verification outcomes building on C2; deferred:
-  targeted property/mutation experiment. Existing `config.verify` can support
-  the pilot without waiting technically for M1. No implementation, tool
-  installation or new runtime contract started; full video claims unverified.
+  The separate small project-local verification pilot remains pending (target
+  unselected), as do explicit outcomes building on C2; the targeted
+  property/mutation experiment is deferred. Existing `config.verify` can
+  support the pilot. Full video claims remain unverified.
 
-- **Next: M2 (global distribution)** — M1 (portable skills and
+- **M2 implementation reviewed and approved; next: M3 (machine setup
+  and live-harness pilot)** — M1 (portable skills and
   planning/implementation/review boundaries) was re-reviewed after correction
   of four P2 findings, approved by the user, and committed as `6567873` on
   2026-10-30. M1 is complete within agent-brains; live-harness verification
@@ -20,9 +18,10 @@
   and limits live in the
   [migration plan](../../docs/plans/cross-harness-workflow-migration.md).
   C5 is closed as a bounded assessment; no broad efficacy or savings claim.
-  Global installation, harness verification and consumer migration have not
-  started. Preserve C1/C2/C3 behavior, Pi /feature and existing resume
-  artifacts.
+  The installer and diagnostics are implemented with isolated fixture tests,
+  but no global installation was applied. Live-harness verification and
+  consumer migration remain M3/M4. Preserve C1/C2/C3 behavior, Pi /feature and
+  existing resume artifacts.
 
 - C3 instruction changes are complete; behavioral validation C3-V remains
   pending on the next explicitly requested real security review. Criteria and
@@ -34,13 +33,12 @@
   and registered as M1–M4 in the
   [roadmap](../../docs/plans/pi-plugin-adoption-roadmap.md#cross-harness-workflow-migration-m).
   Includes per-project `.ai` alignment and the C1/C2 preservation constraints.
-  Documentation only: global installation, skill rename and consumer migration
-  have not started; next action is M1 (C4/C5 closed with their documented
-  limits; no broad savings or skill-efficacy conclusion).
+  The original 2026-10-22 entry below is historical: M1 is complete and M2 is
+  prepared for review; machine setup is M3 and consumer migration is M4.
   Detailed completion status belongs
   to the migration plan, priority and coordination to the roadmap.
 
-- 2026-10-22 agreed consolidation order is owned by
+- Historical 2026-10-22 agreed consolidation order is owned by
   [the roadmap](../../docs/plans/pi-plugin-adoption-roadmap.md#agreed-consolidation-sequence-2026-10-22):
   C1 completion policy/reconciliation → C2 TDD and test-quality consolidation →
   C3 feasible Cloudflare ideas in existing security-reviewer → C4 context/cost
@@ -48,7 +46,8 @@
   full Cloudflare installation is planned. Analytics is excluded. C1/C2/C3 are
   complete; C4 is closed after bounded reconciliation (U16/S2/S1/P1 complete;
   full-workflow comparison inconclusive, unmet criterion explicitly retired)
-  and C5 is closed as a bounded assessment. M1 is next; R1
+  and C5 is closed as a bounded assessment. M1 was next at the time; it is now
+  committed, and M2 is prepared. R1
   plugin trials still require an explicit request.
 
 - New `agent-readiness` and `html-report` skills are registered in common/full;
@@ -102,12 +101,41 @@
 
 ## Done
 
+- 2026-10-31 **M2 approved for commit** after independent review and correction
+  of the installer recovery, rollback validation, symlink-parent handling,
+  missing-home error, and doctor manifest diagnostics. Fresh verification:
+  461/461 tests, typecheck, shell syntax checks, and diff checks passed.
+  The user authorized the commit. No global installation or consumer migration
+  was performed; M3/M4 remain open.
+
 - 2026-10-30 **M1 approved and committed** as `6567873` after the independent
   re-review confirmed the four P2 corrections and the user authorized the
   commit. Verification: 450/450 tests, typecheck and diff checks passed.
-  M2 is next; this closes the repository implementation only, without
-  claiming live-harness discovery, global installation or consumer migration.
+  M2 is now prepared for independent review; this closes only the M1 repository
+  implementation, without claiming live-harness discovery, global installation
+  or consumer migration.
   Earlier same-day entries below preserve the implementation/review history.
+
+- 2026-10-30 **M2 global distribution prepared** (uncommitted, not installed on
+  this Mac). Added a default-preview global installer that creates per-skill
+  links in `~/.agents/skills`, preserves occupied paths, records managed links,
+  supports rollback, and diagnoses catalog/profile/link/duplicate/config
+  state. Added a standalone OpenCode `/spec-and-tasks` command adapter; no
+  `.opencode` directory link or global config was changed. Renamed the old
+  upstream downloader to `update-upstream-skills.sh`, keeping an explicit
+  compatibility route. Clarified project-local `setup.sh`/`unlink.sh` and
+  Laravel Boost's project-local generated output. Read-only inventory found
+  Codex CLI 0.166.0, OpenCode 2.2.4, Pi 0.85.1, existing personal skills and a
+  `react-doctor` duplicate; no sensitive values were read or reported. Fixture
+  Fixture verification passed 11/11, including failed-manifest-move cleanup,
+  symlink-parent refusal, invalid-manifest no-mutation, and missing-home error;
+  invalid-manifest doctor reporting; `npm test` passed 461/461,
+  `npm run typecheck`, all four relevant `bash -n` checks, and
+  `git diff --check` passed. Read-only `--doctor` found 64 valid catalog
+  entries, the existing OpenCode `react-doctor` duplicate, and the two Pi
+  router references absent from the canonical catalog; it read no config
+  values. Live discovery and machine installation remain M3; consumer
+  migration remains M4.
 
 - 2026-10-30 English-language consistency pass: translated repository-authored
   Italian prose in the migration plan, architecture audit, and four research
@@ -158,8 +186,8 @@
   staged edits; re-applied with the Pi `/feature` distinction), (2) to-spec
   contract conflict (adopted locally with the guard above), (3) symlink
   resolution (prescribed everywhere + pinning test), (4) subfolder item
-  wrongly ticked (split into documented vs unverified). M1 is **not closed**:
-  the corrected diff awaits re-approval, and M2 does not start before that.
+  wrongly ticked (split into documented vs unverified). This historical entry
+  was superseded the same day by M1 approval and commit `6567873`.
   Limits: file-level and structural checks only — discovery/invocation on
   live Codex/OpenCode/Pi sessions NOT verified (M3/M4 criteria untouched in
   the migration plan); path resolution when a harness starts in a subfolder

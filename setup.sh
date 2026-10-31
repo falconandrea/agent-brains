@@ -1,6 +1,8 @@
 #!/bin/bash
 #
-# Setup symlinks for AI agents & skills in a target project.
+# Legacy project-local setup: link agent/skill adapters into one target
+# project. Global skill distribution is a separate operation handled by
+# install-global-skills.sh; this command never changes a user's home config.
 #
 # Usage:
 #   ./setup.sh /path/to/project               # default profile: full (all skills)
@@ -15,7 +17,8 @@
 # Profiles are defined in profiles/<name>.list — one skill per line.
 # A list can pull in another with `@include <name>` (e.g. laravel includes frontend).
 # The canonical skill store is .agents/skills/ (where laravel-boost / npx skills write).
-# Projects only consume a curated subset via per-skill symlinks.
+# During the M2→M4 migration, projects may continue consuming a curated subset
+# via per-skill symlinks. Use the global installer for machine-level access.
 #
 # `full` is special-cased: it symlinks the whole .agents/skills dir so newly
 # installed skills appear automatically without editing any manifest.

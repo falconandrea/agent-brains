@@ -2,7 +2,7 @@
 
 **Created:** 2026-09-08
 
-**Status:** R0 and C1–C5 closed; C4 retains an inconclusive full-workflow comparison and C5 is a bounded assessment, not full-collection efficacy validation. M1 is approved and committed in agent-brains as `6567873` (2026-10-30), after correction and re-review of four P2 findings. M2 is next; global installation, live-harness verification and consumer migration remain open. External extension trials still require an explicit request (updated 2026-10-30).
+**Status:** R0 and C1–C5 closed; C4 retains an inconclusive full-workflow comparison and C5 is a bounded assessment, not full-collection efficacy validation. M1 is approved and committed in agent-brains as `6567873` (2026-10-30). M2 global-distribution implementation is prepared in the working tree for independent review and has not been applied to the machine. M3 installation/live-harness verification and M4 consumer migration remain open. External extension trials still require an explicit request (updated 2026-10-30).
 
 **Source of truth for execution status:** this document
 
@@ -18,7 +18,8 @@ does not start implementation or change the R1 sequence.
 
 Discussion of the user-supplied analysis of Matt Pocock's interview with Lauren
 Tan identified the following candidate work. Recording it does not start
-implementation or reorder M1, which remains next.
+implementation or reorder the migration sequence; M1 is now committed and M2
+is prepared for independent review, as recorded in the status above.
 
 - **Project-local verification pilot — pending, target not selected.** Reuse
   an existing test environment and `config.verify` with a small deterministic
@@ -63,6 +64,61 @@ plus local `src/verify.ts`, `src/review.ts`, `src/workflows/feature.ts` and C2.
 The full [video](https://www.youtube.com/watch?v=MN9dGgmLyso) and its quantitative
 claims were not independently verified. Upstream links are mutable references,
 not pinned vendored sources. No efficacy improvement is claimed.
+
+## Retained harness improvement candidates (recorded 2026-10-31)
+
+The user approved retaining the following ideas from a supplied five-video
+analysis. These are pending candidates, not implementation approval or a new
+execution queue. Preserve the current M2–M4 migration priorities. The video
+contents and external project capabilities were not independently verified in
+this discussion; the proposals below are local design choices, not claims of
+upstream efficacy.
+
+- **Acceptance criteria linked to evidence — extend the existing verification
+  pilot and C2 outcome follow-up above.** On a small sample of feature runs,
+  map important approved criteria to an executed check, reviewer judgment or
+  an explicit unverified status. Record the evidence reference, source run,
+  verified code state and limits; distinguish test execution from semantic
+  review and check evidence freshness when reused. Start with a manual report,
+  not a new ISA document, competing specification or runtime schema. Acceptance:
+  identify concrete verification gaps and whether the mapping helps resolve
+  them without unnecessary tests or ceremony. A green suite does not establish
+  every criterion, and a coverage percentage would not establish correctness.
+- **Offline analysis of runs and human corrections — extend recurring-mistake
+  guidance above.** Inspect a small sample of failed, blocked or corrected
+  runs. Record observable behavior with trace references, distinguish confirmed
+  causes from hypotheses, and retain unknown causes explicitly. Propose at
+  least one improvement with a case that can check its effect. Prefer fixing
+  tools, parsing, context delivery or deterministic checks before adding prompt
+  instructions. Do not turn incidents into global rules automatically.
+- **More actionable `needs_human` outcomes — pending UX candidate.** Present
+  the blocking reason, supporting evidence and next permitted step; include
+  alternatives and consequences only when supported. Distinguish a decision
+  needed from the user from format failures and operational failures. Preserve
+  authorization, bounded retries and resume semantics; presenting a proposal
+  does not authorize restarting or mutating a repository. Evaluate usefulness
+  on the sampled blocked runs before adopting a new result contract.
+- **Explicit scope for retained corrections — reuse existing memory and
+  solution-capture responsibilities.** Distinguish run-specific instructions,
+  project conventions and general preferences before retaining a correction.
+  Keep its source and scope explicit; promotion to broader guidance requires
+  a deliberate decision rather than automatic learning. Do not add a parallel
+  memory system or a new skill for this candidate.
+
+Jev remains a conditional shadow experiment under the existing
+[routing assessment](../research/jev-model-router-and-pi-bifrost.md): first
+identify a routing problem and expected decisions, then compare classification
+quality against rules and a conventional model. Shadow agreement alone does
+not prove workflow savings; account for fallback and rework before claiming
+cost or latency benefits. Preserve explicitly assigned reviewer models.
+
+DeepSec remains a possible external experiment, not an installation or automatic
+security phase. First use the existing C3-V behavioral validation to establish
+what the current security review misses; any later comparison should use known
+security cases and measure detection, false positives and cost in a disposable
+environment with a bounded budget. Director is a reference for scoped proposals
+and corrections, not a selected supervisor dependency. No second orchestrator,
+always-on agent system or additional mandatory reviewer is selected.
 
 ## Agreed consolidation sequence (2026-10-22)
 
@@ -264,12 +320,13 @@ was a tentative preference for expanded-guidance Version 1 on the real UI task.
 Unexecuted interview/tooling/reference/trigger cases remain explicitly unmeasured.
 C3-V remains pending the next requested real security review.
 
-**Current next action: M2 — global distribution.** M1 (portable skill
+**Current next action: review M2 global-distribution implementation, then M3 machine setup.** M1 (portable skill
 references and explicit planning/implementation/review boundaries) was
 re-reviewed after correction of four P2 findings, approved by the user and
 committed in agent-brains as `6567873` (2026-10-30). M1 is complete within
 the repository; live-harness and consumer checks remain open for M3/M4.
-Global machine/consumer migration have not started. Preserved: C1/C2/C3
+M2 implementation is prepared but uncommitted and has not changed global
+machine configuration; consumer migration has not started. Preserved: C1/C2/C3
 behavior, Pi `/feature`, `/flow`, resume compatibility and historical
 artifacts. R1 trials remain available only on explicit request; W2/W3/R2/S3
 retain their existing deferral. Appunti prototype adoption is a separate
@@ -284,7 +341,7 @@ Supporting evidence: [TDD assessment](../research/tdd-agent-loop-assessment.md),
 At recording time the next action was C3; C3 completed 2026-10-23, U16 completed
 2026-10-24, and S2 instrumentation/protocol completed 2026-10-24 with the
 definitive baseline recorded 2026-10-25. C4 and C5 are now closed; M1 is
-approved and committed, and M2 is next. Recording M does not itself start a migration,
+approved and committed, and M2 implementation is prepared for review. Recording M does not itself start a migration,
 reorder C1–C5 or activate extension trials. This roadmap owns coordination and
 priority; the [migration plan](cross-harness-workflow-migration.md) owns detailed
 checklists, acceptance criteria and consumer-project status. It was moved from
@@ -320,8 +377,19 @@ OpenCode, expose skills globally once per machine, and retain project-owned
   [migration plan](cross-harness-workflow-migration.md).
 - **M2 — Global distribution:** prepare a conservative installer, conflict
   inventory, diagnostics and rollback; preserve personal skills and local
-  ownership/provenance. Replace the current OpenCode pointers, README contract
-  and structural tests together. Keep applicable setup/gitignore fixes.
+  ownership/provenance. **Prepared for independent review (2026-10-30):**
+  read-only harness/config inventory; default-preview installer with per-skill
+  links, conflict preservation, manifest and rollback; standalone OpenCode
+  `/spec-and-tasks` command adapter (no whole `.opencode` link);
+  `setup.sh`/`unlink.sh` project-local compatibility clarified; former upstream
+  downloader renamed with an explicit compatibility route; Laravel Boost
+  output documented as project-local; README/Pi guide and diagnostics updated.
+  No machine configuration or consumer project was modified. Eleven isolated
+  fixture tests, including four recovery regressions and invalid-manifest
+  doctor reporting, full test suite (461/461), typecheck, shell syntax and diff
+  checks passed. The real-home read-only diagnostic reported the existing
+  OpenCode duplicate and two non-canonical Pi-router skill references; details
+  are in the migration plan.
 - **M3 — Machine setup and pilot:** configure the shared global catalog and
   verify discovery/invocation in all three installed harnesses without local
   skill links. Pi's existing global local-package registration is retained.
