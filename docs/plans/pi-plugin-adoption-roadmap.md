@@ -2,7 +2,7 @@
 
 **Created:** 2026-09-08
 
-**Status:** R0 and C1–C5 closed; C4 retains an inconclusive full-workflow comparison and C5 is a bounded assessment, not full-collection efficacy validation. M1 is approved and committed in agent-brains as `6567873` (2026-10-30). M2 global-distribution implementation is prepared in the working tree for independent review and has not been applied to the machine. M3 installation/live-harness verification and M4 consumer migration remain open. External extension trials still require an explicit request (updated 2026-10-30).
+**Status (2026-10-31):** R0 and C1–C5 closed; C4 retains an inconclusive full-workflow comparison and C5 is a bounded assessment, not full-collection efficacy validation. M1 is committed as `6567873`; M2 is committed as `06039e9`; M3 installed the global catalog and verified live CLI discovery/invocation in Codex, OpenCode, and Pi. M3 remains open pending the refresh check in an already-running GUI/TUI. Evidence and limits are in the [migration plan](cross-harness-workflow-migration.md#5-machine-configuration-m3). M4 consumer migration remains open. External extension trials still require an explicit request.
 
 **Source of truth for execution status:** this document
 
@@ -18,8 +18,8 @@ does not start implementation or change the R1 sequence.
 
 Discussion of the user-supplied analysis of Matt Pocock's interview with Lauren
 Tan identified the following candidate work. Recording it does not start
-implementation or reorder the migration sequence; M1 is now committed and M2
-is prepared for independent review, as recorded in the status above.
+implementation or reorder the migration sequence; M1 and M2 are committed,
+and the M3 CLI pilot is in progress, as recorded in the status above.
 
 - **Project-local verification pilot — pending, target not selected.** Reuse
   an existing test environment and `config.verify` with a small deterministic
@@ -320,17 +320,15 @@ was a tentative preference for expanded-guidance Version 1 on the real UI task.
 Unexecuted interview/tooling/reference/trigger cases remain explicitly unmeasured.
 C3-V remains pending the next requested real security review.
 
-**Current next action: review M2 global-distribution implementation, then M3 machine setup.** M1 (portable skill
-references and explicit planning/implementation/review boundaries) was
-re-reviewed after correction of four P2 findings, approved by the user and
-committed in agent-brains as `6567873` (2026-10-30). M1 is complete within
-the repository; live-harness and consumer checks remain open for M3/M4.
-M2 implementation is prepared but uncommitted and has not changed global
-machine configuration; consumer migration has not started. Preserved: C1/C2/C3
-behavior, Pi `/feature`, `/flow`, resume compatibility and historical
-artifacts. R1 trials remain available only on explicit request; W2/W3/R2/S3
-retain their existing deferral. Appunti prototype adoption is a separate
-project handoff.
+**Current status: M3 global install and CLI pilot are applied; the live
+interactive-session refresh check remains open.** M1 (portable skill references
+and explicit planning/implementation/review boundaries) is committed as
+`6567873`; M2 global distribution is committed as `06039e9`. M3's current
+machine setup and pilot evidence are in the [migration plan](cross-harness-workflow-migration.md#5-machine-configuration-m3).
+Consumer migration has not started. Preserved: C1/C2/C3 behavior, Pi
+`/feature`, `/flow`, resume compatibility and historical artifacts. R1 trials
+remain available only on explicit request; W2/W3/R2/S3 retain their existing
+deferral. Appunti prototype adoption is a separate project handoff.
 
 Supporting evidence: [TDD assessment](../research/tdd-agent-loop-assessment.md),
 [QA suite assessment](../research/claude-code-skills-assessment.md).
@@ -340,8 +338,8 @@ Supporting evidence: [TDD assessment](../research/tdd-agent-loop-assessment.md),
 **Original status (2026-10-22):** planned, implementation not started.
 At recording time the next action was C3; C3 completed 2026-10-23, U16 completed
 2026-10-24, and S2 instrumentation/protocol completed 2026-10-24 with the
-definitive baseline recorded 2026-10-25. C4 and C5 are now closed; M1 is
-approved and committed, and M2 implementation is prepared for review. Recording M does not itself start a migration,
+definitive baseline recorded 2026-10-25. C4 and C5 are now closed. The original
+recording predated M1–M3; current status is summarized above. Recording M does not itself start a migration,
 reorder C1–C5 or activate extension trials. This roadmap owns coordination and
 priority; the [migration plan](cross-harness-workflow-migration.md) owns detailed
 checklists, acceptance criteria and consumer-project status. It was moved from
@@ -377,7 +375,7 @@ OpenCode, expose skills globally once per machine, and retain project-owned
   [migration plan](cross-harness-workflow-migration.md).
 - **M2 — Global distribution:** prepare a conservative installer, conflict
   inventory, diagnostics and rollback; preserve personal skills and local
-  ownership/provenance. **Prepared for independent review (2026-10-30):**
+  ownership/provenance. **Committed (2026-10-31, `06039e9`):**
   read-only harness/config inventory; default-preview installer with per-skill
   links, conflict preservation, manifest and rollback; standalone OpenCode
   `/spec-and-tasks` command adapter (no whole `.opencode` link);
@@ -387,12 +385,29 @@ OpenCode, expose skills globally once per machine, and retain project-owned
   No machine configuration or consumer project was modified. Eleven isolated
   fixture tests, including four recovery regressions and invalid-manifest
   doctor reporting, full test suite (461/461), typecheck, shell syntax and diff
-  checks passed. The real-home read-only diagnostic reported the existing
+  checks passed. The pre-install real-home read-only diagnostic reported the existing
   OpenCode duplicate and two non-canonical Pi-router skill references; details
   are in the migration plan.
 - **M3 — Machine setup and pilot:** configure the shared global catalog and
   verify discovery/invocation in all three installed harnesses without local
-  skill links. Pi's existing global local-package registration is retained.
+  skill links. **Applied on 2026-10-31:** adopted licensed `find-skills` and
+  `i-have-adhd`; kept the personal `diagnose` and old OpenCode `react-doctor`
+  copies recoverable in a private backup; installed 66 catalog skills plus the
+  standalone OpenCode command; kept Pi's existing package registration
+  unchanged. Pre-install Codex reported `spec-and-tasks` not discovered. In
+  real sessions from `src/nested` without project-local `.agents`, Codex
+  `$spec-and-tasks`, OpenCode `/spec-and-tasks`, and Pi
+  `/skill:spec-and-tasks` wrote planning documents at each temporary project
+  root. New and resumed persistent sessions in all three harnesses read a
+  temporary skill-content update after explicit reinvocation; no installer
+  rerun was needed. The same logical sessions were resumed in new CLI process
+  invocations. Post-install `--doctor` reported 66 valid entries and no
+  structural issues. The three outputs interpreted the minimal `OK` contract
+  differently; Pi also asserted prior files existed in an empty fixture.
+  GUI/TUI refresh and existing `/feature`, `/flow`, `/stack` behavior were not
+  retested; the need to reload an already-running interactive TUI remains open.
+  C4 efficacy/cost experiments were not reopened. M4 remains
+  unstarted. Detailed results and limits are in the migration plan.
 - **M4 — Consumer rollout:** migrate boilerplates and individual repositories
   using the plan's inventory; align `.ai` where useful, preserve project-specific
   knowledge and remove only confirmed managed links after successful checks.

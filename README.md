@@ -11,10 +11,11 @@ Planned cross-harness centralization and project-context alignment are tracked
 in the [adoption roadmap](docs/plans/pi-plugin-adoption-roadmap.md#cross-harness-workflow-migration-m)
 and its [detailed migration plan](docs/plans/cross-harness-workflow-migration.md).
 M1 (portable skill references, the `feature` → `spec-and-tasks` skill rename,
-planning/implementation/review boundaries) is implemented in this repository;
-M2 prepares global distribution but does not apply it to this Mac. Machine
-installation and live harness discovery remain M3; consumer migration remains
-M4. Existing project-local setup stays available during that gradual rollout.
+planning/implementation/review boundaries) and M2's global installer are
+committed. M3 verified CLI discovery/invocation in Codex, OpenCode, and Pi;
+refresh in an already-running GUI/TUI remains open. M4 consumer migration has
+not started.
+Existing project-local setup stays available during that gradual rollout.
 
 ## Repository structure
 
@@ -77,9 +78,7 @@ The installer also exposes only the standalone OpenCode `/spec-and-tasks`
 command adapter under `~/.config/opencode/commands/`; it never links the whole
 `.opencode` directory.
 
-M2 adds and verifies this mechanism in isolated fixtures. It does not install
-anything in the real home directory. For the later M3 machine setup, review a
-read-only preview first, then explicitly apply:
+Use a stable checkout and review the read-only preview before applying:
 
 ```bash
 ./install-global-skills.sh                 # preview; no writes
@@ -99,14 +98,54 @@ content remain. The manifest is stored at
 is not copied or moved. A global install is a live link to this checkout, so
 keep the checkout in a stable location and use `--doctor` after moving it.
 
+### M3 CLI verification
+
+The pilot tested Codex 0.166.0, OpenCode 2.2.5, and Pi 0.85.1. In a temporary
+Git project without local skill links, sessions started from a subdirectory
+found and invoked `spec-and-tasks`; OpenCode's `/spec-and-tasks` command and
+Pi's `/skill:spec-and-tasks` also worked. All three wrote planning documents
+under the project root without changing application code. New and resumed
+persistent CLI sessions read catalog updates after explicit reinvocation; an
+installer rerun was not needed. The generated specifications differed on
+whether literal `OK` included a trailing newline, so the pilot verifies loading
+and invocation, not equivalent planning output. Refresh in a GUI/TUI that stays
+open during a content change remains unverified. See the
+[migration plan](docs/plans/cross-harness-workflow-migration.md#5-machine-configuration-m3)
+for the baseline, evidence, and limits.
+
+### Restore personal content
+
+Installer rollback and restoration of personal content are separate operations:
+
+1. Run `./install-global-skills.sh --rollback`. It removes only unchanged links
+   listed in the manifest, including the OpenCode command link.
+2. Before moving personal content out of a global discovery directory, save a
+   copy in a private, persistent `<backup-directory>` outside the repository.
+   Include any existing skill folders or configuration files that may need
+   restoration; keep that backup out of version control.
+3. After rollback, copy each moved folder from `<backup-directory>` back to its
+   original location. For example, restore skill folders to
+   `~/.agents/skills/` and OpenCode-specific skills to
+   `~/.config/opencode/skills/`. Link rollback does not restore moved content
+   or other configuration files.
+
+To install on another machine, clone this repository to a stable path, run the
+preview and `--doctor`, review any name conflicts, then run `--apply` and
+`--doctor` again. The installer covers Codex/OpenCode skills and the OpenCode
+command. It does not register Pi packages: retain an existing `agent-brains`
+Pi package registration, or follow the repository's Pi install instructions if
+that package is absent. No consumer repository links are needed for the global
+catalog.
+
 Codex reads user skills from `~/.agents/skills`, follows symlinked skill
 folders, and supports `$skill` invocation; the installed CLI is 0.166.0. See
 [Codex skill documentation](https://developers.openai.com/codex/skills/).
-OpenCode 2.2.4 uses global `SKILL.md` discovery and does not interpret skill
+OpenCode 2.2.5 uses global `SKILL.md` discovery and does not interpret skill
 metadata as slash-command definitions. The standalone command adapter supplies
 `/spec-and-tasks`; it invokes the skill by ID. See [OpenCode skills](https://docs.opencode.ai/docs/skills/)
-and [OpenCode commands](https://dev.opencode.ai/docs/commands/). Codex and
-OpenCode discovery have not yet been verified in live sessions; that is M3.
+and [OpenCode commands](https://dev.opencode.ai/docs/commands/). Codex,
+OpenCode, and Pi discovery and invocation were verified in live CLI sessions in
+M3; GUI/TUI refresh remains untested.
 
 ### Update responsibilities
 

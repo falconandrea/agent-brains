@@ -42,11 +42,12 @@ part of Pi's own package flow.
 
 The installer defaults to preview. `--apply`, `--doctor`, and `--rollback` are
 documented in the [repository README](../../README.md#global-skill-distribution).
-M2's implementation and isolated fixture checks do not prove discovery in a
-live Codex/OpenCode/Pi session. That verification remains M3. Existing Pi
-`/feature`, `/flow`, `/stack`, role policies, profiles, resume behavior, and
-historical run documents remain in the Pi engine; profiles continue to select
-skills by stack and role there.
+M3 verified `/skill:spec-and-tasks` in a real Pi CLI session from a temporary
+project without local skill links.
+The existing global Pi package registration was preserved; it was not
+reinstalled. Pi `/feature`, `/flow`, `/stack`, role policies, profiles, resume
+behavior, and historical run documents remain in the Pi engine; profiles
+continue to select skills by stack and role there.
 
 Laravel Boost output is project-specific because it reflects the consuming
 project's installed packages and versions. Generate it only in that project's

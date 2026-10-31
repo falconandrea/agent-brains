@@ -1,6 +1,6 @@
 # Cross-harness skill and workflow centralization plan
 
-Inventory date: 2026-10-19. Reconciled: 2026-10-22, against `cdf54f3`. Current status: M1 approved and committed in agent-brains as `6567873` (2026-10-30). M2 implementation is prepared in the working tree for independent review; no global installation was run. M3 machine setup/live-harness verification and M4 consumer migration remain open.
+Inventory date: 2026-10-19. Reconciled: 2026-10-22, against `cdf54f3`. Current status (2026-10-31): M1 is committed as `6567873`; M2 is committed as `06039e9`; M3 installed the global catalog and verified discovery/invocation in Codex, OpenCode, and Pi in temporary projects. M3 remains open for the limits recorded in §5 and the progress log. M4 consumer migration has not started.
 
 The plan was moved from `/Users/andreafalcon/dev/AI-WORKFLOW-MIGRATION.md` into the agent-brains repository. The [roadmap](pi-plugin-adoption-roadmap.md#cross-harness-workflow-migration-m) governs priorities and coordination with other work; this document contains the detailed checklist and status for each project. Do not duplicate the checklists in the roadmap. Consumer repository paths in this document are relative to the `dev` directory, not the agent-brains root.
 
@@ -60,7 +60,7 @@ Do not start by bulk-removing `.agents` or `.opencode` directories.
 
 ### A. Portable catalog
 
-- [x] Inventory skills, declared names, licenses, provenance, dependencies, profiles, and metadata for the different harnesses. (M2 read-only inventory checked catalog/profile structure and local versions: Codex CLI 0.166.0, OpenCode 2.2.4, Pi 0.85.1. No credentials or secret values were read or reported. OpenCode 2.2.4 supports global `~/.agents/skills` discovery, on-demand skills, and global Markdown commands; skill metadata does not create slash commands.)
+- [x] Inventory skills, declared names, licenses, provenance, dependencies, profiles, and metadata for the different harnesses. (M2 read-only snapshot: Codex CLI 0.166.0, OpenCode 2.2.4, Pi 0.85.1. M3 rechecked and found OpenCode 2.2.5. No credentials or secret values were read or reported. Both OpenCode versions support global `~/.agents/skills` discovery, on-demand skills, and global Markdown commands; skill metadata does not create slash commands.)
 - [x] Fix cross-skill references: use paths discovered by the harness or a documented resolution from the catalog; do not assume `.agents/skills` exists in the current project. (2026-10-30: `spec-and-tasks`, `laravel`, `nextjs`, `astro`, and `context-audit` now reference skills by name and resolve files relative to the skill itself; checked by `tests/repo.test.ts`.)
 - [x] Explicitly distinguish paths relative to a skill from paths relative to the project root. (2026-10-30: "Skill and path references" section in `spec-and-tasks`; `.ai/...` remains relative to the root of the project being worked on.)
 - [x] Search all manifests, references, scripts, templates, operational documents, and tests for obsolete references, including `.agents/skills/designer.md` and `.agents/workflows`. (2026-10-30: full sweep; remaining references are distribution mechanics or historical documents. The `EXCLUDED_PATHS` constant in `context-audit.mjs` is a scan exclusion, not an instruction.)
@@ -101,11 +101,11 @@ Do not start by bulk-removing `.agents` or `.opencode` directories.
 ### D. Global installation and maintenance
 
 - [x] Introduce a global installation operation separate from project scaffolding, with preview, conflict detection, and rollback. `install-global-skills.sh` previews by default; `--apply`, `--doctor`, and `--rollback` are explicit operations.
-- [x] Expose the canonical catalog to `~/.agents/skills` while preserving existing personal skills. Implementation uses direct per-skill symlinks rather than a whole-directory link: the inventory found an existing personal catalog, and individual links preserve names and contents while allowing conflicts to be skipped. This is the chosen safe discovery layout; live discovery is still an M3 check.
-- [ ] Coordinate with C4 on a baseline of the discovered catalog before the change and a comparison afterward; any skill merges/removals remain reasoned C5 decisions.
-- [ ] Verify skill discovery and invocation in installed Codex/OpenCode sessions. Version and supported paths were checked; structural verification does not establish live discovery.
-- [x] Prepare a global OpenCode command adapter without linking the repository's `.opencode` directory. One standalone Markdown adapter is installed at `~/.config/opencode/commands/spec-and-tasks.md` by the explicit installer; its `/spec-and-tasks` invocation remains unverified until M3.
-- [x] Use a minimal global adapter for `/spec-and-tasks`: OpenCode 2.2.4 discovers skills by ID and does not use skill metadata as command metadata.
+- [x] Expose the canonical catalog to `~/.agents/skills` while preserving existing personal skills. Implementation uses direct per-skill symlinks rather than a whole-directory link: the inventory found an existing personal catalog, and individual links preserve names and contents while allowing conflicts to be skipped. M3 applied and verified this layout in live CLI sessions; see §5.
+- [x] Coordinate with C4 on a baseline of the discovered catalog before the change and a comparison afterward; any skill merges/removals remain reasoned C5 decisions. No C4 efficacy/cost experiment was repeated. Pre-install doctor and Codex session, plus post-install doctor and all three CLI sessions, are recorded in §5; OpenCode/Pi pre-install state is static inventory only.
+- [x] Verify skill discovery and invocation in installed Codex/OpenCode/Pi CLI sessions. New and resumed sessions loaded the skill from the global catalog without project-local links; GUI/TUI refresh with an already-running session remains open in §5.
+- [x] Prepare a global OpenCode command adapter without linking the repository's `.opencode` directory. One standalone Markdown adapter is installed at `~/.config/opencode/commands/spec-and-tasks.md` by the explicit installer; M3 verified `/spec-and-tasks` in a live OpenCode CLI session.
+- [x] Use a minimal global adapter for `/spec-and-tasks`: OpenCode 2.2.5 discovers skills by ID and does not use skill metadata as command metadata.
 - [x] Keep profiles for role/stack selection in the Pi engine; Pi runtime/profile files were not changed. Legacy project-local profile links remain available during migration.
 - [x] Retain `setup.sh`/`unlink.sh` as project-local compatibility commands and document that unlink does not remove global links; global rollback is `install-global-skills.sh --rollback`.
 - [x] Clarify installer names and responsibilities: `install-global-skills.sh` is global preview/apply/diagnose/rollback; the former upstream package downloader is `update-upstream-skills.sh`. `--update-upstream` remains an explicit compatibility route.
@@ -120,17 +120,19 @@ Do not start by bulk-removing `.agents` or `.opencode` directories.
 - [ ] Ensure UI rules do not require reading a missing or empty `DESIGN_SYSTEM.md`.
 - [ ] Align agent-brains' own `.ai` as well: it currently lacks `context/TECH_STACK.md`; add it if required by the new rules.
 
-## 5. Machine configuration (M3; not performed in M2)
+## 5. Machine configuration (M3)
 
-- [x] Inventory relevant Codex, OpenCode, and Pi configuration without including credentials in reports or versioned backups. M2 read directory names, symlink destinations, installed versions, and only the presence/key names needed to identify config files; no configuration values or credentials were read or reported.
-- [ ] Save a recoverable copy of the configuration and content that will be changed.
-- [ ] Compare and adopt `diagnose`, `find-skills`, and `i-have-adhd` in agent-brains, with license/provenance and without overwriting existing copies with the same names.
-- [ ] Compare `~/.config/opencode/skills/react-doctor` with the central version and remove duplicates only after verification.
-- [ ] Point `~/.agents/skills` to the central catalog using the installer prepared above.
-- [ ] Check skill exclusions in Codex and permissions, agents, or settings that hide skills in OpenCode.
-- [ ] Keep the already registered global Pi package; do not reinstall it without need.
-- [ ] Check update/reload behavior in new and already-open sessions; document when a restart is needed.
-- [ ] Document how to restore the previous configuration and repeat installation on another computer.
+- [x] Inventory relevant Codex, OpenCode, and Pi configuration without including credentials or sensitive values in reports. The installed versions are Codex 0.166.0, OpenCode 2.2.5, and Pi 0.85.1. Codex has no skill/exclusion setting; OpenCode's global config has no skill, permission, or agent override. Pi's existing global `agent-brains` package registration remains unchanged. Codex CLI wrote temporary model/trust settings while running the live checks; these were restored from the protected pre-task backup, and the final Codex config compares byte-for-byte with that backup. OpenCode and Pi settings also remain byte-identical to their copies.
+- [x] Record the pre-install baseline without reopening C4 experiments. Before applying the installer, `--doctor` found 64 valid catalog entries, no manifest, the OpenCode `react-doctor` duplicate, and the two Pi-router references later resolved by adopting `find-skills` and `i-have-adhd`. A real pre-install Codex session reported `spec-and-tasks` was not discovered. OpenCode and Pi were not run as pre-install sessions; their baseline is the recorded static inventory/configuration only.
+- [x] Save a recoverable copy before global changes in a private persistent `<backup-directory>` (mode 700); a temporary working copy was also used. It contains copies of the three personal skill directories, the old OpenCode `react-doctor`, and Codex/OpenCode/Pi config files; no sessions or authentication files. The exact moved live skill directories are under `original-live/`.
+- [x] Compare and resolve the personal skills. `find-skills` and `i-have-adhd` were adopted into the canonical catalog with upstream repository/path and MIT license recorded; their original live directories remain recoverable in the backup. The personal `diagnose` was left in place and backed up: the canonical catalog already has `diagnosing-bugs`, a locally adapted skill with a different name and material changes, while the personal copy has no independently verifiable license/import revision. No duplicate or unlicensed copy was added.
+- [x] Compare `~/.config/opencode/skills/react-doctor` with the canonical version. The live copy was v1.0.0; the canonical copy is v1.2.0 and includes `references/explain.md`. The old copy and its `AGENTS.md` were preserved in the private backup and moved out of OpenCode discovery; the catalog version is now linked globally.
+- [x] Apply the reviewed installer after a clean preview. It created links for 66 catalog skills and the standalone OpenCode command (67 links total); the post-install `--doctor` reported 66 valid catalog entries and no structural issues.
+- [x] Check harness configuration for discovery exclusions. No Codex skill/exclusion setting or OpenCode skill/permission/agent override was present. The installed OpenCode `/spec-and-tasks` command was invoked successfully.
+- [x] Keep the existing global Pi package registration; it was not reinstalled. `/skill:spec-and-tasks` loaded from the shared global catalog in Pi 0.85.1.
+- [x] Check content refresh in new and resumed persistent CLI sessions. After changing a temporary marker in the central skill, new and resumed logical sessions in Codex, OpenCode, and Pi each returned the new marker when the skill was explicitly invoked again. No installer rerun was needed; resumed sessions ran in new CLI process invocations.
+- [ ] Determine whether an already-running GUI/TUI session must reload or restart to see changed skill contents. These M3 checks controlled CLI sessions, not an interactive UI left open during the update.
+- [x] Document link rollback separately from restoration of moved personal content and installation on another machine in the [README](../../README.md#global-skill-distribution).
 
 agent-brains remains the source of the content. The global link is a local access point, not a move of the source into a harness. Remote environments or containers will need an equivalent installation in their filesystem.
 
@@ -205,23 +207,27 @@ Search separately for other subdirectories and nested repositories not found in 
 
 ## 8. Verification and completion criteria
 
-- [ ] In a project with no local links, Codex finds and loads `$spec-and-tasks` from the central catalog.
-- [ ] OpenCode discovers the same skill; check `/spec-and-tasks` separately because it requires supported exposure.
-- [ ] Pi finds `/skill:spec-and-tasks` and registers `/feature`, `/flow`, and `/stack` from the global package.
-- [ ] The documentation skill creates specs and tasks in the current project's `.ai` and does not modify application code.
-- [ ] Skill dependencies work without `.agents` in the project and when starting from a subdirectory.
+- [x] In a temporary project with no local links, Codex finds and loads `$spec-and-tasks` from the central catalog.
+- [x] OpenCode discovers the same skill; `/spec-and-tasks` is exposed by the standalone command adapter and was invoked in a real session.
+- [x] Pi finds `/skill:spec-and-tasks` from the global catalog. Existing `/feature`, `/flow`, and `/stack` package registration was left unchanged; those workflows were not reinstalled or retested here.
+- [x] The documentation skill creates specs and tasks in the temporary project's `.ai` and does not modify application code in all three harness runs.
+- [x] Skill discovery works without `.agents` in the temporary project and from `src/nested`; output files were written at the Git repository root.
 - [ ] Handoff to a new implementation session works by reading the documents, without reconstructing the previous conversation.
 - [ ] A separate review compares the requirements and diff and returns verifiable findings.
 - [ ] Pi remains compatible with existing runs; any full implementation trials happen in a test repository, not an active project merely to verify loading.
-- [ ] A new skill or a skill change becomes available without rerunning setup in projects; note any reload/restart requirement.
+- [x] Catalog changes were read in new and resumed persistent CLI sessions after explicit skill invocation, without rerunning project setup or the installer.
+- [ ] Check whether a GUI/TUI left running must reload or restart before it sees an updated skill.
 - [ ] Run meaningful tests for the engine and modified scripts, including `npm test` and `npm run typecheck` when changing Pi code. Do not run full application suites for documentation-only changes with no executable effects.
 - [ ] No local or third-party content was lost; rollback for global installation is documented and verified.
 
-> **Status 2026-10-30 (M1):** none of the criteria above has yet been verified in
-> real harness sessions — they require global installation (M2/M3) or consumer
-> migration (M4). M1 made the catalog independent of local links at the file and
-> structural-test level; discovery and invocation in real sessions remain open
-> and must not be assumed.
+> **Status 2026-10-31 (M3):** discovery, invocation, root-path behavior, and
+> content refresh were verified in real CLI sessions after global installation.
+> Codex's pre-install session reported the skill was not discovered. The three
+> harnesses made different assumptions about whether literal `OK` includes a
+> trailing newline, and Pi made one unsupported claim that prior planning files
+> existed; the observed outputs are recorded without treating their content as
+> equivalent. GUI/TUI behavior was not tested. Handoff, independent review, and
+> consumer migration remain outside the completed M3 pilot.
 
 ## 9. References
 
@@ -242,3 +248,5 @@ Search separately for other subdirectories and nested repositories not found in 
 | 2026-10-30 | M1 — review round 1 corrections | Independent review: 4 P2 findings, all corrected. (1) `setup/SKILL.md` had reverted to the old `feature` reference after an accidental revert during checks — reapplied with the Pi `/feature` distinction. (2) `to-spec` adopted locally (LICENSE + upstream provenance `5c89081d`, removed from the lock) with a guard against silently overwriting an existing `spec.md`; an approved planning document is updated in place only on request, preserving its own contract. (3) Skill-relative paths now require resolving symlinks to the skill's real directory first (skills are also loaded through `.agents/workflows/<name>.md` links); a test checks resolution from the real directory. (4) The "subdirectory" item was split: convention documented [x], behavior verified [ ]. | `npm test` 450/450, `npm run typecheck`, `git diff --check`; reviewer manual check confirmed (workflow link → destination not found when resolving from link path; resolved from physical directory) | Superseded the same day by M1 approval and commit `6567873`; no live harness verification |
 | 2026-10-30 | M2 global distribution preparation | Added default-preview global installer, per-skill conflict-safe links, install manifest and conservative rollback; standalone OpenCode command adapter; doctor checks; renamed old upstream downloader and retained explicit compatibility route; updated setup/unlink responsibilities, Laravel Boost separation, README and Pi guide. No global installation or consumer migration. Review fixes: retain the rollback journal through manifest rename, refuse symlinked rollback parents, validate the full manifest before mutation, and define the home error helper before use. | Ten isolated fixture tests pass; `npm test` 460/460; `npm run typecheck`; `bash -n` for all four modified shell scripts; `git diff --check`. Read-only real-home `--doctor`: 64 catalog entries valid; detected existing OpenCode `react-doctor` duplicate and two Pi-router skills absent from catalog; config values not read. | Live Codex/OpenCode/Pi discovery/invocation remains M3; consumer migration remains M4; work is uncommitted for independent review |
 | 2026-10-31 | M2 doctor manifest validation | `doctor()` now validates the complete installer manifest before checking managed links, counts malformed manifests as an issue, and exits nonzero even when no other diagnostics fail. Added a minimal isolated repository fixture with no unrelated findings; observed it fail before the fix and pass afterward. No global configuration changed. | Installer fixtures 11/11; `npm test` 461/461; `npm run typecheck`; `bash -n` for all four relevant shell scripts; `git diff --check` | Live harness discovery remains M3; consumer migration remains M4; no commit created |
+| 2026-10-31 | M3 machine install and live pilot | Backed up affected content/configuration privately; adopted licensed `find-skills` and `i-have-adhd`; retained the personal `diagnose` and the old OpenCode `react-doctor` copy in backup; applied 66 catalog skill links plus the OpenCode command; left Pi package registration unchanged. A temporary project with no local `.agents` ran from `src/nested`. | Pre-install Codex session: `spec-and-tasks` not discovered. Post-install: Codex `$spec-and-tasks`, OpenCode `/spec-and-tasks`, and Pi `/skill:spec-and-tasks` loaded and wrote only `.ai/features/m3-smoke/{spec,tasks}.md` at each project root. New and resumed persistent sessions in all three harnesses returned an updated temporary skill marker after explicit reinvocation; marker then removed and source restored byte-for-byte. Post-install `--doctor`: 66 valid skills, no structural issues. | No full C4 cost/efficacy experiment was repeated. OpenCode/Pi were not run as pre-install baseline sessions; their pre-install state is documented by inventory/doctor. Interactive GUI/TUI reload/restart behavior remains unverified, so M3 stays open. Existing Pi workflow commands, spec-to-implementation handoff, review, and all consumer migrations remain unverified/out of M3. |
+| 2026-10-31 | M3 independent-review corrections | Added both adopted skills to `common.list` and `full.list`; updated the D checklist to reflect live CLI discovery and the still-open TUI refresh; copied the M3 backup to a persistent private path. | `tests/repo.test.ts` 11/11; `npm test` 461/461; `npm run typecheck`; post-change `--doctor` reports 66 valid skills and no issues; `git diff --check`; persistent backup matches the temporary copy byte-for-byte. | M3 remains open until refresh/restart behavior is checked in a GUI/TUI already running during content changes. The exact backup location is retained only in a local ignored note. |

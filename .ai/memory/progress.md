@@ -9,19 +9,15 @@
   property/mutation experiment is deferred. Existing `config.verify` can
   support the pilot. Full video claims remain unverified.
 
-- **M2 implementation reviewed and approved; next: M3 (machine setup
-  and live-harness pilot)** — M1 (portable skills and
-  planning/implementation/review boundaries) was re-reviewed after correction
-  of four P2 findings, approved by the user, and committed as `6567873` on
-  2026-10-30. M1 is complete within agent-brains; live-harness verification
-  and consumer migration remain open for M3/M4. Per-item status
-  and limits live in the
-  [migration plan](../../docs/plans/cross-harness-workflow-migration.md).
-  C5 is closed as a bounded assessment; no broad efficacy or savings claim.
-  The installer and diagnostics are implemented with isolated fixture tests,
-  but no global installation was applied. Live-harness verification and
-  consumer migration remain M3/M4. Preserve C1/C2/C3 behavior, Pi /feature and
-  existing resume artifacts.
+- **M3 machine setup and live-harness pilot — current status:** M1 is committed
+  as `6567873`; M2 is committed as `06039e9`; M3 applied the global catalog and
+  verified CLI discovery/invocation and content refresh in Codex, OpenCode, and
+  Pi on 2026-10-31. M3 remains open for GUI/TUI refresh behavior in a session
+  left running during a content update. The pre-install Codex baseline reported
+  `spec-and-tasks` not discovered. See the [migration plan](../../docs/plans/cross-harness-workflow-migration.md)
+  for the full evidence, backup procedure, restoration steps and precise limits.
+  C1/C2/C3 and Pi `/feature`, `/flow`, and existing resume artifacts remain
+  preserved; M4 consumer migration has not started.
 
 - C3 instruction changes are complete; behavioral validation C3-V remains
   pending on the next explicitly requested real security review. Criteria and
@@ -101,6 +97,40 @@
 
 ## Done
 
+- 2026-10-31 **M3 global installation and CLI pilot:** reviewed the installer
+  preview (67 links, no conflicts after resolving preserved duplicates), made
+  recovery snapshots in a private persistent `<backup-directory>` (mode 700)
+  and a temporary working copy,
+  adopted licensed `find-skills` and `i-have-adhd`, retained personal
+  `diagnose` and the previous OpenCode `react-doctor` in recoverable locations,
+  applied 66 skill links plus the standalone OpenCode command, and ran
+  post-install `--doctor` (66 valid entries, zero structural issues). Codex,
+  OpenCode `/spec-and-tasks`, and Pi `/skill:spec-and-tasks` each loaded the
+  shared catalog from `src/nested` in a temporary project without local
+  `.agents`; each created only root `.ai/features/m3-smoke/spec.md` and
+  `tasks.md`. New and resumed persistent sessions in all three harnesses read a
+  temporary content update after explicit reinvocation; the marker was removed
+  and the original skill file matched its backup byte-for-byte. No installer
+  rerun was needed; these were resumed CLI sessions in new process
+  invocations. No C4 efficacy/cost experiment was repeated. Codex CLI's
+  temporary model/trust config writes were restored from
+  backup; OpenCode and Pi configs remained byte-identical. Limits: only Codex
+  had a real pre-install session baseline;
+  OpenCode/Pi pre-install state is static inventory/doctor evidence; no GUI/TUI
+  process was held open during file changes; M4 and the pre-existing Pi
+  `/feature`/`/flow`/`/stack` commands were not retested. Full results and
+  restoration instructions are in the migration plan and README.
+
+- 2026-10-31 **M3 review corrections:** the independent review found the two
+  adopted skills missing from the `common`/`full` profile manifests. Added both
+  to `profiles/common.list` and `profiles/full.list`, and aligned the migration
+  plan's discovery checklist with the live CLI evidence while leaving GUI/TUI
+  refresh explicitly open. Copied the protected backup to the persistent
+  local ignored note and verified the persistent backup is byte-identical to
+  the temporary copy. Verification: `tests/repo.test.ts`
+  11/11; `npm test` 461/461; `npm run typecheck`; `--doctor` clean;
+  `git diff --check` clean.
+
 - 2026-10-31 **M2 approved for commit** after independent review and correction
   of the installer recovery, rollback validation, symlink-parent handling,
   missing-home error, and doctor manifest diagnostics. Fresh verification:
@@ -116,18 +146,18 @@
   or consumer migration.
   Earlier same-day entries below preserve the implementation/review history.
 
-- 2026-10-30 **M2 global distribution prepared** (uncommitted, not installed on
-  this Mac). Added a default-preview global installer that creates per-skill
+- 2026-10-30 **M2 global distribution prepared** (before its later commit and
+  global application). Added a default-preview installer that creates per-skill
   links in `~/.agents/skills`, preserves occupied paths, records managed links,
   supports rollback, and diagnoses catalog/profile/link/duplicate/config
   state. Added a standalone OpenCode `/spec-and-tasks` command adapter; no
   `.opencode` directory link or global config was changed. Renamed the old
   upstream downloader to `update-upstream-skills.sh`, keeping an explicit
   compatibility route. Clarified project-local `setup.sh`/`unlink.sh` and
-  Laravel Boost's project-local generated output. Read-only inventory found
-  Codex CLI 0.166.0, OpenCode 2.2.4, Pi 0.85.1, existing personal skills and a
-  `react-doctor` duplicate; no sensitive values were read or reported. Fixture
-  Fixture verification passed 11/11, including failed-manifest-move cleanup,
+  Laravel Boost's project-local generated output. The M2 read-only inventory
+  recorded Codex CLI 0.166.0, OpenCode 2.2.4, Pi 0.85.1, existing personal
+  skills and a `react-doctor` duplicate; no sensitive values were read or
+  reported. Fixture verification passed 11/11, including failed-manifest-move cleanup,
   symlink-parent refusal, invalid-manifest no-mutation, and missing-home error;
   invalid-manifest doctor reporting; `npm test` passed 461/461,
   `npm run typecheck`, all four relevant `bash -n` checks, and
