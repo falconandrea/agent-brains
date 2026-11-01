@@ -2,6 +2,19 @@
 
 ## Open items
 
+- **M4 consumer rollout — first wave reviewed; commits recorded 2026-11-01:**
+  read-only inventory of all plan §7 repositories refreshed; agent-brains
+  self-alignment done (root `AGENTS.md`, `.ai/context/TECH_STACK.md`); the two
+  `_tests` boilerplates and one active consumer pilot were migrated per the
+  §6 checklist. M4 is **not complete**: the remaining consumers, managed-link
+  removal (requires live global-discovery verification in each consumer), and
+  the M3 GUI/TUI refresh check are still open. Per-repository outcomes and
+  limits are recorded in the
+  [migration plan §7](../../docs/plans/cross-harness-workflow-migration.md#7-tasks-by-project)
+  and its progress log. Pre-edit copies of every modified consumer file are in
+  the private persistent backup directory noted in a local ignored note
+  (`.ai/memory/m4-local.md`).
+
 - 2026-10-30 behavioral verification ideas from the pstack/video discussion
   are saved in the [roadmap follow-ups](../../docs/plans/pi-plugin-adoption-roadmap.md#behavioral-verification-follow-ups-recorded-2026-10-30).
   The separate small project-local verification pilot remains pending (target
@@ -16,8 +29,11 @@
   left running during a content update. The pre-install Codex baseline reported
   `spec-and-tasks` not discovered. See the [migration plan](../../docs/plans/cross-harness-workflow-migration.md)
   for the full evidence, backup procedure, restoration steps and precise limits.
-  C1/C2/C3 and Pi `/feature`, `/flow`, and existing resume artifacts remain
-  preserved; M4 consumer migration has not started.
+   C1/C2/C3 and Pi `/feature`, `/flow`, and existing resume artifacts remain
+   preserved. M4 started on 2026-10-31 (first wave: agent-brains
+   self-alignment, both `_tests` boilerplates, and the `linkedin-analytics`
+   pilot — uncommitted, see the migration plan §7); the remaining consumers
+   are still open.
 
 - C3 instruction changes are complete; behavioral validation C3-V remains
   pending on the next explicitly requested real security review. Criteria and
@@ -96,6 +112,27 @@
   `changes_requested` policy option B is implemented (U15).
 
 ## Done
+
+- 2026-11-01 **M4 first wave approved and committed:** Laravel boilerplate `a2897f2`, Next.js boilerplate `6c597cd`, linkedin-analytics `3c0d0ec`; agent-brains self-alignment is included with this entry. Remaining consumer migrations, live per-consumer discovery and managed-link removal remain open, as does M3 interactive refresh.
+
+- 2026-10-31 **M4 first-wave review corrections (round 1):** addressed the
+  independent review before approval. Standards: the three consumer AGENTS.md
+  notes and their `.ai/agents/agent-brains.md` files no longer assume the
+  global catalog — they now state the prerequisite
+  (`install-global-skills.sh --apply` in agent-brains) with the project-local
+  `setup.sh <profile>` alternative for fresh clones. Spec: the Laravel stub
+  workflow now prepares `spec.md` and `tasks.md` together, obtains ONE joint
+  approval, and ends with a handoff to a fresh implementation session (no
+  in-session implementation offer), mirroring the canonical `spec-and-tasks`
+  Step 5; both boilerplate READMEs updated away from `/feature`/`feature.md`/
+  PRD-only flow. Contradictory central status resolved: the stale "M4 has not
+  started" line in this file corrected, §4.E items 118–121 checked off with
+  evidence (`scaffold.sh` `copy_if_missing` verified skip-only; canonical
+  `templates/AGENTS.md` UI route now conditional on `DESIGN_SYSTEM.md` being
+  present and filled; TECH_STACK.md added), and a §10 progress-log row added
+  for this round. All consumer changes staged for review. Verification: Pest
+  76/76 re-run by the reviewer; link/reference checks and `git diff --check`
+  clean in all four repositories; no live harness sessions. M4 remains open.
 
 - 2026-10-31 **M3 global installation and CLI pilot:** reviewed the installer
   preview (67 links, no conflicts after resolving preserved duplicates), made

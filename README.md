@@ -13,13 +13,16 @@ and its [detailed migration plan](docs/plans/cross-harness-workflow-migration.md
 M1 (portable skill references, the `feature` → `spec-and-tasks` skill rename,
 planning/implementation/review boundaries) and M2's global installer are
 committed. M3 verified CLI discovery/invocation in Codex, OpenCode, and Pi;
-refresh in an already-running GUI/TUI remains open. M4 consumer migration has
-not started.
+refresh in an already-running GUI/TUI remains open. M4 has started: the first
+wave (agent-brains self-alignment, both `_tests` boilerplates, and the
+`linkedin-analytics` pilot) is reviewed and recorded in per-repository commits; the remaining
+consumers are still pending.
 Existing project-local setup stays available during that gradual rollout.
 
 ## Repository structure
 
 ```
+├── AGENTS.md                 # Directives for working in this repository
 ├── .opencode/              # Project-local compatibility adapters
 │   ├── agents/             #   Agent definitions (markdown)
 │   └── skills/             #   Skill definitions (markdown)

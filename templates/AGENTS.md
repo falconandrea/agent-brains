@@ -33,7 +33,7 @@ Load context **by task**, never the whole `.ai/` tree. Read a file only when the
 | Task area | Read |
 |---|---|
 | General orientation | `AGENTS.md`, `.ai/context/TECH_STACK.md`, `.ai/memory/progress.md`, `.ai/memory/lessons.md` |
-| UI work | `.ai/context/DESIGN_SYSTEM.md` (mandatory) + the `designer` skill and the one relevant UI skill |
+| UI work | `.ai/context/DESIGN_SYSTEM.md` when present and filled (scaffolded projects include the template; if missing or still placeholder, derive conventions from existing components or ask) + the `designer` skill and the one relevant UI skill |
 | Anything else | The skill or `.ai/context/` file matching the area; `APP_FLOW.md`, `GLOSSARY.md`, `database_schema.mmd`, ADRs only when needed |
 
 Skill details live in the skills themselves — do not preload or copy them here.
