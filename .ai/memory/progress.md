@@ -2,12 +2,49 @@
 
 ## Open items
 
+- **2026-11-01 global general workflows implemented — partial CLI delivery
+  (independently reviewed 2026-11-02; partial CLI delivery):** executed the approved
+  [`.ai/features/global-workflows`](../features/global-workflows/spec.md)
+  plan T1–T6 in one continuing session; T7 (interactive selection +
+  running-session refresh), AC8 and M3 remain open. Deliverables: seven
+  portable OpenCode agent adapters (`adapters/opencode/agents/`) with the
+  legacy pointers symlinked to them; installer extended for agents, missing-Pi
+  registration, INCOMPLETE verdicts, relocation/stale diagnostics and
+  conservative rollback (24/24 installer fixtures after review rounds 1–2;
+  suite 476/476 observed fresh, typecheck,
+  `bash -n`, diff checks clean); README/Pi-guide/setup.sh guidance aligned
+  (stale OpenCode-only warning replaced by the portable-adapter contract).
+  Machine delta applied after preview review (7 global agent links; doctor
+  clean); linkedin-analytics pilot isolated as planned with a private,
+  conflict-tested restore exercise and inventory equality. CLI proofs from
+  the pilot root and `app/`: Codex 8/8 `$name` injections (W+code-review,
+  zero filesystem commands), OpenCode 7/7 agents + 8/8 skill-tool matrix +
+  command, Pi 16/16 `/skill:` expansions + `/stack`/`/flow status` local —
+  all from the global catalog with no local shared links; disposable-fixture
+  boundary probes passed (planning joint-approval/handoff, implementation
+  gate, review-without-fixes, Pi `/feature` implementation gated with
+  existing run schemas); interactive cancel and interrupted-run resume are
+  unit-covered only, not observed live — AC5 partial. Limits recorded: Pi
+  `-p` stale-ctx preempts
+  interactive gate/cancel (unit-covered); OpenCode free-model flake on one
+  agent run (retry clean); `opencode agent list` absent in 2.2.5 (`debug
+  agents` is the probe). No other consumer touched. CLI delivery approved for commit; T7/AC8/M3 and live AC5 cancel/resume remain open.
+
+- **2026-11-01 review reconciliation:** independently verified follow-ups are
+  tracked in the [roadmap](../../docs/plans/pi-plugin-adoption-roadmap.md#review-reconciliation-follow-ups-verified-2026-11-01).
+  Prioritize RV1 (snapshot failure with ignored Pi runtime paths); RV2–RV5
+  cover planner reliability, routing guards, observed test-first behavior and
+  progress cleanup. Compatibility and runtime-doc corrections retain their
+  existing T9/U13 owners. Recorded only; no runtime fix or milestone closure.
+
+- **2026-11-01 linkedin-analytics M4 CLI pilot:** six fresh Codex/OpenCode/Pi sessions from root and `app/` passed native loading without the 44 local shared-skill links. Codex native `skills/list` reports user scope; initial model-visible omission is consistent with `allow_implicit_invocation: false`, while explicit invocation is confirmed by transcript provenance. Only those 44 links moved to private backup; workflows and `.opencode` preserved. Interactive checks remain open with commands in [migration plan §11](../../docs/plans/cross-harness-workflow-migration.md#11-m4-linkedin-analytics-global-catalog-pilot--2026-11-01). No other consumer changed; no commit/push.
+
 - **M4 consumer rollout — first wave reviewed; commits recorded 2026-11-01:**
   read-only inventory of all plan §7 repositories refreshed; agent-brains
   self-alignment done (root `AGENTS.md`, `.ai/context/TECH_STACK.md`); the two
   `_tests` boilerplates and one active consumer pilot were migrated per the
   §6 checklist. M4 is **not complete**: the remaining consumers, managed-link
-  removal (requires live global-discovery verification in each consumer), and
+  removal in the remaining consumers (requires per-consumer live verification), and
   the M3 GUI/TUI refresh check are still open. Per-repository outcomes and
   limits are recorded in the
   [migration plan §7](../../docs/plans/cross-harness-workflow-migration.md#7-tasks-by-project)
@@ -1219,3 +1256,5 @@
 - 2026-09-22 Vercel skills follow-up (commit `51e4e65`): `vercel-composition-patterns` and `vercel-react-best-practices` already byte-identical to upstream `vercel-labs/agent-skills` (verified via shallow-clone diff; `npx skills update` on composition-patterns was a content no-op) — no change applied. `vercel-react-view-transitions` updated to upstream latest (post PR #328: Suspense crossfade readiness, Layout Displacement Morph, Chromium 125+ correction, `router.back()` carries-no-types semantics, new `references/troubleshooting.md`, markdown links to references; ~921 insertions across SKILL.md/AGENTS.md/README/references; lockfile hash c8952fc9→2033ef2). No local patches existed in the three skills (no `.ai/` remap needed — Vercel-sourced); remap script run: 0 files. Health checks: no broken skill deps, tracker config present, profile integrity bidirectional clean, setup.sh smoke test PASS for all 10 profiles; npm test 212/212, typecheck clean. `npx skills update -p` also creates `.pi/skills/<name>` symlinks (Pi discovery root per docs/pi-brain/SPEC.md §9.1) → `.pi/skills/` added to .gitignore as CLI plumbing.
 - 2026-09-22 Merged `main` → `pi-brain` (merge commit on `pi-brain`, then fast-forwarded `main`): kept pi-brain's `<name>/SKILL.md` directory convention (no legacy flat `designer.md`/`product-thinking.md` restored); combined `profiles/common.list` (pi-brain normalized names + main's 5 new skills: codebase-design, domain-modeling, prototype, resolving-merge-conflicts, writing-for-agents); `socialite-development` once in `laravel.list`; kept main's `update-skills`, Humanizer updates, `.ai` tracker conventions, scaffold and path-remap; preserved the local-ownership invariant (`grill-with-docs` and `research` stay `management: local`, absent from `skills-lock.json`, metadata + LICENSE intact, ownership tests active); aligned `extra/skills/update-skills/SKILL.md` to the ownership contract (lockfile-only scope, named updates preferred, adopted/derived skills never updated).
 - 2026-08-29 humanizer 2.11.0 (no-ai-slop merge), mattpocock skills to 1.2.3 + 4 new skills, `.ai/` path remap, tracker/scaffold conventions, profiles fixed (bidirectional check), `update-skills` maintenance skill in `extra/`.
+
+- 2026-11-01 M4 pilot review corrections: replaced personal paths in the six new public launch commands with relative paths. Fixed the private rollback AND-list guard using explicit exits and full preflight; six isolated scenarios passed, including all occupied destination types and no partial restore on a late conflict. Live restore never executed; 44 links remain backed up.

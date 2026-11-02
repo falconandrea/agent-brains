@@ -36,18 +36,24 @@ Real runs have since covered the whole pipeline on real features.
 creates per-skill links in `~/.agents/skills`, a location supported by Codex
 and OpenCode; per-skill links preserve personal skill directories and avoid
 overwriting name conflicts. It also installs one standalone OpenCode
-`/spec-and-tasks` command adapter. It does not link the repository's `.opencode`
-directory, change Pi's global package registration, or install global files as
-part of Pi's own package flow.
+`/spec-and-tasks` command adapter, the seven OpenCode workflow agent adapters
+as individual files (never the repository's whole `.opencode` directory), and
+— only when no such registration exists — the Pi package registration for
+this checkout through Pi's own package manager. Pre-existing Pi
+registrations, including third-party packages, are preserved and survive
+rollback.
 
-The installer defaults to preview. `--apply`, `--doctor`, and `--rollback` are
-documented in the [repository README](../../README.md#global-skill-distribution).
+The installer defaults to preview; unresolved conflicts, a missing `pi`
+executable or a failed registration produce an explicit INCOMPLETE verdict
+with a rerun path. `--apply`, `--doctor`, `--rollback`, the relocation
+diagnostic and manual recovery are documented in the
+[repository README](../../README.md#global-skill-distribution).
 M3 verified `/skill:spec-and-tasks` in a real Pi CLI session from a temporary
-project without local skill links.
-The existing global Pi package registration was preserved; it was not
-reinstalled. Pi `/feature`, `/flow`, `/stack`, role policies, profiles, resume
-behavior, and historical run documents remain in the Pi engine; profiles
-continue to select skills by stack and role there.
+project without local skill links; at that time the existing global Pi
+package registration was preserved and not reinstalled. Pi `/feature`,
+`/flow`, `/stack`, role policies, profiles, resume behavior, and historical
+run documents remain in the Pi engine; profiles continue to select skills by
+stack and role there.
 
 Laravel Boost output is project-specific because it reflects the consuming
 project's installed packages and versions. Generate it only in that project's

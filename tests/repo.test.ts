@@ -201,7 +201,7 @@ const readmeWorkflows = (): WorkflowRow[] => {
   }));
 };
 
-test("every workflow in the README table has an OpenCode pointer and a resolved workflow link", () => {
+test("every workflow in the README table has a portable OpenCode pointer and a resolved workflow link", () => {
   const workflows = readmeWorkflows();
   assert.ok(workflows.length > 0, "README workflow table not found");
 
@@ -214,11 +214,23 @@ test("every workflow in the README table has an OpenCode pointer and a resolved 
       problems.push(`${skill}: link must be .agents/workflows/${skill}.md (found ${link})`);
     }
 
+    // The pointer must BE the canonical portable adapter (single source of
+    // truth); legacy consumers linking `.opencode` inherit the same behavior.
+    const adapter = join(ROOT, "adapters", "opencode", "agents", `${skill}.md`);
+    if (!existsSync(adapter)) {
+      problems.push(`${skill}: missing canonical adapter adapters/opencode/agents/${skill}.md`);
+    }
     const pointerPath = join(ROOT, pointer);
     if (!existsSync(pointerPath)) {
       problems.push(`${skill}: missing OpenCode pointer ${pointer}`);
-    } else if (!readFileSync(pointerPath, "utf8").includes(link)) {
-      problems.push(`${skill}: ${pointer} does not reference ${link}`);
+    } else {
+      try {
+        if (realpathSync(pointerPath) !== realpathSync(adapter)) {
+          problems.push(`${skill}: ${pointer} must resolve to the canonical adapter ${adapter}`);
+        }
+      } catch {
+        problems.push(`${skill}: broken pointer symlink ${pointer}`);
+      }
     }
 
     const linkPath = join(ROOT, link);
@@ -232,6 +244,60 @@ test("every workflow in the README table has an OpenCode pointer and a resolved 
     }
   }
 
+  assert.deepEqual(problems, [], problems.join("\n"));
+});
+
+test("OpenCode workflow adapters are portable primary agents that load skills natively", () => {
+  const adaptersDir = join(ROOT, "adapters", "opencode", "agents");
+  const workflowNames = readdirSync(join(ROOT, ".agents", "workflows"))
+    .filter((name) => name.endsWith(".md"))
+    .map((name) => name.slice(0, -".md".length))
+    .sort();
+  const adapterNames = readdirSync(adaptersDir)
+    .filter((name) => name.endsWith(".md"))
+    .map((name) => name.slice(0, -".md".length))
+    .sort();
+  assert.deepEqual(
+    adapterNames,
+    workflowNames,
+    "the adapter set must exactly mirror the compatibility workflow set",
+  );
+
+  const problems: string[] = [];
+  for (const name of adapterNames) {
+    const content = readFileSync(join(adaptersDir, `${name}.md`), "utf8");
+    const fm = content.match(/^---\n(.*?)\n---/s)?.[1] ?? "";
+    if (!/^description:\s*\S/m.test(fm)) problems.push(`${name}: frontmatter needs a description`);
+    if (!/^mode:\s*primary\s*$/m.test(fm)) {
+      problems.push(`${name}: must declare mode: primary (explicit selection, no delegation surface)`);
+    }
+    if (/^(model|permission|tools):/m.test(fm)) {
+      problems.push(`${name}: must not override model, permissions, or tools`);
+    }
+    if (/\.agents\/(skills|workflows)/.test(content)) {
+      problems.push(`${name}: references a project-local .agents path; adapters must load the native skill by ID instead`);
+    }
+    if (!content.includes(`"${name}"`)) {
+      problems.push(`${name}: must load the "${name}" skill by its exact native ID`);
+    }
+    if (content.includes("$ARGUMENTS")) {
+      problems.push(`${name}: is an agent, not a command; $ARGUMENTS belongs to command adapters`);
+    }
+  }
+  assert.deepEqual(problems, [], problems.join("\n"));
+});
+
+test("the planning command stays a command: forwards arguments and loads the skill by ID", () => {
+  const content = readFileSync(join(ROOT, "adapters", "opencode", "commands", "spec-and-tasks.md"), "utf8");
+  const problems: string[] = [];
+  if (!content.includes("$ARGUMENTS")) problems.push("planning command must forward $ARGUMENTS");
+  if (!content.includes("spec-and-tasks")) problems.push("planning command must load the spec-and-tasks skill by ID");
+  if (/\.agents\/(skills|workflows)/.test(content)) {
+    problems.push("planning command must not reference project-local .agents paths");
+  }
+  if (/^mode:/m.test(content.match(/^---\n(.*?)\n---/s)?.[1] ?? "")) {
+    problems.push("planning command must not declare an agent mode; it runs in the current agent");
+  }
   assert.deepEqual(problems, [], problems.join("\n"));
 });
 

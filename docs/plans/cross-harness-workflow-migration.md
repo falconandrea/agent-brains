@@ -182,7 +182,7 @@ The following tasks add to the common checklist. “Core present” means that T
 | [x] | `agent-brains` | Implement section 4; apply the migration to its own rules and `.ai` as well. **(2026-10-31: section 4 complete; root `AGENTS.md` created and `.ai/context/TECH_STACK.md` added (M1 had left §4.E open); historical `.ai/features/` `prd-`/`tasks-` documents kept readable; README structure tree updated. Uncommitted.)** |
 | [x] | `_tests/laravel-ai-boilerplate` | Core present; contains historical prompts and `.ai/agents/agent-brains.md`. Align it early to avoid new projects inheriting old conventions. Preserve the Laravel Zero rules found there. **(2026-10-31: stubs realigned — `.agents/workflows/feature.md` renamed `spec-and-tasks.md` with the `spec.md`+`tasks.md` contract; `_TEMPLATE.md` updated in repo and stubs; `create_prd.md`/`generate_tasks.md` marked historical; `.ai/agents/agent-brains.md` and AGENTS note moved to the global catalog + Pi `/feature` distinction; dangling `.agents/skills/feature` link replaced by `spec-and-tasks`. Review round: stub conforms to the approved contract — both documents prepared together, ONE joint approval, handoff to a fresh implementation session; AGENTS/README state the global-catalog prerequisite with the `setup.sh … laravel` fresh-clone fallback; README scaffold tree and slash commands updated. Pest 76/76, Pint and PHPStan clean. Preserved: the uncommitted 2026-10-08 alignment, Laravel Zero rules, `project_setup.md` prompt, Boost guidance in the scaffold installer. Uncommitted.)** |
 | [x] | `_tests/nextjs-ai-boilerplate` | Core present; retains `guidelines`, `blockers.md`, and setup prompts. Align templates and rules without losing Next.js guidance. **(2026-10-31: fixed the dangling AGENTS.md reference to `.agents/workflows/feature.md` (links were already renamed 2026-10-30); New Feature Workflow, PLANNING MODE, Quick Commands and the Antigravity Workflows table now use `spec-and-tasks` and the `spec.md`+`tasks.md` contract; `_TEMPLATE.md` and `.ai/agents/agent-brains.md` updated; dangling `.agents/skills/feature` link replaced. Review round: README session/feature flows, structure tree and slash-command table updated; AGENTS/README state the global-catalog prerequisite with the `setup.sh … nextjs` fresh-clone fallback. Preserved: Next.js code rules, `guidelines/`, the `blockers.md` convention AGENTS.md still routes to, setup prompts, 2026-10-08 uncommitted alignment. No test suite exists in this template repo; reference checks only. Uncommitted.)** |
-| [x] | `linkedin-analytics` | Core present; has PRD/task/setup prompts and local agent-brains instructions. Consolidate duplicate notes in AGENTS and check UI rules against documents that actually exist. **(2026-10-31 pilot, validated: consolidated the duplicated agent-brains note inside the Boost block into one updated copy; UI routing no longer requires the absent `DESIGN_SYSTEM.md` (conditional route); `GLOSSARY.md` marked absent; `.ai/agents/agent-brains.md` and `_TEMPLATE.md` updated; PRD prompts marked historical; dangling `.agents/skills/feature` link replaced by `spec-and-tasks` (44 links, all resolve). Review round: the note and `agent-brains.md` state the global-catalog prerequisite with the `setup.sh … laravel-analytics` fresh-clone fallback instead of assuming installation. Preserved: the entire `<laravel-boost-guidelines>` block, all ten historical `prd-`/`tasks-` feature pairs, APP_FLOW/PRD/TECH_STACK/schema, `laravel-analytics` profile references, 2026-10-08 uncommitted alignment. Limits: no live per-consumer harness session was run — M3's CLI discovery evidence stands; managed links intentionally kept. Uncommitted.)** |
+| [x] | `linkedin-analytics` | Core present; has PRD/task/setup prompts and local agent-brains instructions. Consolidate duplicate notes in AGENTS and check UI rules against documents that actually exist. **(2026-10-31 pilot, validated: consolidated the duplicated agent-brains note inside the Boost block into one updated copy; UI routing no longer requires the absent `DESIGN_SYSTEM.md` (conditional route); `GLOSSARY.md` marked absent; `.ai/agents/agent-brains.md` and `_TEMPLATE.md` updated; PRD prompts marked historical; dangling `.agents/skills/feature` link replaced by `spec-and-tasks` (44 links, all resolve). Review round: the note and `agent-brains.md` state the global-catalog prerequisite with the `setup.sh … laravel-analytics` fresh-clone fallback instead of assuming installation. Preserved: the entire `<laravel-boost-guidelines>` block, all ten historical `prd-`/`tasks-` feature pairs, APP_FLOW/PRD/TECH_STACK/schema, `laravel-analytics` profile references, 2026-10-08 uncommitted alignment. Limits: no live per-consumer harness session was run — M3's CLI discovery evidence stands; managed links intentionally kept. Uncommitted.)** **Follow-up 2026-11-01: six fresh consumer CLI checks passed without local skill links; 44 managed skill links moved into private backup, workflows and OpenCode adapters preserved. Interactive checks remain open; see §11.** |
 | [ ] | `ga-analytics` | Core present, with Pi configuration, solutions, and a specialist roadmap. Good candidate for checking Pi/Codex/OpenCode coexistence after an initial isolated test; preserve runs and document compatibility. Consolidate duplicate prompts and notes. |
 | [ ] | `craftcv.online` | Core present; detailed context, `FRONTEND_GUIDELINES.md`, `blockers.md`, historical prompts, and several task conventions. Preserve English documentation and project-specific UI routing. |
 | [ ] | `appuntidalgiappone` | Core present; update references to `/feature` and old PRD/task names. After reading, assess the classification of `.ai/SEO-STRATEGY.md` and `.ai/to.md` without moving them automatically. |
@@ -273,3 +273,182 @@ Search separately for other subdirectories and nested repositories not found in 
 | 2026-10-31 | M4 first-wave review corrections | Independent review: four findings, all corrected before approval. (1) Standards — the three consumers' AGENTS.md notes and `agent-brains.md` files no longer assume the global catalog: they state the `install-global-skills.sh --apply` prerequisite with the `setup.sh <profile>` alternative for fresh clones. (2) Spec — the Laravel stub `spec-and-tasks.md` conforms to the approved contract: `spec.md` and `tasks.md` prepared together, ONE joint approval, explicit handoff to a fresh implementation session (mirrors canonical Step 5). (3) Spec — both boilerplate READMEs migrated away from `/feature` / `feature.md` / PRD-only flow. (4) Spec — central status de-conflicted: stale `progress.md` "M4 has not started" line corrected; §4.E items 118–121 closed with evidence (`copy_if_missing` verified skip-only; canonical `templates/AGENTS.md` UI route now conditional on `DESIGN_SYSTEM.md` being present and filled); consumer changes staged for review. | Reviewer re-ran Pest 76/76 (non-fatal sandbox cache-write warning); link/reference checks and `git diff --check` clean in all four repositories; no live harness sessions. | M4 remains open: 19 consumers pending; managed-link removal requires per-consumer live discovery checks; M3 GUI/TUI refresh still open. |
 
 | 2026-11-01 | M4 first-wave commits | Independent review corrections approved. Consumer commits: Laravel boilerplate `a2897f2`, Next.js boilerplate `6c597cd`, linkedin-analytics `3c0d0ec`. agent-brains self-alignment is committed with this record. | Diff checks passed; previous review verified consumer Pest 76/76. | Remaining consumers and live verification remain open; historical uncommitted notes above describe the review-time state. |
+
+## 11. M4 linkedin-analytics global-catalog pilot — 2026-11-01
+
+**Outcome:** fresh CLI discovery and explicit loading passed in Codex 0.166.0,
+OpenCode 2.2.5 and Pi 0.85.1, from both the repository root and `app/`, with
+all 44 local shared-skill links absent. These are six new real CLI sessions,
+not manual file-read simulations. Interactive GUI/TUI verification remains
+open; commands below make that limit reproducible. This does not close M4 for
+other consumers or M3's already-running GUI/TUI refresh check.
+
+### Inventory and preservation
+
+Both repositories started clean. A private persistent backup contains the
+before-state Git output, categorized inventory, exact 44-link manifest,
+original link objects, per-run commands/stdout/stderr/results, native Codex
+invocation provenance and a conflict-safe `restore.zsh`. Its machine-local
+location is recorded in the ignored `.ai/memory/m4-local.md` note.
+
+- **Skills:** `.agents/skills/` was a real directory containing 44 per-skill
+  symlinks, all resolving inside `agent-brains/.agents/skills/`. No real or
+  personal skill files occupied it. Only these 44 links were moved out of the
+  consumer into the private backup after the live checks. The directory stays.
+- **Workflows:** `.agents/workflows` points to `agent-brains/.agents/workflows`;
+  preserve it, including `spec-and-tasks.md`, because OpenCode agent adapters
+  still reference it. It was not disabled during the skill-discovery tests.
+- **Agents/adapters:** preserve `.opencode -> agent-brains/.opencode` in full:
+  seven agent Markdown files, three legacy skill adapters, package files and
+  `.gitignore`. Global skill installation does not replace these adapters.
+- **Commands:** no project `.opencode/commands` directory exists. The global
+  `~/.config/opencode/commands/spec-and-tasks.md` adapter remains available.
+  An OpenCode slash command and an OpenCode agent are separate resources.
+- **Configuration:** preserve real project `opencode.json` (Sail Boost MCP),
+  `.ai`, AGENTS and historical plans. Project `.pi` and `.codex` are absent;
+  none were created. Preserve global Pi package registrations, including
+  agent-brains and the existing third-party package. No harness config changed.
+
+### Codex diagnosis: discovery is not initial prompt exposure
+
+`spec-and-tasks/agents/openai.yaml` contains
+`policy.allow_implicit_invocation: false`. The current model-visible startup
+catalog omits this explicit-only skill. This is not evidence that the native
+scanner failed: `skills/list` with `forceReload: true` returned it enabled,
+with **scope `user`**, from both launch directories, with no loading errors,
+while there were **zero** local skill symlinks. No `skills.config` exclusion
+was present in user config; project Codex config is absent.
+
+Both `$spec-and-tasks` runs received the canonical skill body as an
+harness-generated message with
+`content_item_kinds: ["skills.selected_skill_instructions"]` and provenance
+`type: skills`. No filesystem tools ran in either session. The model's final
+answers called this user-supplied injection and reported the initial catalog
+entry ABSENT; the transcript metadata establishes native explicit loading.
+Do not turn that model interpretation into a false discovery failure. Equally,
+do not claim the skill appeared in the initial model-visible catalog.
+
+The [official skill documentation](https://learn.chatgpt.com/docs/build-skills)
+distinguishes explicit invocation from implicit invocation and documents that
+`allow_implicit_invocation: false` preserves explicit `$skill` invocation.
+No central policy or skill content was changed to perform this diagnosis.
+
+### Evidence by harness, without local skill links
+
+| Harness | Root | `app/` | Native loading evidence |
+|---|---|---|---|
+| Codex 0.166.0 | Pass | Pass | `skills/list`: enabled user scope, no errors; `$spec-and-tasks` inserted `skills.selected_skill_instructions` in both transcripts. Initial model-visible catalog entry remains absent. |
+| OpenCode 2.2.5 | Pass | Pass | Fresh standalone `/spec-and-tasks` sessions called `skill` with `id: spec-and-tasks`; returned skill content reports base `~/.agents/skills/spec-and-tasks`. Only the skill tool ran. |
+| Pi 0.85.1 | Pass | Pass | `/skill:spec-and-tasks` expanded into a skill block whose location is `~/.agents/skills/spec-and-tasks/SKILL.md`; both sessions reported the native available-skills entry. Only `app/` additionally used `read` on that catalog path. |
+
+All six exited 0 and reported the single joint spec/tasks approval and fresh
+implementation-session handoff. No session drafted planning documents, asked
+discovery questions, wrote application files, or launched `/feature`. Exit
+codes alone were not used as proof: tool events and expansion provenance were
+examined. Initial sandbox denials for Pi's trust lock and OpenCode's log were
+resolved by approved execution against the real home configuration; they were
+not counted as harness discovery failures.
+
+The test runner restored all 44 original links byte-for-byte by link text
+before evidence review. After the six successful CLI checks and the Codex
+user-scope check, the same 44 destination-validated links were moved into the
+persistent backup as the final state. **Removed from the consumer: 44 skill
+links; removed workflow/agent/command/configuration links: zero.** Restoration
+uses the exact per-link `rtk mv` operations in `restore.zsh`, rejects occupied
+destinations and leaves third-party content alone. No commit or push was made.
+
+### Open interactive checks and exact repetition procedure
+
+These non-interactive CLI sessions do not prove interactive selector rendering,
+GUI/TUI refresh, or behavior of a UI left running during an update. Leave those
+checks open. With the current final state (no local shared-skill links), start
+six new interactive processes, one per row; do not resume existing sessions.
+Run every launch command below from the project root:
+
+| CWD | Harness | Launch command |
+|---|---|---|
+| root | Codex | `rtk proxy codex -C . -s read-only` |
+| `app/` | Codex | `rtk proxy codex -C app -s read-only` |
+| root | OpenCode | `rtk proxy opencode --standalone .` |
+| `app/` | OpenCode | `rtk proxy opencode --standalone app` |
+| root | Pi | `rtk proxy pi --tools read,grep,find,ls` |
+| `app/` | Pi | `rtk proxy sh -c 'cd app && exec pi --tools read,grep,find,ls'` |
+
+In Codex inspect `/skills` or the `$` selector for `spec-and-tasks`, then send
+`$spec-and-tasks` followed by the diagnostic below. In OpenCode send
+`/spec-and-tasks` followed by it and inspect the actual `skill` tool result.
+In Pi send `/skill:spec-and-tasks` followed by it and inspect the expanded
+location. Use this diagnostic text in each new session:
+
+> Diagnostic only. Do not start planning, ask questions, create documents,
+> modify files, delegate, or run implementation commands. Report whether the
+> native catalog exposes spec-and-tasks and its source; load it only by native
+> explicit invocation, then report its name, ONE joint approval rule and
+> fresh-session handoff rule. If absent, report ABSENT without filesystem
+> search fallback. Stop immediately after reporting.
+
+Success requires a native entry/selector or native expansion/tool event linked
+to the global catalog, the expected rules and no write actions; a manual `cat`
+is insufficient. Record harness version, CWD and actual events. Exit each UI
+with Ctrl-C without proceeding to planning. On a genuine discovery/loading
+failure, run the private `restore.zsh` and retain the failure evidence. No
+central skill markers or content edits are needed. An already-running UI
+refresh experiment is a separate M3 check and remains unperformed.
+
+### Pilot review corrections — 2026-11-01
+
+- **Standards P2:** all six new interactive launch commands use project-relative paths; run them from the project root. Machine-specific backup paths remain in the private note.
+- **Spec P1:** the original rollback guard incorrectly relied on `set -e` after an AND-list. It was never executed against the live project. Replaced it with explicit `if`/`exit 1` checks, a preflight across all destinations before any move, and a repeated guard immediately before each `rtk mv -n`. The rejected script is retained privately as non-executable evidence.
+- **Fresh verification:** the replacement script passed `zsh -n` and six isolated fixture scenarios: occupied file, directory, live symlink, dangling symlink, conflict at the last destination (no partial restore), and successful restoration of 44 links followed by an idempotent rerun. Each conflict exited 1 and left the entire fixture unchanged. The live restore was not run; all 44 backup links remain in place. No application code or central skill changed; interactive checks remain open.
+
+### Global general workflows implementation — 2026-11-01 (partial CLI delivery, uncommitted)
+
+Follows the approved [`.ai/features/global-workflows`](../../.ai/features/global-workflows/spec.md)
+plan (T1–T6 executed; T7 interactive checks open, so AC8 and M3 remain open).
+Machine delta applied after a reviewed preview: the seven OpenCode agent
+adapters installed under `~/.config/opencode/agents/` by the extended
+installer (RESULT: COMPLETE, doctor clean); skills, the planning command and
+the Pi registration already existed and were left untouched (the
+pre-existing registration is not owned and survives rollback). The pilot
+kept its isolated final state: its two shared links (`.agents/workflows`,
+`.opencode`) were removed with ownership proof, snapshot, conflict-tested
+restore (occupied/dangling/last-entry-conflict abort with no partial
+restore), live restore with inventory equality, and re-isolation. Doctor
+clean after reapply; `opencode.json`, Boost content and `.ai` untouched.
+
+Observed CLI evidence (diagnostic-only sessions, transcript metadata as
+proof, pilot root and `app/`): Codex `$name` matrix 8/8 (W + code-review)
+from the canonical catalog, zero filesystem commands; OpenCode seven agents
+registered `mode: primary`, native skill-tool matrix 8/8 per CWD, each agent
+firing its own skill id, `/spec-and-tasks` loading the skill from both CWDs;
+Pi 16/16 `/skill:` expansions from the global catalog and `/stack`,
+`/flow status` handled locally by the registered package from both CWDs.
+Disposable-fixture boundaries held: planning reports one joint approval and
+the fresh-session handoff; a workflow skill refuses to implement without an
+approved plan; code-review reports findings and fixes nothing; a fixture
+`/feature` run gated implementation (planner drafts only) and persisted
+`agent.completed` + `workflow.failed` in the existing run schemas — with the
+observed limit that Pi `-p` makes the extension ctx stale before an
+interactive cancel can happen (U8 guards contained it). Observed precedence
+contracts: OpenCode project scope shadows user scope for skills and commands;
+Pi discovers project scope only under project trust (then project wins);
+Codex user-scope `$name` injects natively while a same-name project skill
+suppresses the injection (local overrides intentionally block the shared
+route and are reported, never forced).
+
+Proportionate checks at handoff: `rtk npm test` 472/472, `rtk npm run
+typecheck` clean, `rtk proxy bash -n` for both changed shell scripts,
+`rtk git diff --check` clean, no personal paths in changed public files.
+No other consumer was touched; no commit or push was made.
+
+Implementation review round 1 (2026-11-01) — corrected before commit: the
+relocation recovery message now includes the stale-manifest archive step and
+the full managed-link list, and a fixture walks the printed procedure to a
+successful reinstallation (doctor clean); the OpenCode config root honors
+`XDG_CONFIG_HOME` (verified against `opencode debug paths` on 2.2.5), is
+reported, and nothing is silently installed into an unused location; `--apply`
+now ends `RESULT: INCOMPLETE` when a managed source is obsolete (kept, never
+auto-pruned); the AC5 claim was downgraded to partial — cancel and
+interrupted-run resume are covered by the existing unit suite only, while
+`/stack`, `/flow status` and the gate behavior are the live-observed parts.
+Installer fixtures 23/23 after the corrections.

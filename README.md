@@ -71,35 +71,76 @@ examples when their original language is part of the evidence or behavior.
 
 ## Global skill distribution
 
-`agent-brains` remains the canonical source. The installer creates individual
-symlinks from the catalog into `~/.agents/skills`, which Codex and OpenCode
-both discover. Per-skill links allow existing personal skills to stay in the
-same directory and let name conflicts be skipped without replacing content.
-The installer also checks OpenCode's higher-priority global skills directory
-and skips a same-name collision there.
-The installer also exposes only the standalone OpenCode `/spec-and-tasks`
-command adapter under `~/.config/opencode/commands/`; it never links the whole
-`.opencode` directory.
+`agent-brains` remains the canonical source. One machine install from a stable
+checkout makes the shared catalog available to Codex, OpenCode and Pi without
+project setup or profile selection:
+
+- per-skill links from the catalog into `~/.agents/skills` (Codex and OpenCode
+  discover them; personal skills stay in the same directory and name conflicts
+  are skipped without replacing content; a same-name skill already defined in
+  OpenCode's higher-priority global skills directory is also skipped);
+- the standalone OpenCode `/spec-and-tasks` command adapter under
+  `~/.config/opencode/commands/` — never the whole `.opencode` directory;
+- the seven OpenCode workflow agent adapters (`astro`, `laravel`, `nextjs`,
+  `setup`, `solution-capture`, `spec-and-tasks`, `start`) as individual files
+  under `~/.config/opencode/agents/`, each a selectable primary agent that
+  loads its native skill by exact ID;
+- the Pi package registration for this checkout through Pi's own package
+  manager (`pi install`), only when no such registration exists; a
+  pre-existing registration — including third-party packages — is preserved
+  and never recorded as owned.
 
 Use a stable checkout and review the read-only preview before applying:
 
 ```bash
 ./install-global-skills.sh                 # preview; no writes
-./install-global-skills.sh --doctor         # catalog, manifests, links, duplicates, config paths
+./install-global-skills.sh --doctor         # catalog, manifests, links, agents, Pi registration
 ./install-global-skills.sh --apply          # explicit global installation
 ./install-global-skills.sh --doctor         # inspect the resulting state
-./install-global-skills.sh --rollback       # remove only recorded unchanged links
+./install-global-skills.sh --rollback       # remove only recorded unchanged links + owned registration
 ```
 
-`--apply` preserves existing files, directories and foreign symlinks at every
-skill/command destination and reports conflicts, including a same-name skill
-already defined in OpenCode's higher-priority global skill directory. It
-records only links it created. Rollback removes a recorded path only while it
-is still a symlink to the same canonical source; changed paths and personal
-content remain. The manifest is stored at
-`~/.agents/.agent-brains-global-manifest`. The catalog
-is not copied or moved. A global install is a live link to this checkout, so
-keep the checkout in a stable location and use `--doctor` after moving it.
+`--apply` preserves existing files, directories and foreign or dangling
+symlinks at every destination and reports conflicts without overwriting
+anything. It ends with an explicit verdict: `RESULT: COMPLETE`, or
+`RESULT: INCOMPLETE` (non-zero exit) when anything is unresolved — conflicts,
+a missing `pi` executable, or a failed registration. Incomplete installs are
+rerunnable: fix the reported cause and run `--apply` again; already-linked
+resources are left untouched. It records only resources it created in the
+manifest at `~/.agents/.agent-brains-global-manifest`. Rollback removes a
+recorded path only while it is still a symlink to the same canonical source
+and removes only the Pi registration it recorded; changed paths, personal
+content, foreign links and pre-existing registrations remain. If a rollback
+cannot verify ownership (for example when `pi` is unavailable), it reports
+the exact manual recovery command instead of touching anything.
+
+The catalog is not copied or moved: a global install is a live link to this
+checkout, so keep the checkout in a stable location. If a checkout moves, the
+manifest no longer matches and apply/rollback stop with a `CHECKOUT
+RELOCATED` report; the documented manual recovery is to remove the
+old-checkout links yourself and rerun `--apply` from the new location.
+Managed resources whose canonical source was deleted are reported as
+obsolete by `--doctor` (remove the global link manually after verifying).
+Automated relocation repair, automated rebind and stale-resource
+reconciliation are deferred; nothing foreign is pruned automatically.
+Updates are explicit: content edits flow through the links on the next
+session start or reload; new resources require an explicit installer rerun.
+
+Invocation differs per harness and resource — a workflow name does not imply
+the same syntax everywhere:
+
+| Harness | Skills/workflows | Commands | Agent/role surface |
+|---|---|---|---|
+| Codex | `$<name>` explicit invocation, incl. all seven workflows and `code-review` | no new custom slash commands | no new Codex agent definitions |
+| OpenCode | native skill tool by exact name (incl. `code-review`) | `/spec-and-tasks` (runs in the current agent) | seven selectable primary agents `<name>`; independent review uses `code-review` in a fresh session |
+| Pi | `/skill:<name>` (incl. `code-review`) | existing `/feature`, `/flow`, `/stack` from the registered package | internal planner/developer/reviewer roles; profiles remain internal to Pi routing |
+
+Local overrides intentionally win and can block the shared route — a project
+skill or command with the same name shadows the global one (and in Codex a
+same-name project skill suppresses `$name` injection), while
+`permission.skill: "deny"` in OpenCode blocks skill loading outright.
+Diagnostics report these as observed causes; the installer never changes
+permissions to force success.
 
 ### M3 CLI verification
 
@@ -134,11 +175,11 @@ Installer rollback and restoration of personal content are separate operations:
 
 To install on another machine, clone this repository to a stable path, run the
 preview and `--doctor`, review any name conflicts, then run `--apply` and
-`--doctor` again. The installer covers Codex/OpenCode skills and the OpenCode
-command. It does not register Pi packages: retain an existing `agent-brains`
-Pi package registration, or follow the repository's Pi install instructions if
-that package is absent. No consumer repository links are needed for the global
-catalog.
+`--doctor` again. The installer covers Codex/OpenCode skills, the OpenCode
+command and the seven agent adapters, and registers the Pi package when
+missing; an existing Pi package registration (yours or third-party) is kept
+and left unowned, so it survives rollback. No consumer repository links are
+needed for the global catalog.
 
 Codex reads user skills from `~/.agents/skills`, follows symlinked skill
 folders, and supports `$skill` invocation; the installed CLI is 0.166.0. See
@@ -190,11 +231,13 @@ for role/stack selection.
 ./setup.sh /path/to/your-project opencode   # link .opencode only (no .agents)
 ```
 
-> **OpenCode-only warning.** The OpenCode agent pointers in
-> `.opencode/agents/*.md` read `.agents/workflows/*.md`, which is **not** linked
-> in this mode. `setup.sh` prints the same warning and the exact command to fix
-> it: `./setup.sh /path/to/your-project full` (a curated profile such as
-> `laravel`, `nextjs`, `astro` or `nodejs` works too).
+The OpenCode agent pointers in `.opencode/agents/*.md` are portable: they are
+symlinks to the canonical adapters in `adapters/opencode/agents/`, and each
+adapter loads its workflow skill through OpenCode's native skill tool by
+exact ID. An `opencode`-only link therefore needs no `.agents/workflows`
+dependency; the agents work as long as the global catalog (or a project-local
+`.agents/skills`) is discoverable. Link `.agents` only when you also want the
+project-local skill aliases and legacy compatibility path.
 
 ### Existing project (with local configurations)
 
@@ -242,9 +285,9 @@ one has an OpenCode pointer and a workflow link:
 
 | Tool | Syntax | Example |
 |---|---|---|
-| OpenCode | global command adapter `/spec-and-tasks`; skills are loaded by ID | `/spec-and-tasks` or `@spec-and-tasks` |
+| OpenCode | skill tool by exact name; primary agent selection (Tab or `--agent`); global command adapter `/spec-and-tasks` | `--agent laravel`, `/spec-and-tasks` |
 | Codex (CLI / IDE) | `$` mention or `/skills` | `$spec-and-tasks` |
-| Pi | `/skill:spec-and-tasks` (documentary skill) — `/feature` remains the orchestrated runtime command | `$spec-and-tasks` / `/feature <idea>` |
+| Pi | `/skill:spec-and-tasks` (documentary skill) — `/feature` remains the orchestrated runtime command | `/skill:laravel` / `/feature <idea>` |
 
 Profile membership: `start` / `spec-and-tasks` / `setup` / `solution-capture`
 are in `common.list` (every profile); `laravel` / `nextjs` / `astro` are in
@@ -268,8 +311,14 @@ session workflows remain available for explicit use, while pipeline children
 receive their framework specialists. `simplify` belongs to the main session,
 which can edit files and run cleanup commands; it is excluded from pipeline roles.
 
-`.opencode/agents/*.md` and `.agents/workflows/*.md` (symlinks) both point at the
-same `SKILL.md` — single source of truth per workflow, no duplication.
+Three adapter layers stay separate by design, with one source of truth per
+workflow: `.opencode/agents/<name>.md` is a symlink to the canonical portable
+adapter in `adapters/opencode/agents/<name>.md` (an OpenCode primary agent
+that loads the native skill by ID); `.agents/workflows/<name>.md` remains a
+symlink alias to the same `SKILL.md` for legacy consumers; the skill itself
+lives once in `.agents/skills/<name>/SKILL.md`. The OpenCode command adapter
+(`adapters/opencode/commands/spec-and-tasks.md`) stays a command — it runs in
+the current agent and forwards `$ARGUMENTS`; it is never an agent.
 
 ## How It Works
 

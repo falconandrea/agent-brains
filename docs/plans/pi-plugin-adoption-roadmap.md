@@ -14,6 +14,77 @@ after the [Spotify shunt assessment](../research/spotify-shunt-assessment.md).
 These items are independent of R1 external extension trials; recording them
 does not start implementation or change the R1 sequence.
 
+## Review reconciliation follow-ups (verified 2026-11-01)
+
+Rechecked the October 29 review against the current checkout, code, Git
+history and recorded evaluations. M1/M2 are already committed; M3 CLI checks
+and the first M4 wave have evidence. Do not restart those milestones or mark
+the remaining interactive checks and consumer rollout complete. The following
+items are recorded for implementation; none is fixed by this reconciliation.
+
+- [ ] **RV1 — High priority: snapshots with ignored Pi runtime paths.**
+  `src/shell.ts` still runs `git add -A -- .` with negative pathspecs for
+  `.pi/pi-brain.lock*` and `.pi/pi-brain/`. A fresh temporary Git repository
+  with committed ignore rules and both runtime paths present reproduced exit
+  1 with an ignored-path error; the same paths without ignore rules returned
+  0. The [C4 report](../evals/pi-usage/FEATURE-E2E-2026-10-27.md)
+  already records this limitation. Fix snapshot construction while preserving
+  the scratch index, the user's index, ordinary untracked-file inclusion,
+  ignore behavior, and runtime exclusion (including accidentally tracked
+  runtime paths). Add real Git integration regressions in `tests/git.test.ts`
+  for ignored and non-ignored runtime files, application changes alongside
+  them, and user-index preservation. Existing runtime exclusion tests cover
+  the non-ignored case. Prioritize this bounded reliability fix before further
+  Pi runtime work; it does not reopen M1/M2 or require a security-policy change.
+- [ ] **Compatibility — existing T9 remains the owner.** Complete
+  [T9](../../.ai/features/code-review-follow-ups/tasks-code-review-follow-ups.md)
+  with supported Node/SDK/TypeBox ranges and appropriate runtime smoke
+  evidence. Peer dependencies remain `*`, no `engines` field is declared,
+  and the lockfile uses SDK 0.84.2. M3 skill-loading evidence on Pi 0.85.1
+  does not establish full `/feature` engine compatibility. The old request
+  to finish this before M3 is superseded; do not create a duplicate task.
+- [ ] **RV2 — Planner generation reliability.** The C4 report records two
+  rejected plans missing literal `## TITLE`; the production prompt and
+  validator still use the heading contract. Evaluate a bounded improvement
+  to generation/output delivery with representative real outputs and malformed
+  cases, preserving deterministic rejection and existing document/resume
+  contracts. Record observed reliability and limits; do not infer the current
+  failure rate from two historical attempts. This is separate from existing
+  T7's optional parser-module extraction, and does not authorize a broad parser
+  relaxation or a new orchestration layer.
+- [ ] **RV3 — Catalog routing guards.** Unknown skills still default to
+  `craft`. Add targeted structural/routing checks for catalog skills that
+  start workflows, require mutation, or conflict with read-only roles; cover
+  all pipeline roles and relevant profiles. Preserve the technical fallback
+  unless evidence warrants changing it. Existing operational exclusions pass;
+  this is preventive coverage, not a demonstrated permission bypass. No new
+  registry or broad skill-efficacy evaluation is selected.
+- [ ] **Runtime documentation — existing U13 remains the owner.** Update
+  the runner's obsolete "nothing here has executed" header and the Pi README's
+  212-test claim through
+  [U13](../../.ai/features/main-review-hardening/tasks-main-review-hardening.md).
+  Qualify historical SDK evidence rather than treating it as current support.
+- [ ] **RV4 — Verify test-first behavior on a suitable real task.** Reuse
+  [C2](../evals/tdd-review/C2-2026-10-22.md) and the behavioral-verification
+  follow-ups below. The C4 E2E explicitly records implementation before new
+  tests and no skill-body reads; its independent 6/6 regression check is not
+  test-first evidence. On the next suitable task, capture the failing check
+  before implementation and the passing check afterward, respecting execution
+  ownership. Do not reopen C2 or make this a prerequisite for all migration.
+- [ ] **RV5 — Compact current progress.** `.ai/memory/progress.md` has
+  1,226 lines (about 90 KB) at reconciliation and mixes current status with
+  extensive completion history and superseded summaries. Keep current open
+  items concise, archive historical narrative with resolving links, and remove
+  contradictory current-status summaries while preserving evidence and the
+  roadmap/migration plan's ownership. This records cleanup only; no history
+  has been removed.
+
+Verification at reconciliation: 107/107 targeted tests passed across
+`tests/git.test.ts`, `tests/pi-session-injection.test.ts` and
+`tests/unit.test.ts`; `git diff --check` passed. This is not a full-suite run
+or a new live-harness pilot, and the separate ignored-runtime reproduction
+still fails. Keep R1/S3 deferred and U12/U14 independent of these items.
+
 ## Behavioral verification follow-ups (recorded 2026-10-30)
 
 Discussion of the user-supplied analysis of Matt Pocock's interview with Lauren
@@ -348,6 +419,37 @@ the parent `dev` directory so the agreed work is versioned with agent-brains.
 The goal is to keep agent-brains as the canonical store across Pi, Codex and
 OpenCode, expose skills globally once per machine, and retain project-owned
 `.ai/` context without per-project skill symlink maintenance.
+
+### Desired end state: general workflows without per-project setup
+
+**User direction recorded 2026-11-01; planning pending, not implemented.**
+After a one-time machine installation, opening any project should make the
+shared general skills and workflows available in Codex, OpenCode and Pi,
+without running `setup.sh` or choosing an installation profile for that project.
+The global skill catalog already covers part of this goal; global workflow and
+adapter exposure, especially OpenCode adapters that still reference
+`.agents/workflows`, requires separate design and live verification.
+
+- Keep agent-brains as the canonical content source and retain explicit-only
+  invocation and the planning/implementation/review boundaries.
+- Remove the need for consumer `.agents` links for shared general content.
+  Preserve project-specific skills and adapters until their ownership and
+  replacement are established; this is not authorization to delete them.
+- Keep project rules and knowledge in `AGENTS.md` and `.ai/`; global resources
+  do not replace project context or third-party generated configuration.
+- Per-project installation profiles should no longer be required for the
+  global route. Pi role/stack profiles remain a separate internal selection
+  mechanism; this direction does not authorize removing that filtering.
+- Before extending M4 to further consumers, plan the global adapter approach
+  and validate it in the linkedin-analytics pilot. Prove native invocation
+  without local shared skill/workflow links in all three harnesses, preserve
+  local content and provide rollback. Keep M3 interactive-refresh checks open
+  until actually observed; do not reinterpret the existing CLI pilot as proof
+  of the new end state.
+
+Recording this direction does not launch implementation, remove compatibility
+setup commands or profiles, or close M3/M4. Update the detailed migration plan
+when the design and executable tasks are agreed.
 
 - **M1 — Portable skills and role boundaries:** replace project-local skill
   path assumptions; turn the instruction skill `feature` into planning-only
