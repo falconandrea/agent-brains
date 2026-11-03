@@ -2,6 +2,8 @@
 
 ## Open items
 
+- **2026-11-03 T7 partial interactive evidence:** user-observed planning routes from pilot root/app/ and content-marker refresh in open root sessions recorded in [the T7 report](../../docs/evals/global-workflows/T7-2026-11-03.md). Canonical source restored byte for byte. Codex/Pi observed marker removal in the same conversation; OpenCode required a new conversation in the same process for an unambiguous ABSENT result. Versions, selectors and Pi status commands are recorded; T7/AC8/M3 remain open for full interactive invocation coverage; AC5 live cancel/resume and remaining M4 consumers unchanged.
+
 - **2026-11-01 global general workflows implemented — partial CLI delivery
   (independently reviewed 2026-11-02; partial CLI delivery):** executed the approved
   [`.ai/features/global-workflows`](../features/global-workflows/spec.md)
@@ -37,7 +39,7 @@
   progress cleanup. Compatibility and runtime-doc corrections retain their
   existing T9/U13 owners. Recorded only; no runtime fix or milestone closure.
 
-- **2026-11-01 linkedin-analytics M4 CLI pilot:** six fresh Codex/OpenCode/Pi sessions from root and `app/` passed native loading without the 44 local shared-skill links. Codex native `skills/list` reports user scope; initial model-visible omission is consistent with `allow_implicit_invocation: false`, while explicit invocation is confirmed by transcript provenance. Only those 44 links moved to private backup; workflows and `.opencode` preserved. Interactive checks remain open with commands in [migration plan §11](../../docs/plans/cross-harness-workflow-migration.md#11-m4-linkedin-analytics-global-catalog-pilot--2026-11-01). No other consumer changed; no commit/push.
+- **2026-11-01 linkedin-analytics M4 CLI pilot:** six fresh Codex/OpenCode/Pi sessions from root and `app/` passed native loading without the 44 local shared-skill links. Codex native `skills/list` reports user scope; initial model-visible omission is consistent with `allow_implicit_invocation: false`, while explicit invocation is confirmed by transcript provenance. Only those 44 links moved to private backup; workflows and `.opencode` preserved. Interactive checks remain open with commands in [migration plan §11](../../docs/plans/cross-harness-workflow-migration.md#11-m4-consumer-global-catalog-pilot--2026-11-01). No other consumer changed; no commit/push.
 
 - **M4 consumer rollout — first wave reviewed; commits recorded 2026-11-01:**
   read-only inventory of all plan §7 repositories refreshed; agent-brains

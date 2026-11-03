@@ -15,7 +15,7 @@ planning/implementation/review boundaries) and M2's global installer are
 committed. M3 verified CLI discovery/invocation in Codex, OpenCode, and Pi;
 refresh in an already-running GUI/TUI remains open. M4 has started: the first
 wave (agent-brains self-alignment, both `_tests` boilerplates, and the
-`linkedin-analytics` pilot) is reviewed and recorded in per-repository commits; the remaining
+consumer pilot) is reviewed and recorded in per-repository commits; the remaining
 consumers are still pending.
 Existing project-local setup stays available during that gradual rollout.
 

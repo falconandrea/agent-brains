@@ -192,13 +192,13 @@ run `rtk npm test` and `rtk npm run typecheck`. Inspect setup/unlink preservatio
 fixtures if their behavior changes; any behavior expansion needs spec review.
 Acceptance: AC9; supports AC1 and AC7.
 
-## T5 — Prepare and verify reversible linkedin-analytics isolation
+## T5 — Prepare and verify reversible consumer-pilot isolation
 
 Status: done (2026-11-01, implementation session, under the user's explicit
 machine/pilot authorization after preview review). Machine delta: installer
 preview reviewed (0 conflicts, 7 agent links, skills/command already linked,
 Pi already registered) then applied — RESULT: COMPLETE, `--doctor` clean.
-Pilot (linkedin-analytics): dirty state inventoried (only its own
+Consumer pilot: dirty state inventoried (only its own
 `.ai/memory/progress.md`; preserved); ownership proven for the two shared
 links (`.agents/workflows`, `.opencode` — both resolve inside this checkout;
 zero shared-skill links present, `.agents/skills` an empty real directory);
@@ -279,6 +279,8 @@ changes became necessary. Mark failures/unsupported routes explicitly.
 Acceptance: AC2, AC3, AC4, AC5, AC9.
 
 ## T7 — Separate interactive selection from running-session refresh
+
+Update 2026-11-03: partial user-observed interactive planning-route and running-session refresh evidence is recorded in [the T7 report](../../../docs/evals/global-workflows/T7-2026-11-03.md). Source restored byte for byte. OpenCode removal was visible in a new conversation in the same process; its previous conversation still reported the removed marker. Fresh versions, all selectors and Pi status commands are recorded; full interactive invocation coverage remains pending, so T7/AC8/M3 stay open. The status below describes the original handoff.
 
 Status: OPEN — deliberately not started (2026-11-01). No interactive
 process, UI selector check, or running-session content update was performed;

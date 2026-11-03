@@ -26,7 +26,7 @@ claiming universal availability.
 ## Scope and boundaries
 
 Implement machine distribution, portable OpenCode adapters, diagnostics,
-recovery and documentation. Validate only linkedin-analytics as the consumer
+recovery and documentation. Validate only the designated consumer
 pilot. Migration of other consumers remains separately authorized M4 work.
 Do not remove directories containing project resources. Preserve personal
 skills, local agents, plugin registrations, configuration and Laravel Boost
@@ -50,7 +50,7 @@ Do not equate installed CLI compatibility with SDK typecheck compatibility.
 The working tree already had edits in `.ai/memory/progress.md` and both
 migration/adoption plans. Preserve them. M3 interactive refresh and remaining
 M4 migrations are open. Existing six-session CLI evidence in
-[migration plan §11](../../../docs/plans/cross-harness-workflow-migration.md#11-m4-linkedin-analytics-global-catalog-pilot--2026-11-01)
+[migration plan §11](../../../docs/plans/cross-harness-workflow-migration.md#11-m4-consumer-global-catalog-pilot--2026-11-01)
 is historical observed evidence, not a new test performed by this planning run.
 It proves native skill loading from root and app/ without 44 local skill links;
 it does not prove independence from the retained workflow/adapter links.
@@ -73,15 +73,14 @@ it does not prove independence from the retained workflow/adapter links.
 | Third-party project generation | Boost rules, MCP configuration, generated skills/adapters where present | Remains in its project; never redirect generator writes through catalog links |
 
 Live read-only consumer inspection confirmed `.agents/workflows` and `.opencode`
-links into this checkout in linkedin-analytics, ga-analytics, itinerary-ai,
-ardizio-design, andreafalcon.dev, appuntidalgiappone, craftcv.online,
-careguru-brain and careguru/carefinder-backend. Real opencode.json is present
-in linkedin-analytics, ga-analytics, itinerary-ai, careguru-brain and the backend;
-absent in the other four inspected roots. These are link/config-presence checks,
-not content validation or a fresh exhaustive M4 inventory. The authoritative
-larger consumer list remains migration plan §7; no migration is inferred here.
+links into this checkout in nine consumer roots. Real opencode.json is present
+in five inspected roots and absent in the other four. These are link/config-presence
+checks, not content validation or a fresh exhaustive M4 inventory. The shared
+migration checklist and aggregate status remain in migration plan §7; detailed
+consumer identities and inventory are maintained locally outside Git in
+`PERSONAL_PROJECTS.local.md`. No migration is inferred here.
 
-linkedin-analytics currently has no local shared-skill links, but retains both
+The consumer pilot currently has no local shared-skill links, but retains both
 shared workflow and `.opencode` links. Its real opencode.json supplies Sail Boost
 MCP according to §11. Project `.pi` and `.codex` were absent in that pilot.
 Global OpenCode agents directory is currently empty; the global planning command
@@ -255,7 +254,7 @@ live/dangling link and late conflict all fail without partial restoration.
 - AC2: All seven OpenCode agents are natively listed/selectable and load the
   exact global skill by native tool event; the planning command independently
   forwards arguments and loads spec-and-tasks without filesystem fallback.
-- AC3: Fresh Codex/OpenCode/Pi sessions from linkedin-analytics root and app/
+- AC3: Fresh Codex/OpenCode/Pi sessions from the consumer pilot root and app/
   load every W plus code-review natively, with zero local links to shared skills
   or workflows and no shared `.opencode` dependency. Record version, CWD, native
   source/provenance and result for each resource. A manual cat is not proof.
@@ -322,6 +321,6 @@ congiuntamente spec.md e tasks.md, incluse le assunzioni residue. Chiudi la
 pianificazione con il handoff, senza iniziare l'implementazione." The same
 user message then explicitly authorized implementation to proceed in the
 continuing session, starting from T1, with no commit/push, no rollout beyond
-the linkedin-analytics pilot, and a clearly labeled partial CLI handoff
+the consumer pilot, and a clearly labeled partial CLI handoff
 keeping T7, AC8 and M3 open if interactive proofs are not executable.
 Planning is closed; T1 onward is implementation work.

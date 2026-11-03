@@ -2,7 +2,7 @@
 
 **Created:** 2026-09-08
 
-**Status (2026-10-31):** R0 and C1–C5 closed; C4 retains an inconclusive full-workflow comparison and C5 is a bounded assessment, not full-collection efficacy validation. M1 is committed as `6567873`; M2 is committed as `06039e9`; M3 installed the global catalog and verified live CLI discovery/invocation in Codex, OpenCode, and Pi. M3 remains open pending the refresh check in an already-running GUI/TUI. Evidence and limits are in the [migration plan](cross-harness-workflow-migration.md#5-machine-configuration-m3). M4 has started: agent-brains self-alignment, both `_tests` boilerplates, and the `linkedin-analytics` pilot are migrated and reviewed (first-wave commits recorded 2026-11-01 in the migration plan); the remaining consumers are untouched — the pilot's validation pattern is recorded in the migration plan §7/§10, and M4 is not complete. External extension trials still require an explicit request.
+**Status (2026-10-31):** R0 and C1–C5 closed; C4 retains an inconclusive full-workflow comparison and C5 is a bounded assessment, not full-collection efficacy validation. M1 is committed as `6567873`; M2 is committed as `06039e9`; M3 installed the global catalog and verified live CLI discovery/invocation in Codex, OpenCode, and Pi. M3 remains open pending the refresh check in an already-running GUI/TUI. Evidence and limits are in the [migration plan](cross-harness-workflow-migration.md#5-machine-configuration-m3). M4 has started: agent-brains self-alignment, both `_tests` boilerplates, and the first-wave consumer pilot are migrated and reviewed (first-wave commits recorded 2026-11-01 in the migration plan); the remaining consumers are untouched — the pilot's validation pattern is recorded in the migration plan §7/§10, and M4 is not complete. External extension trials still require an explicit request.
 
 **Source of truth for execution status:** this document
 
@@ -441,7 +441,7 @@ adapter exposure, especially OpenCode adapters that still reference
   global route. Pi role/stack profiles remain a separate internal selection
   mechanism; this direction does not authorize removing that filtering.
 - Before extending M4 to further consumers, plan the global adapter approach
-  and validate it in the linkedin-analytics pilot. Prove native invocation
+  and validate it in the first-wave consumer pilot. Prove native invocation
   without local shared skill/workflow links in all three harnesses, preserve
   local content and provide rollback. Keep M3 interactive-refresh checks open
   until actually observed; do not reinterpret the existing CLI pilot as proof
