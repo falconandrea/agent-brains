@@ -545,6 +545,7 @@ const AVAILABLE_SKILLS = (() => {
     "setup",
     "to-tickets",
     "lessons-gardener",
+    "progress-gardener",
     "context-audit",
     "long-horizon-brief",
     "improve-codebase-architecture",
@@ -573,7 +574,7 @@ test("each role gets only its categories: developer plans nothing, reviewer revi
 test("no operational skill reaches any pipeline role", () => {
   for (const role of ["planner", "developer", "reviewer", "tester", "security-reviewer"] as const) {
     const sel = selectSkills(PROFILES_DIR, "full", role, AVAILABLE_SKILLS);
-    for (const banned of ["handoff", "start", "setup", "to-tickets", "lessons-gardener", "context-audit", "long-horizon-brief", "improve-codebase-architecture"]) {
+    for (const banned of ["handoff", "start", "setup", "to-tickets", "lessons-gardener", "progress-gardener", "context-audit", "long-horizon-brief", "improve-codebase-architecture"]) {
       assert.ok(!sel.skills.includes(banned), `${banned} must not reach ${role}`);
     }
   }

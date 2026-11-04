@@ -26,6 +26,11 @@ changes.
 
 ## Stable directives
 
+- Update `.ai/memory/progress.md` after completing a task: revise current state,
+  blockers and open next actions in place, keeping evidence links and limits.
+  Keep detailed completion history in its canonical owner rather than appending
+  session logs. Read linked history only when the task needs historical evidence;
+  use `progress-gardener` for accumulated-history cleanup with proposal approval.
 - Skills are edited **here**, never through project symlinks or global links.
   A skill marked `metadata.management: local` in its frontmatter is locally
   authoritative; lock-managed skills update only via the reviewed

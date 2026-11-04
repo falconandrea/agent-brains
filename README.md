@@ -571,6 +571,11 @@ Optional assessments and reporting:
   evidence and prioritized root fixes. `context-audit` owns documentation hygiene.
 - `html-report` creates offline HTML reports from a local kit and checks browser
   rendering. Research remains Markdown by default; HTML is an optional deliverable.
+- `progress-gardener` maintains `.ai/memory/progress.md`: proposes a current-state
+  rewrite with evidence and explicit destinations for preserved history,
+  decisions and limits. It remains read-only until the user approves the concrete
+  tracker and destination changes. It is in `common` and inherited by `full`;
+  progress gardening is separate from routine status updates.
 - `extra/skills/humanizer` supports composition, editing and optional English
   candidate scanning for long prose. Manual copies must include its references
   and scripts; see [the adoption note](docs/research/alfonso-skills-adaptation.md).

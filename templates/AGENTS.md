@@ -42,7 +42,11 @@ Skill details live in the skills themselves — do not preload or copy them here
 
 - For non-trivial feature work, follow the `spec-and-tasks` skill: no code before the approved `spec.md` + `tasks.md`. Small fixes need no spec.
 - Read `.ai/context/TECH_STACK.md` before technical decisions; `.ai/memory/lessons.md` before starting work.
-- Update `.ai/memory/progress.md` when completing a task. Blockers live in its Blockers section — no separate file exists.
+- Update `.ai/memory/progress.md` when completing a task: revise current state,
+  blockers and open next actions in place, keeping evidence links and limits.
+  Blockers live in its Blockers section. Detailed completion history belongs in
+  its canonical owner; read linked history only when the task needs historical
+  evidence. Use `progress-gardener` for accumulated-history cleanup with proposal approval.
 - Never install a dependency without checking it is not already present.
 - Never store credentials, temporary URLs, or personal data in auto-loaded files.
 - UI decisions defer to `.ai/context/DESIGN_SYSTEM.md`; deviations need explicit user approval.
