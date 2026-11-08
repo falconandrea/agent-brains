@@ -13,10 +13,13 @@
  * (including an untracked file the workflow later `git add`s).
  *
  * Snapshotting uses a throwaway index file via GIT_INDEX_FILE, so the user's
- * real index and working tree are never touched. `git add -A` there honours
- * .gitignore, so ignored paths stay out. pi-brain's own runtime files are
- * excluded by pathspec on top of that, so they never reach the reviewer even
- * in a target repository without matching .gitignore entries.
+ * real index and working tree are never touched. It is built in three steps
+ * that keep git's untracked-files machinery away from the runtime surface:
+ * `add -u` for tracked updates, `ls-files --others` to enumerate untracked
+ * files (runtime paths excluded, ignored files skipped), and `update-index`
+ * to add exactly those enumerated paths. git only ever processes content of
+ * files that are neither ignored nor runtime, and the user's real index is
+ * never touched.
  */
 
 import { execFile, spawn } from "node:child_process";
@@ -313,12 +316,29 @@ export async function repoStateDigest(repoRoot: string): Promise<string> {
  * staging file (`lock.<pid>.<runId>.tmp`) — and the run-log tree under
  * `.pi/pi-brain/`. Machine-local state, not project changes: it must not
  * reach the reviewer's diff, whatever the repository's .gitignore says.
- * The exclusion also covers paths seeded into the scratch index from HEAD
- * (runtime files committed by mistake): `git add` skips them entirely, so
- * both snapshots carry HEAD's version and the paths cancel out.
+ * These are the exact historical patterns: deliberately narrow, so a
+ * committed `.pi/pi-brain.json`, a `.pi/pi-brain.local.json`, a
+ * `.pi/other-brain/` directory or anything else keeps reaching the diff.
  *
- * Deliberately narrow: other `.pi/` files — a committed `.pi/pi-brain.json`
- * above all — keep reaching the diff.
+ * How they are used matters (RV1, P2). The exclusion cannot ride on a bulk
+ * `git add -A`: git runs its ignored-path complaint over untracked files a
+ * pathspec item names (exit 1 — our own excludes named `.pi/pi-brain.lock`
+ * and `.pi/pi-brain` whenever the project ignored them, and any `.pi/`- or
+ * `*brain`-anchored alternative named the ignored `.pi` directory itself or
+ * swallowed lookalike applicative files), and it runs .gitattributes clean
+ * filters over everything it adds (so removing runtime paths from the
+ * scratch index afterwards is too late when a mandatory filter fails on a
+ * runtime file — exit 128). Instead the tracked updates go through `add -u`,
+ * which never walks untracked files and never collects ignored ones, and the
+ * untracked files are enumerated by `ls-files --others` with the runtime
+ * paths excluded from that enumeration, then handed to `update-index --stdin`
+ * one exact path at a time — literal paths, so no pathspec re-parsing and no
+ * argument-list limits. Filters therefore run only on applicative files, and
+ * a failing filter on one still fails the snapshot loudly.
+ *
+ * The exclusion also covers paths seeded into the scratch index from HEAD
+ * (runtime files committed by mistake): `git add -u` skips them entirely, so
+ * both snapshots carry HEAD's version and the paths cancel out.
  */
 const RUNTIME_EXCLUDE_PATHSPECS = [
   ":(exclude).pi/pi-brain.lock*",
@@ -326,12 +346,58 @@ const RUNTIME_EXCLUDE_PATHSPECS = [
 ] as const;
 
 /**
+ * Like git(), but feeds `input` on stdin: update-index takes literal paths,
+ * so entries like "a:b.txt" or "weird[bg].txt" cannot be reinterpreted as
+ * pathspec patterns, and arbitrarily many paths never hit ARG_MAX.
+ *
+ * A write error on stdin must never surface as an unhandled 'error' event:
+ * that terminates the whole Node process, outside any caller's try/catch.
+ * It can happen legitimately — git dying mid-input (a mandatory clean filter
+ * failing on the first of many paths) tears the pipe down while a large
+ * write is still in flight — so the error is captured, and the outcome is
+ * decided by the process exit: the command's own exit code and stderr name
+ * the real cause.
+ */
+function gitStdin(
+  cwd: string,
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  input: string,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("git", args, { cwd, env });
+    const stderr: Buffer[] = [];
+    let stdinFailure: Error | undefined;
+
+    child.stderr?.on("data", (chunk: Buffer) => stderr.push(chunk));
+    child.stdin?.on("error", (err: Error) => {
+      stdinFailure ??= err; // recorded, never unhandled
+    });
+    child.stdout?.resume(); // drain: a full stdout pipe must not stall git
+
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0 && stdinFailure === undefined) {
+        resolve();
+        return;
+      }
+      const details =
+        Buffer.concat(stderr).toString("utf8") +
+        (stdinFailure === undefined ? "" : `\n${stdinFailure.message}`);
+      reject(new Error(`git ${args.join(" ")} failed (${code}): ${details}`));
+    });
+    child.stdin?.end(input);
+  });
+}
+
+/**
  * Tree object for the current working tree, built in a SCRATCH index.
  *
  * The scratch index is what makes this trustworthy: `assume-unchanged` and
  * `skip-worktree` are bits stored in the repository's real index, so a fresh
- * index seeded from HEAD does not carry them and `git add -A` sees the actual
- * file contents. `git status` cannot make that guarantee.
+ * index seeded from HEAD does not carry them and the snapshot commands
+ * (`add -u`, `ls-files --others`, `update-index`) see the actual file
+ * contents. `git status` cannot make that guarantee.
  */
 async function snapshotTree(repoRoot: string): Promise<string> {
   const indexFile = join(tmpdir(), `pi-brain-index-${process.pid}-${randomUUID()}`);
@@ -339,7 +405,23 @@ async function snapshotTree(repoRoot: string): Promise<string> {
   try {
     const head = await headSha(repoRoot);
     await git(repoRoot, head ? ["read-tree", head] : ["read-tree", "--empty"], env);
-    await git(repoRoot, ["add", "-A", "--", ".", ...RUNTIME_EXCLUDE_PATHSPECS], env);
+    if (head !== null) {
+      await git(repoRoot, ["add", "-u", "--", ".", ...RUNTIME_EXCLUDE_PATHSPECS], env);
+    }
+    const others = splitZ(
+      await git(repoRoot, [
+        "ls-files", "--others", "-z", "--exclude-standard",
+        "--", ".", ...RUNTIME_EXCLUDE_PATHSPECS,
+      ], env),
+    );
+    if (others.length > 0) {
+      await gitStdin(
+        repoRoot,
+        ["update-index", "-z", "--add", "--stdin"],
+        env,
+        `${others.join("\0")}\0`,
+      );
+    }
     return (await git(repoRoot, ["write-tree"], env)).trim();
   } finally {
     rmSync(indexFile, { force: true });

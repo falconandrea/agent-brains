@@ -1,8 +1,9 @@
 # Progress
 
-**Last Updated:** 2026-11-04
+**Last Updated:** 2026-11-08
 **Current Phase:** Global workflow validation and per-repository migration.
-**Active Task:** None selected; next priority is RV1 before further Pi runtime work.
+**Active Task:** None selected; RV1 is resolved, next priorities are the T7/AC8/M3
+and AC5 evidence work and per-repository M4 rollout.
 
 ## Current state
 
@@ -21,6 +22,26 @@
   operational routing and README guidance; user reviewed and authorized commit.
   Creation checks passed 476/476 tests, typecheck and diff check; skill-creator's
   Python validator was unavailable because PyYAML was missing.
+- RV1 is resolved: `snapshotTree` builds the scratch index in steps that
+  keep git's untracked-files machinery away from a bulk add — `git add -u`
+  for tracked updates, `git ls-files --others --exclude-standard` (runtime
+  paths excluded) to enumerate untracked files, `git update-index --stdin`
+  to add those exact paths — so the exact historical excludes
+  (`.pi/pi-brain.lock*`, `.pi/pi-brain/`) no longer trip git's ignored-path
+  complaint for any ignore-rule shape, and .gitattributes clean filters run
+  only on applicative content (rounds P2: post-add removal was too late for
+  failing filters; wildcard-broken pathspecs swallowed lookalike
+  applicative files and still collected an ignored `.pi`). Real-Git
+  regressions cover ignored runtime, failing filters on runtime and
+  applicative files, lookalike-path precision, the whole-`.pi` ignore case,
+  user-index preservation, and a subprocess test proving a mid-stream stdin
+  failure (EPIPE when git dies on bulk input) rejects catchably with the
+  command's real cause instead of crashing the Node process; non-ignored and
+  tracked-runtime cases reuse existing coverage. `npm test` 484/484,
+  typecheck and diff check pass.
+  Review accepted and commit authorized on 2026-11-08.
+  Limits: verified on local Git 2.54 only; no repeated live `/feature` run.
+  [RV1 record](../../docs/plans/pi-plugin-adoption-roadmap.md).
 
 ## Blockers and validation gaps
 
@@ -32,16 +53,13 @@
   context reuse remains undetermined. Codex/Pi observed removal in conversation.
 - AC5 live cancel/resume remains unobserved. Pi `-p` stale-context behavior
   prevented the intended interactive cancellation probe.
-- RV1: ignored Pi runtime paths can make snapshot construction fail.
-  This is recorded, not fixed. Prioritize before further Pi runtime work.
 - T9 compatibility remains open: skill-loading evidence does not establish full
   Pi engine compatibility. Specific owners are not assigned in this tracker.
 
 ## Next actions
 
-1. Resolve RV1 with focused real-Git regression coverage before further runtime
-   work. Keep RV2 planner reliability and RV3 routing guards in their existing
-   backlog; this cleanup does not implement them.
+1. Keep RV2 planner reliability and RV3 routing guards in their existing
+   backlog; RV1's snapshot fix does not implement them.
 2. Agree the remaining T7/AC8/M3 and AC5 evidence work without inferring completion
    or restarting repetitive manual probes.
 3. Review ga-analytics migration/recovery evidence, then continue M4 only through

@@ -6,7 +6,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, renameSync, chmodSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -444,6 +444,239 @@ test("runtime files already tracked in HEAD do not re-enter the diff via the scr
   const { patch, files } = await git.diffSince(baseline);
   assert.deepEqual(files, [], `got ${JSON.stringify(files)}`);
   assert.equal(patch, "");
+});
+
+// -- ignored runtime files: snapshot construction must still succeed (RV1) -----
+//
+// A project may commit ignore rules covering pi-brain's runtime paths (that is
+// what this repository's own .gitignore ships). There the old snapshot shape —
+// `git add -A` carrying `:(exclude)` pathspecs for the runtime paths — failed
+// outright: git treats a pathspec-named ignored path as explicitly requested
+// and exits 1 ("The following paths are ignored by one of your .gitignore
+// files"). Snapshotting must survive ignored runtime files with the same
+// guarantees as the unignored case above.
+
+test("runtime files ignored by the project do not fail snapshot construction (RV1)", async () => {
+  const dir = initRepo();
+  const run = (...args: string[]) => execFileSync("git", args, { cwd: dir });
+  writeFileSync(join(dir, ".gitignore"), ".pi/pi-brain.lock*\n.pi/pi-brain/\n");
+  run("add", ".");
+  run("commit", "-qm", "ignore pi-brain runtime paths");
+
+  // the lock exists before the baseline is taken: that is the real ordering
+  writeRuntimeFiles(dir);
+  const baseline = await git.baseline(dir);
+
+  // the run continues: ignored runtime noise changes alongside real work
+  writeFileSync(join(dir, ".pi", "pi-brain.lock"), JSON.stringify({ pid: 4243, runId: "run-y" }));
+  writeFileSync(join(dir, ".pi", "pi-brain", "runs", "run-x.jsonl"), '{"event":"verify"}\n');
+  writeFileSync(join(dir, "existing.txt"), "one\nAGENT EDIT\n");
+  writeFileSync(join(dir, "created.txt"), "agent output\n");
+
+  const { patch, files } = await git.diffSince(baseline);
+  assert.deepEqual(files, ["created.txt", "existing.txt"], `got ${JSON.stringify(files)}`);
+  assert.match(patch, /\+AGENT EDIT/);
+  assert.match(patch, /agent output/);
+  assert.ok(!patch.includes("run-y"), "ignored runtime content must still stay out of the patch");
+});
+
+test("snapshot construction never touches the user's index (RV1)", async () => {
+  const dir = initRepo();
+  const run = (...args: string[]) => execFileSync("git", args, { cwd: dir });
+
+  // the user is mid-work while the run starts: staged work, an accidentally
+  // staged runtime lock, an unstaged edit and untracked files
+  writeRuntimeFiles(dir);
+  writeFileSync(join(dir, "user-staged.txt"), "staged by the user\n");
+  writeFileSync(join(dir, "agent.txt"), "agent output\n");
+  run("add", "user-staged.txt", ".pi/pi-brain.lock");
+  writeFileSync(join(dir, "existing.txt"), "one\nUSER UNSTAGED EDIT\n");
+
+  const indexBefore = run("ls-files", "--stage").toString();
+  const stagedBefore = run("diff", "--cached", "--name-only").toString();
+
+  const baseline = await git.baseline(dir);
+  await git.diffSince(baseline);
+
+  assert.equal(
+    run("ls-files", "--stage").toString(),
+    indexBefore,
+    "the real index must stay byte-identical across snapshotting",
+  );
+  assert.equal(
+    run("diff", "--cached", "--name-only").toString(),
+    stagedBefore,
+    "the user's staged work must survive snapshotting",
+  );
+});
+
+// -- runtime files must stay out of git's content processing (P2) --------------
+//
+// Removing the runtime surface from the scratch index only AFTER `git add`
+// comes too late: git runs .gitattributes clean filters over everything it
+// adds, so a mandatory filter that fails on a runtime file aborts the whole
+// snapshot (exit 128, "clean filter ... failed"). The excludes must live in
+// the `git add` pathspec itself so git never processes runtime content —
+// and those pathspecs must carry no literal prefix naming the runtime paths,
+// or git's ignored-path complaint returns (RV1 above). Both properties are
+// what the wildcard-broken patterns pin.
+
+/** A mandatory clean filter that always fails, applied to the runtime surface. */
+function plantFailingRuntimeFilter(dir: string): void {
+  const run = (...args: string[]) => execFileSync("git", args, { cwd: dir });
+  writeFileSync(
+    join(dir, ".gitattributes"),
+    ".pi/pi-brain.lock* filter=failing\n.pi/pi-brain/** filter=failing\n",
+  );
+  run("add", ".");
+  run("commit", "-qm", "mandatory filter over the runtime surface");
+  run("config", "filter.failing.required", "true");
+  run("config", "filter.failing.clean", "false");
+}
+
+test("a failing clean filter on runtime files does not fail snapshot construction (P2)", async () => {
+  const dir = initRepo();
+  plantFailingRuntimeFilter(dir);
+
+  writeRuntimeFiles(dir);
+  const baseline = await git.baseline(dir); // failed here before the fix
+
+  writeFileSync(join(dir, ".pi", "pi-brain.lock"), JSON.stringify({ pid: 4243, runId: "run-y" }));
+  writeFileSync(join(dir, ".pi", "pi-brain", "runs", "run-x.jsonl"), '{"event":"verify"}\n');
+  writeFileSync(join(dir, "existing.txt"), "one\nAGENT EDIT\n");
+
+  const { patch, files } = await git.diffSince(baseline);
+  assert.deepEqual(files, ["existing.txt"], `got ${JSON.stringify(files)}`);
+  assert.match(patch, /\+AGENT EDIT/);
+  assert.ok(!patch.includes("run-y"), "runtime content must stay out of the patch");
+});
+
+test("ignored runtime files stay excluded even with a failing mandatory filter (RV1+P2)", async () => {
+  const dir = initRepo();
+  const run = (...args: string[]) => execFileSync("git", args, { cwd: dir });
+  writeFileSync(join(dir, ".gitignore"), ".pi/pi-brain.lock*\n.pi/pi-brain/\n");
+  run("add", ".");
+  run("commit", "-qm", "ignore pi-brain runtime paths");
+  plantFailingRuntimeFilter(dir);
+
+  writeRuntimeFiles(dir);
+  const baseline = await git.baseline(dir);
+
+  writeFileSync(join(dir, ".pi", "pi-brain", "runs", "run-x.jsonl"), '{"event":"verify"}\n');
+  writeFileSync(join(dir, "existing.txt"), "one\nAGENT EDIT\n");
+
+  const { patch, files } = await git.diffSince(baseline);
+  assert.deepEqual(files, ["existing.txt"], `got ${JSON.stringify(files)}`);
+  assert.match(patch, /\+AGENT EDIT/);
+  assert.ok(!patch.includes("run-x"), "ignored runtime content must stay out of the patch");
+});
+
+test("a failing clean filter on an applicative file still fails the snapshot loudly (P2)", async () => {
+  const dir = initRepo();
+  const run = (...args: string[]) => execFileSync("git", args, { cwd: dir });
+  writeFileSync(join(dir, ".gitattributes"), "*.secret filter=failing\n");
+  run("add", ".");
+  run("commit", "-qm", "mandatory filter on secret files");
+  run("config", "filter.failing.required", "true");
+  run("config", "filter.failing.clean", "false");
+
+  writeFileSync(join(dir, "notes.secret"), "sensitive\n");
+  await assert.rejects(() => git.baseline(dir), /failed/);
+});
+
+test("applicative files that merely resemble the runtime paths stay in the diff (P2)", async () => {
+  const dir = initRepo();
+  const baseline = await git.baseline(dir);
+
+  // names that sloppy runtime globs would swallow: a longer lock name, a
+  // sibling *brain directory, and a nested pi-brain directory — only
+  // .pi/pi-brain.lock* and .pi/pi-brain/ itself may be excluded
+  mkdirSync(join(dir, ".pi", "other-brain"), { recursive: true });
+  mkdirSync(join(dir, ".pi", "nested", "pi-brain"), { recursive: true });
+  writeFileSync(join(dir, ".pi", "pi-brain.local.json"), "{ \"local\": true }\n");
+  writeFileSync(join(dir, ".pi", "other-brain", "config.json"), "cfg\n");
+  writeFileSync(join(dir, ".pi", "nested", "pi-brain", "config.json"), "nested\n");
+
+  const { patch, files } = await git.diffSince(baseline);
+  assert.deepEqual(
+    files.sort(),
+    [
+      ".pi/nested/pi-brain/config.json",
+      ".pi/other-brain/config.json",
+      ".pi/pi-brain.local.json",
+    ],
+    `got ${JSON.stringify(files)}`,
+  );
+  assert.match(patch, /local/);
+  assert.match(patch, /nested/);
+});
+
+test("a repo that ignores .pi entirely still snapshots (RV1)", async () => {
+  const dir = initRepo();
+  const run = (...args: string[]) => execFileSync("git", args, { cwd: dir });
+  // broader than pi-brain's runtime surface: the whole .pi directory ignored
+  writeFileSync(join(dir, ".gitignore"), ".pi/\n");
+  run("add", ".");
+  run("commit", "-qm", "ignore .pi");
+
+  writeRuntimeFiles(dir);
+  const baseline = await git.baseline(dir); // failed before the fix: ".pi" collected
+
+  writeFileSync(join(dir, "existing.txt"), "one\nAGENT EDIT\n");
+  const { patch, files } = await git.diffSince(baseline);
+  assert.deepEqual(files, ["existing.txt"], `got ${JSON.stringify(files)}`);
+  assert.match(patch, /\+AGENT EDIT/);
+});
+
+// -- a stdin failure must fail loud, not crash the process (P2) ----------------
+//
+// When git stops reading stdin early (a mandatory clean filter failing on the
+// first of many paths), the still-in-flight write tears down with EPIPE. An
+// unhandled 'error' event on child.stdin terminates the whole Node process —
+// uncatchable from the caller — so the helper must capture it itself and let
+// the command's exit decide the outcome. Exercised in a subprocess: a crash
+// must not be able to take the workflow down with it.
+
+test("a failing clean filter on bulk untracked files fails loud without crashing (P2)", async () => {
+  const dir = initRepo();
+  const run = (...args: string[]) => execFileSync("git", args, { cwd: dir });
+  writeFileSync(join(dir, ".gitattributes"), "*.big filter=failing\n");
+  run("add", ".");
+  run("commit", "-qm", "mandatory failing filter on bulk files");
+  run("config", "filter.failing.required", "true");
+  run("config", "filter.failing.clean", "false");
+
+  // enough long-named untracked files that update-index dies on the first
+  // one while a large stdin write is still in flight (input ≫ pipe buffer)
+  for (let i = 0; i < 3000; i++) {
+    writeFileSync(join(dir, `failing-${String(i).padStart(4, "0")}-${"x".repeat(180)}.big`), "bulk\n");
+  }
+
+  // run baseline() in a subprocess: an unhandled 'error' event would kill it
+  const script = `
+process.on("uncaughtException", (err) => {
+  console.log(JSON.stringify({ crash: true, message: String(err?.message ?? err) }));
+  process.exit(3);
+});
+try {
+  const { RealGitService } = await import(process.argv[2]);
+  await new RealGitService().baseline(process.argv[1]);
+  console.log(JSON.stringify({ crash: false, outcome: "resolved" }));
+} catch (err) {
+  console.log(JSON.stringify({ crash: false, outcome: "rejected", message: String(err?.message ?? err) }));
+}
+`;
+  const result = spawnSync(
+    process.execPath,
+    ["--input-type=module", "-e", script, dir, new URL("../src/shell.ts", import.meta.url).href],
+    { encoding: "utf8", timeout: 120_000 },
+  );
+
+  assert.equal(result.status, 0, `subprocess did not exit cleanly: ${result.stdout} ${result.stderr}`);
+  const report = JSON.parse(result.stdout) as { crash: boolean; outcome: string; message?: string };
+  assert.equal(report.crash, false, `the process must not crash: ${report.message}`);
+  assert.equal(report.outcome, "rejected", "the snapshot must fail, not complete");
+  assert.match(report.message ?? "", /clean filter/, "the real cause must be reported");
 });
 
 // -- repository-state digest (U3, F1/F2) --------------------------------------

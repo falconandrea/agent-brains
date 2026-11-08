@@ -22,7 +22,7 @@ and the first M4 wave have evidence. Do not restart those milestones or mark
 the remaining interactive checks and consumer rollout complete. The following
 items are recorded for implementation; none is fixed by this reconciliation.
 
-- [ ] **RV1 — High priority: snapshots with ignored Pi runtime paths.**
+- [x] **RV1 — High priority: snapshots with ignored Pi runtime paths.**
   `src/shell.ts` still runs `git add -A -- .` with negative pathspecs for
   `.pi/pi-brain.lock*` and `.pi/pi-brain/`. A fresh temporary Git repository
   with committed ignore rules and both runtime paths present reproduced exit
@@ -36,6 +36,60 @@ items are recorded for implementation; none is fixed by this reconciliation.
   them, and user-index preservation. Existing runtime exclusion tests cover
   the non-ignored case. Prioritize this bounded reliability fix before further
   Pi runtime work; it does not reopen M1/M2 or require a security-policy change.
+  **Resolved (2026-11-05, four rounds).** Round 1 root cause confirmed on
+  Git 2.54: the `:(exclude)` pathspecs themselves make git treat the ignored
+  runtime paths as explicitly requested, so `git add` exits 1 with the
+  ignored-path error. The round-1 shape — a plain `git add` with the runtime
+  paths removed from the scratch index afterwards — was corrected after
+  review round P2 reproduced a regression: git runs .gitattributes clean
+  filters over content it adds, so a failing mandatory filter on a runtime
+  file aborted the whole snapshot (exit 128). The round-2 shape — excluding
+  the runtime paths with wildcard-broken `git add` pathspecs — was corrected
+  after review round P2 reproduced two more: the wildcards broadened the
+  exclusion (`.pi/pi-brain.lo*` swallowed `.pi/pi-brain.local.json`;
+  `.pi/*brain/**` also matched `.pi/other-brain/` and, because a default
+  pathspec `*` crosses directory separators, `.pi/nested/pi-brain/`), and a
+  repo ignoring `.pi` entirely still failed — git's collector also fires
+  when an item's literal prefix names an ignored path's parent directory, so
+  every `.pi/`-anchored item collected the ignored `.pi` itself.
+  **Final shape:** the exact historical patterns (`:(exclude).pi/
+  pi-brain.lock*`, `:(exclude).pi/pi-brain/`) are applied where they are
+  safe, and git's untracked-files machinery never sees a bulk add:
+  `snapshotTree()` seeds the scratch index from HEAD, runs `git add -u`
+  (tracked updates only — it never walks untracked files, so the
+  ignored-path collector has no surface and filters never touch tracked
+  runtime files), enumerates untracked non-ignored files with
+  `git ls-files --others --exclude-standard` under the same exact excludes,
+  and adds exactly those enumerated paths through
+  `git update-index -z --add --stdin` (literal paths — no pathspec
+  re-parsing of odd names, no argument-list limits). Filters therefore run
+  only on applicative files, a failing filter on one still fails the
+  snapshot loudly (exit 128), ignored runtime files are never enumerated,
+  and the exclusion is exact. Real-Git regressions in `tests/git.test.ts`:
+  ignored runtime files present at the baseline with an applicative change
+  alongside them (failed before round 1), a failing clean filter on runtime
+  files (failed before round 2), lookalike applicative files staying in the
+  diff and a repo ignoring `.pi` entirely still snapshotting (failed before
+  round 3), the ignored+filter combination, user-index preservation
+  (`ls-files --stage` byte-identical across snapshotting, including an
+  accidentally staged runtime lock), and an applicative failing filter still
+  failing the snapshot loudly. Non-ignored and tracked-runtime coverage is
+  reused from the existing tests. **Round 4 (review P2):** the `update-index`
+  stdin helper let a write error on `child.stdin` surface as an unhandled
+  'error' event — reproduced with ~3,000 long-named untracked files and a
+  failing mandatory clean filter, where git dies on the first file while a
+  large write is still in flight and the EPIPE terminated the whole Node
+  process outside any try/catch. The helper now captures stdin errors,
+  decides the outcome from the command's exit (the command's stderr names
+  the real cause), drains stdout to avoid a stalled pipe, and a subprocess
+  regression runs `baseline()` under the same fixture and requires a
+  catchable rejection with the "clean filter" cause instead of a crash
+  (failed before the fix with `{"crash":true,"message":"write EPIPE"}`,
+  exit 3). Verification: targeted `tests/git.test.ts`
+  55/55, `npm test` 484/484, `npm run typecheck` and `git diff --check`
+  clean. Limits: verified against local Git 2.54 (Apple Git-157) only; no
+  repeated live `/feature` run was made. Review accepted and commit
+  authorized on 2026-11-08.
 - [ ] **Compatibility — existing T9 remains the owner.** Complete
   [T9](../../.ai/features/code-review-follow-ups/tasks-code-review-follow-ups.md)
   with supported Node/SDK/TypeBox ranges and appropriate runtime smoke
@@ -83,7 +137,8 @@ Verification at reconciliation: 107/107 targeted tests passed across
 `tests/git.test.ts`, `tests/pi-session-injection.test.ts` and
 `tests/unit.test.ts`; `git diff --check` passed. This is not a full-suite run
 or a new live-harness pilot, and the separate ignored-runtime reproduction
-still fails. Keep R1/S3 deferred and U12/U14 independent of these items.
+failed at that time — RV1 has since been resolved (2026-11-05, entry above).
+Keep R1/S3 deferred and U12/U14 independent of these items.
 
 ## Behavioral verification follow-ups (recorded 2026-10-30)
 
