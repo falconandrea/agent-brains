@@ -1,18 +1,34 @@
 # Progress
 
-**Last Updated:** 2026-11-08
-**Current Phase:** Global workflow validation and per-repository migration.
-**Active Task:** None selected; RV1 is resolved, next priorities are the T7/AC8/M3
-and AC5 evidence work and per-repository M4 rollout.
+**Last Updated:** 2026-11-10
+**Current Phase:** Global workflow validation complete; per-repository migration
+and existing roadmap follow-ups remain separate.
+**Active Task:** Review approved; documentation and evidence archive are being
+committed. The last 34
+invocation cells passed (OpenCode 7, Pi 13, Codex 14); no matrix cell remains.
+T7 is complete, AC8 satisfied and M3's source tracker reconciled. AC5 remains
+satisfied with its recorded limits. The external review found no further
+findings. RV1 remains resolved.
 
 ## Current state
 
-- Global workflows: T1–T6 delivered for the CLI scope; T7/AC8/M3 remain open.
-  AC5 live cancel/resume is unverified; unit coverage does not close it.
+- Global workflows: T1–T6 delivered; T7 is complete, AC8 satisfied and M3
+  validation complete as of 2026-11-10, using all 50 route/CWD cells plus
+  previously accepted selector and qualified running-session refresh evidence.
+  The final 34 invocations have green original results, native provenance,
+  zero model tools, exit 0, absent owned groups and clean consumer Git.
+  [Final validation/handoff](../../docs/evals/global-workflows/T7-2026-11-08.md#final-residual-validation-and-acceptance-reconciliation--2026-11-10).
+  AC5 is satisfied against its literal criterion at fixture scope: gate cancel
+  and interrupted-run resume each ran in a real Pi 0.85.1 TUI with persisted
+  outcomes in the existing run schemas (resume ended needs_human via reviewer
+  escalation, not completed).
   [Tasks](../features/global-workflows/tasks.md) ·
-  [T7 evidence and limits](../../docs/evals/global-workflows/T7-2026-11-03.md).
-- M1 (`6567873`) and M2 (`06039e9`) are committed. M3 global installation
-  and CLI discovery/invocation are verified; full interactive coverage is pending.
+  [T7 evidence and limits](../../docs/evals/global-workflows/T7-2026-11-03.md) ·
+  [Bounded continuation](../../docs/evals/global-workflows/T7-2026-11-08.md).
+- M1 (`6567873`) and M2 (`06039e9`) are committed. M3 global installation,
+  CLI and interactive validation are verified at the approved pilot scope;
+  the source-plan refresh checkbox is reconciled. The review approved this
+  documentation scope; no new installation or rollout occurred.
 - M4 first wave is reviewed and committed; rollout remains incomplete.
   The migration log also records ga-analytics work and recovery corrections
   through 2026-11-04 as uncommitted and awaiting review. Do not infer rollout
@@ -45,14 +61,33 @@ and AC5 evidence work and per-repository M4 rollout.
 
 ## Blockers and validation gaps
 
-- T7 lacks interactive invocation coverage beyond the recorded samples.
-  The user requested that repetitive manual testing stop; agree the remaining
-  validation approach or scope before resuming those probes.
+- No T7 invocation or AC8 refresh check remains pending. Evidence is mixed-date
+  and version-qualified: new residual baselines Codex 0.167.0 / OpenCode 2.2.6,
+  Pi 0.85.1; existing approved observations are reused. Earlier failed driver
+  verdicts and the November 9 stop-rule deviation remain in the report. The
+  last 34 invocations passed with no stop-rule exception. Private packages were
+  preserved at `/Users/andreafalcon/.local/state/agent-brains/t7-final-validation-20261110/`;
+  the final manifest and byte-for-byte package copies were verified. Three live
+  batch packages have no root manifest. The historical AC5, OpenCode root and
+  residual packages, earlier attempts, and available T7 runner artifacts were
+  also archived and inventoried. The November 3 selector/refresh observations
+  have no separate raw capture identified; their evidence remains the report's
+  account of user-supplied observations. This private archive is evidence
+  custody, not a durable test suite. [Archive index](../../docs/evals/global-workflows/T7-evidence-archive-index-2026-11-10.md).
+  [Full evidence and limits](../../docs/evals/global-workflows/T7-2026-11-08.md#final-residual-validation-and-acceptance-reconciliation--2026-11-10).
 - OpenCode marker removal was not reliably visible in the existing conversation;
   a fresh conversation in the same process returned ABSENT. Cache versus model
   context reuse remains undetermined. Codex/Pi observed removal in conversation.
-- AC5 live cancel/resume remains unobserved. Pi `-p` stale-context behavior
-  prevented the intended interactive cancellation probe.
+- AC5 live cancel/resume is now observed at disposable-fixture scope: gate
+  cancel (planner completed, plan present, no approval/developer, content
+  unchanged, cancelled outcome persisted, lock released) and interrupted-run
+  resume (authentic post-approval SIGKILL, `/flow resume` from the persisted
+  log, resumed develop phase, no re-planning or re-baselining, original
+  artifacts, terminal needs_human outcome persisted). The earlier Pi `-p`
+  stale-context limit is a separate, already-recorded observation. Formal AC5
+  reconciliation confirms compatibility; resume-to-completed is unobserved
+  and not required by AC5.
+  [Scenario evidence and limits](../../docs/evals/global-workflows/T7-2026-11-08.md#scenario-2--live-interrupted-run-resume-observed).
 - T9 compatibility remains open: skill-loading evidence does not establish full
   Pi engine compatibility. Specific owners are not assigned in this tracker.
 
@@ -60,8 +95,16 @@ and AC5 evidence work and per-repository M4 rollout.
 
 1. Keep RV2 planner reliability and RV3 routing guards in their existing
    backlog; RV1's snapshot fix does not implement them.
-2. Agree the remaining T7/AC8/M3 and AC5 evidence work without inferring completion
-   or restarting repetitive manual probes.
+2. Review the final evidence/documents and confirm the historical evidence
+   inventory in the [archive index](../../docs/evals/global-workflows/T7-evidence-archive-index-2026-11-10.md).
+   Available AC5 and earlier OpenCode packages are preserved; no separate raw
+   selector/refresh capture was identified, so retain the report's stated
+   user-observation limit. No repeated manual matrix, selector, refresh, AC5 or
+   RV1 test is pending. T7/AC8/M3 validation is complete at the approved CLI/TUI
+   scope; M4 and T9 remain separate. User review approved the documentation
+   changes for commit; no push was requested.
+   [Final validation and handoff](../../docs/evals/global-workflows/T7-2026-11-08.md#final-residual-validation-and-acceptance-reconciliation--2026-11-10).
+
 3. Review ga-analytics migration/recovery evidence, then continue M4 only through
    separately authorized per-repository work with live discovery before link removal.
 4. Retain existing source-plan tasks: code-review-follow-ups T7/T9/T10 and

@@ -122,6 +122,14 @@ Do not start by bulk-removing `.agents` or `.opencode` directories.
 
 ## 5. Machine configuration (M3)
 
+**Validation complete — 2026-11-10 (approved CLI/TUI pilot scope).** Global
+workflows T7/AC8 now have complete invocation coverage; the qualified existing
+running-session refresh evidence closes the remaining M3 question. See the
+[final evidence reconciliation](../evals/global-workflows/T7-2026-11-08.md#final-residual-validation-and-acceptance-reconciliation--2026-11-10).
+The inventory/setup items below preserve their October 31 baseline; the new
+residual checks use selected Codex 0.167.0, OpenCode 2.2.6 and Pi 0.85.1.
+M4 rollout remains separate; no consumer migration is implied by M3 closure.
+
 - [x] Inventory relevant Codex, OpenCode, and Pi configuration without including credentials or sensitive values in reports. The installed versions are Codex 0.166.0, OpenCode 2.2.5, and Pi 0.85.1. Codex has no skill/exclusion setting; OpenCode's global config has no skill, permission, or agent override. Pi's existing global `agent-brains` package registration remains unchanged. Codex CLI wrote temporary model/trust settings while running the live checks; these were restored from the protected pre-task backup, and the final Codex config compares byte-for-byte with that backup. OpenCode and Pi settings also remain byte-identical to their copies.
 - [x] Record the pre-install baseline without reopening C4 experiments. Before applying the installer, `--doctor` found 64 valid catalog entries, no manifest, the OpenCode `react-doctor` duplicate, and the two Pi-router references later resolved by adopting `find-skills` and `i-have-adhd`. A real pre-install Codex session reported `spec-and-tasks` was not discovered. OpenCode and Pi were not run as pre-install sessions; their baseline is the recorded static inventory/configuration only.
 - [x] Save a recoverable copy before global changes in a private persistent `<backup-directory>` (mode 700); a temporary working copy was also used. It contains copies of the three personal skill directories, the old OpenCode `react-doctor`, and Codex/OpenCode/Pi config files; no sessions or authentication files. The exact moved live skill directories are under `original-live/`.
@@ -131,7 +139,7 @@ Do not start by bulk-removing `.agents` or `.opencode` directories.
 - [x] Check harness configuration for discovery exclusions. No Codex skill/exclusion setting or OpenCode skill/permission/agent override was present. The installed OpenCode `/spec-and-tasks` command was invoked successfully.
 - [x] Keep the existing global Pi package registration; it was not reinstalled. `/skill:spec-and-tasks` loaded from the shared global catalog in Pi 0.85.1.
 - [x] Check content refresh in new and resumed persistent CLI sessions. After changing a temporary marker in the central skill, new and resumed logical sessions in Codex, OpenCode, and Pi each returned the new marker when the skill was explicitly invoked again. No installer rerun was needed; resumed sessions ran in new CLI process invocations.
-- [ ] Determine whether an already-running GUI/TUI session must reload or restart to see changed skill contents. These M3 checks controlled CLI sessions, not an interactive UI left open during the update.
+- [x] Determine whether an already-running GUI/TUI session must reload or restart to see changed skill contents. Reconciled 2026-11-10 using the [November 3 running-session observations](../evals/global-workflows/T7-2026-11-03.md#running-session-content-refresh): all three still-open root processes saw a replacement marker on explicit reinvocation without requested reload/restart; source was restored byte for byte. Codex/Pi saw removal in the existing conversation; OpenCode required a new conversation in the same process, with old-conversation caching versus context reuse unresolved. This qualified result answers the M3 question; it does not promise universal refresh semantics. No refresh was repeated for this reconciliation.
 - [x] Document link rollback separately from restoration of moved personal content and installation on another machine in the [README](../../README.md#global-skill-distribution).
 
 agent-brains remains the source of the content. The global link is a local access point, not a move of the source into a harness. Remote environments or containers will need an equivalent installation in their filesystem.
@@ -206,7 +214,7 @@ Search separately for other subdirectories and nested repositories not found in 
 - [ ] A separate review compares the requirements and diff and returns verifiable findings.
 - [ ] Pi remains compatible with existing runs; any full implementation trials happen in a test repository, not an active project merely to verify loading.
 - [x] Catalog changes were read in new and resumed persistent CLI sessions after explicit skill invocation, without rerunning project setup or the installer.
-- [ ] Check whether a GUI/TUI left running must reload or restart before it sees an updated skill.
+- [x] Check whether a GUI/TUI left running must reload or restart before it sees an updated skill. Reconciled 2026-11-10: see the qualified running-session observations and OpenCode removal limit in [M3](#5-machine-configuration-m3); no repeat refresh probe was needed.
 - [ ] Run meaningful tests for the engine and modified scripts, including `npm test` and `npm run typecheck` when changing Pi code. Do not run full application suites for documentation-only changes with no executable effects.
 - [ ] No local or third-party content was lost; rollback for global installation is documented and verified.
 
@@ -330,6 +338,11 @@ uses the exact per-link `rtk mv` operations in `restore.zsh`, rejects occupied
 destinations and leaves third-party content alone. No commit or push was made.
 
 ### Open interactive checks and exact repetition procedure
+
+**Historical procedure; validation completed on 2026-11-10.** The original
+pending instructions below are superseded by the [final T7 reconciliation](../evals/global-workflows/T7-2026-11-08.md#final-residual-validation-and-acceptance-reconciliation--2026-11-10).
+Reuse the existing selector/qualified refresh evidence; do not restart this
+completed matrix. Earlier CLI observations and their limits remain historical.
 
 These non-interactive CLI sessions do not prove interactive selector rendering,
 GUI/TUI refresh, or behavior of a UI left running during an update. Leave those

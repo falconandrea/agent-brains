@@ -19,8 +19,10 @@ does not start implementation or change the R1 sequence.
 Rechecked the October 29 review against the current checkout, code, Git
 history and recorded evaluations. M1/M2 are already committed; M3 CLI checks
 and the first M4 wave have evidence. Do not restart those milestones or mark
-the remaining interactive checks and consumer rollout complete. The following
-items are recorded for implementation; none is fixed by this reconciliation.
+the remaining interactive checks and consumer rollout complete on that evidence
+alone. The interactive gap was subsequently closed by actual T7 evidence on
+2026-11-10 (see current M3 status below); M4 remains incomplete. The following
+items are recorded for implementation; none is fixed by the November 1 reconciliation.
 
 - [x] **RV1 — High priority: snapshots with ignored Pi runtime paths.**
   `src/shell.ts` still runs `git add -A -- .` with negative pathspecs for
@@ -446,12 +448,14 @@ was a tentative preference for expanded-guidance Version 1 on the real UI task.
 Unexecuted interview/tooling/reference/trigger cases remain explicitly unmeasured.
 C3-V remains pending the next requested real security review.
 
-**Current status: M3 global install and CLI pilot are applied; the live
-interactive-session refresh check remains open.** M1 (portable skill references
-and explicit planning/implementation/review boundaries) is committed as
-`6567873`; M2 global distribution is committed as `06039e9`. M3's current
-machine setup and pilot evidence are in the [migration plan](cross-harness-workflow-migration.md#5-machine-configuration-m3).
-Consumer migration has not started. Preserved: C1/C2/C3 behavior, Pi
+**Current status (2026-11-10): M3 global installation and CLI/TUI pilot
+validation are complete at the approved scope; T7/AC8 are satisfied using native
+invocation records and qualified running-session refresh evidence.** M1
+(portable skill references and explicit planning/implementation/review boundaries)
+is committed as `6567873`; M2 global distribution is committed as `06039e9`.
+M3's source checklist and retained limits are in the [migration plan](cross-harness-workflow-migration.md#5-machine-configuration-m3).
+M4 rollout remains per repository and incomplete; its current status is owned
+by that plan. Preserved: C1/C2/C3 behavior, Pi
 `/feature`, `/flow`, resume compatibility and historical artifacts. R1 trials
 remain available only on explicit request; W2/W3/R2/S3 retain their existing
 deferral. Appunti prototype adoption is a separate project handoff.
@@ -483,7 +487,9 @@ shared general skills and workflows available in Codex, OpenCode and Pi,
 without running `setup.sh` or choosing an installation profile for that project.
 The global skill catalog already covers part of this goal; global workflow and
 adapter exposure, especially OpenCode adapters that still reference
-`.agents/workflows`, requires separate design and live verification.
+`.agents/workflows`, requires separate design and live verification. This records the original
+November 1 direction; the approved [global-workflows tasks](../../.ai/features/global-workflows/tasks.md)
+now own delivery, with T7/AC8 validation completed on November 10.
 
 - Keep agent-brains as the canonical content source and retain explicit-only
   invocation and the planning/implementation/review boundaries.
@@ -565,6 +571,14 @@ when the design and executable tasks are agreed.
   retested; the need to reload an already-running interactive TUI remains open.
   C4 efficacy/cost experiments were not reopened. M4 remains
   unstarted. Detailed results and limits are in the migration plan.
+  **Validation closure (2026-11-10):** the preceding M3 observations retain
+  their October 31 scope. Global-workflows T7/AC8 and the qualified existing
+  running-session refresh evidence now satisfy M3's remaining validation;
+  the [migration plan source tracker](cross-harness-workflow-migration.md#5-machine-configuration-m3)
+  is reconciled. [Final evidence and retained limits](../evals/global-workflows/T7-2026-11-08.md#final-residual-validation-and-acceptance-reconciliation--2026-11-10).
+  The earlier open-TUI/M4-unstarted wording is historical; M4's current rollout
+  status remains owned by the migration plan. No broad engine compatibility,
+  efficacy claim or new consumer migration follows from this closure.
 - **M4 — Consumer rollout:** migrate boilerplates and individual repositories
   using the plan's inventory; align `.ai` where useful, preserve project-specific
   knowledge and remove only confirmed managed links after successful checks.

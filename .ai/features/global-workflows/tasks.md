@@ -3,8 +3,9 @@
 Status: approved jointly with spec.md on 2026-11-01, including all five
 residual assumptions
 
-All tasks are future work. A shell-capable implementation session executes
-checks with rtk; a Pi role without shell tools hands checks to the orchestrator
+The original task descriptions were approved as future work; dated statuses
+record implementation and validation. A shell-capable session executes checks
+with rtk; a Pi role without shell tools hands checks to the orchestrator
 and reports them as unexecuted until evidence arrives. Preserve the existing
 dirty files. No task authorizes another consumer rollout, commit or push.
 
@@ -280,9 +281,110 @@ Acceptance: AC2, AC3, AC4, AC5, AC9.
 
 ## T7 — Separate interactive selection from running-session refresh
 
+**Current status: DONE (2026-11-10, approved CLI/TUI pilot scope).** The last
+34 missing invocations passed live: OpenCode 7, Pi 13, Codex 14. All original
+new results are passed:true with exact native provenance, zero model tools,
+exit 0 and clean consumer; all owned process groups are absent. Combining
+these with the previously accepted selector, refresh and invocation evidence
+completes the 50 route/CWD cells. AC8 is satisfied and M3's residual validation
+is complete; its source tracker is reconciled. Preserve the OpenCode old-
+conversation removal limit and mixed-date/version evidence. AC5 remains
+satisfied with resume-to-completed unobserved and not required. No RV1/AC5,
+selector or refresh repeat occurred. No missing matrix cell remains.
+[Final evidence, limits and handoff](../../../docs/evals/global-workflows/T7-2026-11-08.md#final-residual-validation-and-acceptance-reconciliation--2026-11-10).
+
+The dated updates below retain the chronology; their open statuses are
+superseded by this final reconciliation, not erased.
+
+Update 2026-11-10: provider quota permitted the retry. OpenCode root/setup,
+root/solution-capture and root/start passed live with native completion, exit 0
+and cleanup. app/astro also loaded the exact global skill and reached native
+idle/succeeded; its stripped-terminal-label matcher timed out on cursor-diff
+rendering. Original passed:false retained; coordinator analysis of native
+records and limited cursor replay establishes that invocation. Batch stopped
+there, no later cell ran. **34 cells remain**: Codex 14; OpenCode app/ agents 5
++ native code-review 2; Pi 13. Post-stop matcher correction passes 22 synthetic
+checks but has no live run. Private worklist now starts app/laravel and excludes
+all four observed cells. AC5 and baseline decisions stand; T7/AC8/M3 stay open.
+[November 10 evidence and precise residual](../../../docs/evals/global-workflows/T7-2026-11-08.md#november-10-resumption--three-green-cells-appastro-observed).
+
+Update 2026-11-09 (authorized root/setup resumption): one new real TUI
+reached explicit native failed/idle with `provider.quota` HTTP 429 from
+zai-coding-plan/glm-5.3 before any tool call. The runner stopped correctly;
+cleanup succeeded and pilot Git stayed clean. No later cell or retry ran.
+Root/setup remains unverified; **38 cells remain**. This is provider quota,
+not an established skill/MCP failure. Completion/native-exit success is still
+synthetic-only. Next decision: resume after quota availability returns or
+explicitly select an already configured alternative model/provider; no silent
+switch/configuration edit is authorized. Baselines and prior evidence stand.
+[Quota evidence and handoff](../../../docs/evals/global-workflows/T7-2026-11-08.md#authorized-rootsetup-resumption--2026-11-09-provider-quota-stop).
+
+Update 2026-11-09 (autonomous continuation): 14 initial synthetic readiness
+checks passed, then the single root/setup TUI stopped on a runner publication
+race: the session existed but its messages were not yet published. Cleanup
+succeeded, pilot Git stayed clean and no next cell ran. Post-stop export has
+only the user prompt, no tool call; root/setup remains unverified. **38 cells
+remain**. The private runner now treats empty messages as pending and allows
+UI rendering to catch up with persisted completion; 20 synthetic checks pass,
+including red/green replay of the actual failed snapshot. These corrections
+have not run live. Resume requires authorization after the failed result;
+start at root/setup and retain stop-at-first-problem. Baselines unchanged.
+[Latest evidence and limits](../../../docs/evals/global-workflows/T7-2026-11-08.md#autonomous-runner-continuation--2026-11-09-stopped-at-rootsetup).
+
+Update 2026-11-09 (OpenCode probe): user explicitly approved 2.2.6. One real
+root TUI selected nextjs and loaded native skill ID nextjs from the global
+catalog despite the Boost MCP error. Native export confirms tool completion,
+idle/succeeded, no other tool and unchanged snapshots; pilot Git stayed clean.
+The controller timed out on its total deadline before native shutdown; original
+passed:false retained. Coordinator evidence establishes the invocation cell,
+not an all-green driver run. Stopped without retry or subsequent cell.
+**38 cells remain**: Codex 14; OpenCode agents 9 + code-review 2; Pi 13.
+Both residual baselines are approved/selected (0.167.0 / 2.2.6); next work is
+synthetic completion/shutdown readiness before a separately authorized live
+continuation. Do not repeat the observed root/nextjs cell.
+[Evidence and handoff](../../../docs/evals/global-workflows/T7-2026-11-08.md#opencode-226-rootnextjs--2026-11-09-observed-driver-timeout).
+
+Update 2026-11-09 (authorized continuation preflight): user delegated the
+proposed next step; Codex 0.167.0 was selected and version-confirmed, retaining
+0.166.0 evidence as historical. OpenCode version-only preflight instead returned
+2.2.6 (planned 2.2.5). Stopped before any TUI/skill probe; all 39 invocation
+cells remain. OpenCode 2.2.6 now requires an explicit baseline decision before
+the single root/nextjs probe. No plugin/MCP repair or installation is implied.
+[Preflight record](../../../docs/evals/global-workflows/T7-2026-11-08.md#authorized-continuation-preflight--2026-11-09-stopped-before-tui).
+
+Update 2026-11-09 (formal reconciliation): AC5 is satisfied against its
+literal approved criterion: native commands in both pilot CWDs, disposable
+gate/cancel and interrupted-run resume compatibility. Resume ended needs_human;
+resume-to-completed is unobserved and is not required by AC5. Both automatic
+verdicts remain failed; acceptance uses the documented coordinator analysis of
+native evidence, not driver readiness. T7/AC8/M3 remain OPEN: 39 invocation
+cells remain (Codex 14; OpenCode agents 10 + code-review 2; Pi 13).
+Selectors and the qualified running-session refresh are already observed;
+reuse them, including OpenCode's same-conversation removal limitation.
+[Clause mapping, exact residual matrix and decision gates](../../../docs/evals/global-workflows/T7-2026-11-08.md#formal-ac5-reconciliation-and-bounded-handoff--2026-11-09)
+are the current handoff. Codex 0.167.0 needs baseline approval; OpenCode 2.2.5
+needs a separately authorized bounded skill-route probe despite startup errors.
+No live work is authorized by this update.
+
+Update 2026-11-09 (second): the corrected automation observed the two
+authorized Pi fixture scenarios live — gate cancel and interrupted-run resume
+(`/flow resume`, persisted terminal outcome; resume-to-completed unobserved
+because the reviewer escalated on planning artifacts in the snapshot diff).
+Runner defects found and fixed are documented in
+[the continuation report](../../../docs/evals/global-workflows/T7-2026-11-08.md).
+T7/AC8/M3 remain open; AC5's fixture-scope cancel/resume evidence now exists,
+with formal reconciliation left to review.
+
+Update 2026-11-08: the user approved a bounded continuation using real TUI
+automation and the existing selector/refresh evidence. Pi root / astro adds
+one native interactive invocation. The batch stopped on automation-readiness
+issues; OpenCode startup warnings and Codex version drift were also recorded.
+Cancel/resume were not attempted. See [the continuation report](../../../docs/evals/global-workflows/T7-2026-11-08.md).
+T7/AC8/M3 remain open; AC5 remains partial.
+
 Update 2026-11-03: partial user-observed interactive planning-route and running-session refresh evidence is recorded in [the T7 report](../../../docs/evals/global-workflows/T7-2026-11-03.md). Source restored byte for byte. OpenCode removal was visible in a new conversation in the same process; its previous conversation still reported the removed marker. Fresh versions, all selectors and Pi status commands are recorded; full interactive invocation coverage remains pending, so T7/AC8/M3 stay open. The status below describes the original handoff.
 
-Status: OPEN — deliberately not started (2026-11-01). No interactive
+Original handoff status (2026-11-01): OPEN — deliberately not started. No interactive
 process, UI selector check, or running-session content update was performed;
 nothing was substituted for it. The CLI-side prerequisites are all in place:
 global agents/command/Pi installed and doctor-clean, pilot isolated, and the
@@ -307,6 +409,19 @@ inspection. Check pilot local resources remain intact.
 Acceptance: AC8, supports AC2, AC3 and AC9.
 
 ## T8 — Reconcile acceptance and hand off to independent review
+
+Current acceptance update (2026-11-10): AC5 is satisfied against its literal
+criterion; T7 is complete, AC8 satisfied and M3 validation complete, with the
+source-plan tracker reconciled. The final evidence handoff is ready for review;
+no new independent code review is claimed. All residual invocations, existing
+selectors and qualified refresh evidence are mapped in T7's final report.
+The PARTIAL AC5 and unperformed-refresh descriptions below retain the original
+November 1 CLI handoff and are superseded, not current gaps.
+
+Review update (2026-11-10): the user independently verified the archive copies,
+all entries in the final manifest, private directory permissions, the archived
+index and local references, and reported no new findings. The documentation
+scope is approved for commit. No new live evidence was requested or produced.
 
 Status: done as PARTIAL CLI handoff (2026-11-01, implementation session).
 Acceptance map with evidence class: AC1 ✓ observed (installer fixtures:
