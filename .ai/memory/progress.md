@@ -3,11 +3,12 @@
 **Last Updated:** 2026-11-13
 **Current Phase:** Global workflow validation complete; M4 rollout and
 existing technical follow-ups remain open.
-**Active Task:** RV2 planner generation reliability resolved at the bounded
-pilot scope: prompt-only output-contract precedence and artifact-scope
-distinction, evaluated with a pre-declared paired real-provider comparison
-(candidate 6/6 valid vs current 5/6). Next: observe the reviewer-side
-behavior on the next real `/feature` run; M4 and RV3 remain open.
+**Active Task:** RV3 catalog routing guards resolved (2026-11-13,
+preventive scope; review P2 corrected the same day): the routing table is
+now pinned by structural and routing tests, and `resolving-merge-conflicts`
+and `solution-capture` are classified `operational` after their
+instructions proved incompatible with pipeline roles. Next: observe the
+RV2 reviewer-side behavior on the next real `/feature` run; M4 remains open.
 
 ## Current state
 
@@ -62,6 +63,18 @@ behavior on the next real `/feature` run; M4 and RV3 remain open.
   point. Evidence and protocol:
   [RV2 report](../../docs/evals/pi-compatibility/RV2-2026-11-13.md).
   [Migration evidence and limits](../../docs/evals/pi-compatibility/PI-1.5.2-2026-11-12.md).
+- RV3 is resolved (2026-11-13, preventive scope; review P2 corrected): the
+  catalog, classification, profile and role routing path is pinned by new
+  routing guards in `tests/unit.test.ts` (literal role-category policy,
+  table-derived operational exclusion, name-level workflow-driver pins,
+  anti-impoverishment inclusion pins), and `resolving-merge-conflicts` and
+  `solution-capture` are classified `operational` after their shell/git and
+  approval-gated memory-write instructions proved incompatible with
+  pipeline roles; the W1 textual router-mention check became a behavioral
+  exclusion test across every profile × role. Limits: the guards cover the
+  routing table only — effective tool allowlists and the write guard are
+  separate tested layers, unchanged; no live injection observed. Evidence:
+  [RV3 roadmap entry](../../docs/plans/pi-plugin-adoption-roadmap.md).
 
 ## Blockers and validation gaps
 
@@ -103,9 +116,9 @@ behavior on the next real `/feature` run; M4 and RV3 remain open.
 2. Review ga-analytics migration/recovery evidence before further M4 work.
    Continue only with separate per-repository authorization and live discovery
    before removing destination-proven managed links.
-3. Retain RV3 routing guards. RV1 and RV2 are resolved.
-   Keep optional parser extraction T7 separate. U12/U13/U14 remain open;
-   T8 is covered by U6/U8. Apply T10 verification to implementation work.
+3. RV1, RV2 and RV3 are resolved. Keep optional parser extraction T7
+   separate. U12/U13/U14 remain open; T8 is covered by U6/U8. Apply T10
+   verification to implementation work.
    [Hardening tasks](../features/main-review-hardening/tasks-main-review-hardening.md).
 4. RV4: capture observed failing/passing checks on the next suitable real task.
    The local verification pilot has no target; explicit verification outcomes

@@ -4,7 +4,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync, readdirSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dirname } from "node:path";
@@ -20,7 +20,7 @@ import {
   MAX_FROZEN_MANIFESTS,
   type VerifyFreeze,
 } from "../src/verify.ts";
-import { selectSkills } from "../src/skill-router.ts";
+import { selectSkills, categoryOf } from "../src/skill-router.ts";
 import { decideNextRound, validateReviewResult, type ReviewResult } from "../src/review.ts";
 import { normalizeConfig, DEFAULT_CONFIG, type PiBrainConfig } from "../src/config.ts";
 import { slugify, splitPlannerOutput } from "../src/workflows/feature.ts";
@@ -574,7 +574,10 @@ test("each role gets only its categories: developer plans nothing, reviewer revi
 test("no operational skill reaches any pipeline role", () => {
   for (const role of ["planner", "developer", "reviewer", "tester", "security-reviewer"] as const) {
     const sel = selectSkills(PROFILES_DIR, "full", role, AVAILABLE_SKILLS);
-    for (const banned of ["handoff", "start", "setup", "to-tickets", "lessons-gardener", "progress-gardener", "context-audit", "long-horizon-brief", "improve-codebase-architecture"]) {
+    for (const banned of ["handoff", "start", "setup", "to-tickets", "lessons-gardener", "progress-gardener", "context-audit", "long-horizon-brief", "improve-codebase-architecture",
+      // RV3: name-level pins for the workflow drivers and the shell/git
+      // mutation skill, so reclassification cannot quietly re-admit them.
+      "spec-and-tasks", "grilling", "grill-with-docs", "i-have-adhd", "find-skills", "resolving-merge-conflicts"]) {
       assert.ok(!sel.skills.includes(banned), `${banned} must not reach ${role}`);
     }
   }
@@ -590,6 +593,140 @@ test("cleanup stays in the main-session catalog and out of every pipeline role",
     }
   }
   assert.ok(resolveProfile(PROFILES_DIR, "common").skills.includes("simplify"));
+});
+
+test("resolving-merge-conflicts stays a main-session skill: never routed into a pipeline role", () => {
+  // RV3, content-justified (not name-matched): the skill's own instructions
+  // command shell execution (git history, staging, committing, continuing a
+  // rebase, running checks). No pipeline role has bash — the orchestrator owns
+  // command execution and the git baseline — so no pipeline role can ever
+  // execute it, and its "always resolve; never --abort; stage everything and
+  // commit" contract conflicts with read-only roles outright.
+  for (const profile of listProfiles(PROFILES_DIR)) {
+    const available = new Set(resolveProfile(PROFILES_DIR, profile).skills);
+    for (const role of ["planner", "developer", "reviewer", "security-reviewer", "tester"] as const) {
+      const selection = selectSkills(PROFILES_DIR, profile, role, available);
+      assert.ok(
+        !selection.skills.includes("resolving-merge-conflicts"),
+        `${profile}/${role} must not receive shell/git mutation instructions`,
+      );
+      assert.ok(!selection.missing.includes("resolving-merge-conflicts"));
+    }
+  }
+  assert.ok(
+    resolveProfile(PROFILES_DIR, "common").skills.includes("resolving-merge-conflicts"),
+    "the main session keeps merge-conflict resolution through common",
+  );
+});
+
+const ALL_ROLES = ["planner", "developer", "reviewer", "security-reviewer", "tester"] as const;
+
+/** Catalog skills: directories under .agents/skills holding a SKILL.md. */
+const catalogSkills = (): Set<string> => {
+  const skillsDir = join(dirname(fileURLToPath(import.meta.url)), "..", ".agents", "skills");
+  return new Set(
+    readdirSync(skillsDir, { withFileTypes: true })
+      .filter((d) => (d.isDirectory() || d.isSymbolicLink()) && existsSync(join(skillsDir, d.name, "SKILL.md")))
+      .map((d) => d.name),
+  );
+};
+
+test("the role-category policy holds for every role in every profile", () => {
+  // RV3: the admitted categories are pinned LITERALLY here, so widening a
+  // role (say, handing `testing` or `debugging` to a reviewer, or craft to a
+  // tester) fails loudly instead of silently re-scoping what children see.
+  const ADMITTED: Record<(typeof ALL_ROLES)[number], string[]> = {
+    planner: ["planning", "craft", "stack"],
+    developer: ["testing", "debugging", "craft", "stack"],
+    reviewer: ["review", "craft", "stack"],
+    "security-reviewer": ["review", "craft", "stack"],
+    tester: ["testing", "debugging", "stack"], // deliberately no craft
+  };
+  for (const profile of listProfiles(PROFILES_DIR)) {
+    const available = new Set(resolveProfile(PROFILES_DIR, profile).skills);
+    for (const role of ALL_ROLES) {
+      const selected = selectSkills(PROFILES_DIR, profile, role, available).skills;
+      assert.ok(selected.length > 0, `${profile}/${role} selects nothing`);
+      for (const skill of selected) {
+        assert.ok(
+          ADMITTED[role].includes(categoryOf(skill)),
+          `${profile}/${role} received ${skill} (category ${categoryOf(skill)}) outside its admitted categories`,
+        );
+      }
+    }
+  }
+  // Named anchors over the boundaries that matter most (readable failures):
+  for (const role of ["reviewer", "security-reviewer"] as const) {
+    const sel = selectSkills(PROFILES_DIR, "nodejs", role, AVAILABLE_SKILLS);
+    assert.ok(!sel.skills.includes("tdd"), `${role} implements nothing`);
+    assert.ok(!sel.skills.includes("diagnosing-bugs"), `${role} debugs nothing`);
+  }
+  const plan = selectSkills(PROFILES_DIR, "nodejs", "planner", AVAILABLE_SKILLS);
+  assert.ok(!plan.skills.includes("diagnosing-bugs"), "the planner does not debug");
+  const tester = selectSkills(PROFILES_DIR, "nodejs", "tester", AVAILABLE_SKILLS);
+  assert.ok(!tester.skills.includes("karpathy-guidelines"), "tester admits no craft");
+});
+
+test("no skill classified operational reaches a pipeline role, and each stays distributed", () => {
+  // Table-derived: a FUTURE operational skill is guarded the moment it is
+  // classified, without extending a hand-written list. Name-level pins for
+  // the known workflow drivers live in the test below, so reclassification
+  // of one of them cannot quietly undo this guarantee.
+  const operational = [...catalogSkills()].filter((s) => categoryOf(s) === "operational");
+  assert.ok(operational.length > 0, "the operational classification must be in use");
+  for (const profile of listProfiles(PROFILES_DIR)) {
+    const available = new Set(resolveProfile(PROFILES_DIR, profile).skills);
+    for (const role of ALL_ROLES) {
+      for (const skill of selectSkills(PROFILES_DIR, profile, role, available).skills) {
+        assert.notEqual(categoryOf(skill), "operational", `${skill} must not reach ${profile}/${role}`);
+      }
+    }
+  }
+  // Operational skills are main-session tools: each must stay reachable
+  // through at least one profile instead of silently disappearing.
+  const distributed = new Set(
+    listProfiles(PROFILES_DIR).flatMap((p) => resolveProfile(PROFILES_DIR, p).skills),
+  );
+  assert.deepEqual(
+    operational.filter((s) => !distributed.has(s)),
+    [],
+    "operational skills must stay listed in at least one profile",
+  );
+});
+
+test("content-reviewed craft skills keep reaching developer and reviewer", () => {
+  // RV3 read the instructions of every unclassified common skill so the
+  // fallback flow of these is a recorded decision, not an accident — and a
+  // future reclassification has to be a conscious act that updates this test:
+  // - codebase-design: design vocabulary, read-only-safe for review;
+  // - domain-modeling: glossary/ADR discipline a developer may legitimately
+  //   apply when a task includes recording decisions;
+  // - writing-for-agents: authoring guidance for features that edit skills or
+  //   agent docs (this repo's own features), and review criteria for such diffs.
+  for (const profile of ["nodejs", "laravel", "nextjs", "astro"] as const) {
+    const available = new Set(resolveProfile(PROFILES_DIR, profile).skills);
+    for (const role of ["developer", "reviewer"] as const) {
+      const sel = selectSkills(PROFILES_DIR, profile, role, available);
+      for (const skill of ["codebase-design", "domain-modeling", "writing-for-agents"]) {
+        assert.ok(sel.skills.includes(skill), `${skill} must stay available to ${role} (${profile})`);
+      }
+    }
+  }
+  // The technical fallback is deliberately permissive: unclassified stack
+  // specialists flow to the roles that use them.
+  const aiBackend = () => new Set(resolveProfile(PROFILES_DIR, "nodejs-ai-backend").skills);
+  for (const role of ["developer", "reviewer", "security-reviewer"] as const) {
+    const sel = selectSkills(PROFILES_DIR, "nodejs-ai-backend", role, aiBackend());
+    for (const skill of ["api-designer", "sql-pro", "typescript-expert"]) {
+      assert.ok(sel.skills.includes(skill), `nodejs-ai-backend/${role} keeps ${skill}`);
+    }
+  }
+  // review-class skills in the security specialist's profile reach both
+  // judging roles — legitimate review inclusion, pinned so it survives.
+  for (const role of ["reviewer", "security-reviewer"] as const) {
+    const sel = selectSkills(PROFILES_DIR, "nodejs-ai-backend", role, aiBackend());
+    assert.ok(sel.skills.includes("security-reviewer"), `nodejs-ai-backend/${role} keeps security-reviewer`);
+  }
 });
 
 test("explicit stack workflows stay available while pipeline roles retain framework knowledge", () => {

@@ -81,6 +81,18 @@ const SKILL_CATEGORIES: Record<string, SkillCategory> = {
   setup: "operational", // greenfield bootstrap drives a whole session, not a pipeline child
   // Cleanup needs writes and shell execution; the main session owns it.
   simplify: "operational",
+  // Merge resolution commands shell execution (git history/stage/commit,
+  // continue the rebase, run the project's checks) — no pipeline role has
+  // bash, and read-only roles conflict with it outright. The main session
+  // owns git state (RV3, justified from the skill's own instructions).
+  "resolving-merge-conflicts": "operational",
+  // Explicit-only capture workflow (W1): invocation starts an approval-gated
+  // assessment that ends in memory writes. RV3 review P2: leaving it
+  // unclassified let the craft fallback route it into four pipeline roles,
+  // contradicting the W1 intent of distribution without implicit workflow
+  // routing — absence from this table was never an exclusion. The main
+  // session keeps invoking it explicitly.
+  "solution-capture": "operational",
   // Explicit stack workflows run plan/act/review themselves. Children use
   // the framework specialists instead of receiving a second workflow.
   laravel: "operational",
@@ -109,7 +121,8 @@ const ROLE_CATEGORIES: Record<Role, SkillCategory[]> = {
   tester: ["testing", "debugging", "stack"],
 };
 
-function categoryOf(skill: string): SkillCategory {
+/** Exported for the routing guards: the table is the single source of truth. */
+export function categoryOf(skill: string): SkillCategory {
   return SKILL_CATEGORIES[skill] ?? "craft";
 }
 

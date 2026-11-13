@@ -140,13 +140,63 @@ items are recorded for implementation; none is fixed by the November 1 reconcili
   rate inferred; the next real `/feature` run is the observation point for
   the reviewer behavior. Evidence, protocol and limits:
   [RV2 report](../evals/pi-compatibility/RV2-2026-11-13.md).
-- [ ] **RV3 — Catalog routing guards.** Unknown skills still default to
+- [x] **RV3 — Catalog routing guards.** Unknown skills still default to
   `craft`. Add targeted structural/routing checks for catalog skills that
   start workflows, require mutation, or conflict with read-only roles; cover
   all pipeline roles and relevant profiles. Preserve the technical fallback
   unless evidence warrants changing it. Existing operational exclusions pass;
   this is preventive coverage, not a demonstrated permission bypass. No new
   registry or broad skill-efficacy evaluation is selected.
+  **Resolved (2026-11-13, preventive scope).** The actual routing path was
+  reconstructed first (catalog → `SKILL_CATEGORIES` in `src/skill-router.ts` →
+  profile resolution → role filter → `selectSkills` → Pi `skillsOverride`
+  injection), and every unclassified skill's instructions were read, not
+  name-matched. One concrete defect emerged and was fixed test-first:
+  `resolving-merge-conflicts` instructs shell/git mutation — history, staging,
+  committing, continuing the rebase, running checks — that no pipeline role
+  can execute (no role has bash; the orchestrator owns command execution and
+  the git baseline) and that conflicts with read-only roles outright; the
+  craft fallback had routed it into planner, developer, reviewer and
+  security-reviewer in every common-derived profile. It is now classified
+  `operational` like `simplify` (main session owns it; still resolved through
+  `common`; the lock-managed skill's content is untouched). The technical
+  fallback itself is preserved. New guards in `tests/unit.test.ts`: the
+  per-role admitted-category policy pinned literally across every profile ×
+  role (tester deliberately admits no craft; reviewer and security-reviewer
+  no testing/debugging; planner no review); a table-derived guard proving no
+  `operational`-classified skill reaches any pipeline role while each stays
+  listed in at least one profile (future classifications are guarded
+  automatically); name-level pins extended to the workflow drivers
+  (spec-and-tasks, grilling, grill-with-docs, i-have-adhd, find-skills) and
+  the new exclusion; and anti-impoverishment pins recording that the
+  content-reviewed craft skills (codebase-design, domain-modeling,
+  writing-for-agents) and unclassified stack specialists (api-designer,
+  sql-pro, typescript-expert) deliberately keep flowing to developer/reviewer.
+  Verification: the new exclusion test failed pre-fix (astro/planner first),
+  then targeted routing tests, typecheck and `git diff --check` clean.
+  **Review round (2026-11-13): one P2 finding, corrected.** The entry had
+  recorded `solution-capture` as a bounded residual — an explicit-only,
+  approval-gated memory-writing workflow still reaching planner, developer,
+  reviewer and security-reviewer via the craft fallback, with only tool
+  permissions bounding the effect. That was exactly an RV3-relevant routing
+  incompatibility, and the W1 textual pin (the name must not appear in
+  `skill-router.ts`) demonstrably did not guarantee exclusion. Corrected
+  test-first: `solution-capture` is now classified `operational` (main
+  session keeps invoking it explicitly; still resolved through `common` and
+  `full`; skill content untouched), and the W1 textual check in
+  `tests/solution-capture-skill.test.ts` was replaced by the behavioral
+  guarantee — no pipeline role in any profile selects it, with a
+  reproduction failure recorded pre-fix (`astro/planner`). The W1
+  requirement ("distributed without implicit workflow routing") is
+  unchanged; only its enforcement moved from file text to routing outcome.
+  The table-derived operational guard now covers it automatically. Limits:
+  these guards pin the
+  ROUTING table only — effective tool permissions (`READ_ONLY_TOOLS`, the
+  write guard) are separate layers with their own tests and are unchanged;
+  injection into children was not observed in a live provider run (offline
+  `tests/pi-session-injection.test.ts` remains the injection evidence).
+  Final verification after the correction: `npm test` 494/494 (+5 over the
+  489 baseline), typecheck and `git diff --check` clean.
 - [ ] **Runtime documentation — existing U13 remains the owner.** Update
   the runner's obsolete "nothing here has executed" header and the Pi README's
   212-test claim through
