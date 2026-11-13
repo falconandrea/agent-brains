@@ -116,6 +116,11 @@ items are recorded for implementation; none is fixed by the November 1 reconcili
   failure rate from two historical attempts. This is separate from existing
   T7's optional parser-module extraction, and does not authorize a broad parser
   relaxation or a new orchestration layer.
+  The [2026-11-13 real-TUI pilot](../evals/pi-compatibility/REAL-TUI-2026-11-13.md)
+  produced one valid first-call plan but ended `needs_human`: the reviewer
+  treated required planning artifacts as violating an only-hello.txt criterion.
+  Retain that scope-conflict case alongside missing-TITLE cases; the report
+  defines the bounded next evaluation. No reliability implementation is delivered.
 - [ ] **RV3 — Catalog routing guards.** Unknown skills still default to
   `craft`. Add targeted structural/routing checks for catalog skills that
   start workflows, require mutation, or conflict with read-only roles; cover

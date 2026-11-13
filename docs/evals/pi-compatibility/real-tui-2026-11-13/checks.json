@@ -1,0 +1,22 @@
+{
+  "node": "v24.12.0",
+  "fixtureHead": "d0793697787a4e7abbdc330242edcddddde64904",
+  "headMatchesClonedBaseline": true,
+  "helloHex": "68656c6c6f0a",
+  "verifyExit": 0,
+  "trackedDiffEmpty": true,
+  "lockReleased": true,
+  "status": "?? .ai/\n?? hello.txt\n",
+  "projectConfig": {
+    "stack": "nodejs",
+    "verify": [
+      "node check.test.js"
+    ],
+    "maxReviewRounds": 1,
+    "maxVerifyRetries": 0,
+    "notifications": {
+      "bell": false,
+      "os": false
+    }
+  }
+}

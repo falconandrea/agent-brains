@@ -3,9 +3,9 @@
 **Last Updated:** 2026-11-13
 **Current Phase:** Global workflow validation complete; M4 rollout and
 existing technical follow-ups remain open.
-**Active Task:** Progress cleanup and the Pi 1.5.2 migration are implemented,
-verified and reviewed; commit authorized on 2026-11-13, no push requested.
-Next: a bounded real-provider/fullscreen-TUI fixture run on Pi 1.5.2.
+**Active Task:** Pi 1.5.2 real-provider/fullscreen-TUI pilot recorded; all
+pipeline phases ran, ending `needs_human` on a plan/review artifact-scope conflict.
+Next: RV2 planner generation reliability, using the bounded scope in the pilot report.
 
 ## Current state
 
@@ -38,18 +38,23 @@ Next: a bounded real-provider/fullscreen-TUI fixture run on Pi 1.5.2.
   typecheck, 484/484 tests, `smoke:pi`, plus isolated Pi CLI 1.5.2 RPC-mode
   fixture runs — gate approval, `/flow stop` cancellation and SIGKILL
   interruption resumed with `/flow resume` to `completed`. Real-provider and
-  full-workflow fullscreen-TUI runs remain unverified on 1.5.2. Global CLI
+  full-workflow fullscreen-TUI runs were initially unverified on 1.5.2. Global CLI
   1.5.2 was independently confirmed on 2026-11-13; the user reported a working
   `/stack` response (nodejs, 70%). This establishes command dispatch only,
   not real-provider workflow completion.
+  A subsequent real-provider/fullscreen-TUI pilot exercised planner, native gate,
+  developer, passing verification and reviewer; outcome `needs_human` because the
+  reviewer treated required planning artifacts as violating the generated
+  only-hello.txt criterion. HEAD unchanged, lock released; no consumer changes.
+  [Pilot evidence, limits and RV2 scope](../../docs/evals/pi-compatibility/REAL-TUI-2026-11-13.md).
   [Migration evidence and limits](../../docs/evals/pi-compatibility/PI-1.5.2-2026-11-12.md).
 
 ## Blockers and validation gaps
 
-- The 1.5.2 baseline is verified at scripted-fixture scope only: real-provider
-  execution and a full workflow in the fullscreen TUI on 1.5.2 remain
-  unverified, as do other Node majors/platforms. Global CLI 1.5.2 is now
-  installed; the user-reported `/stack` result is a bounded command check.
+- Pi 1.5.2 now has one real-provider/fullscreen-TUI pipeline observation,
+  ending `needs_human`; successful real-provider feature completion, live
+  cancel/resume, revision/fix loops and other platforms remain unverified.
+  The planner/reviewer artifact-scope conflict is retained as an RV2 case.
   Historical skill loading on Pi CLI 0.85.1 does not establish engine
   compatibility with SDK 0.85.1.
 - T7 evidence is mixed-date/version-qualified; residual baselines were
@@ -70,13 +75,11 @@ Next: a bounded real-provider/fullscreen-TUI fixture run on Pi 1.5.2.
 
 ## Next actions
 
-1. Run one bounded real-provider/fullscreen-TUI `/feature` pilot in a disposable
-   project on Pi 1.5.2; preserve evidence and qualify any unobserved behavior.
-   Migration review is complete with both documentation P3s resolved. T7 parser
-   extraction and final T10 closure remain open; T9 is complete and superseded
-   by the 1.5.2 migration.
-   [Task owner](../features/code-review-follow-ups/tasks-code-review-follow-ups.md) ·
-   [Migration report](../../docs/evals/pi-compatibility/PI-1.5.2-2026-11-12.md).
+1. Address RV2 planner generation reliability with the bounded output-contract
+   scope and cases in the [pilot report](../../docs/evals/pi-compatibility/REAL-TUI-2026-11-13.md#rv2-next-scope).
+   The pilot is recorded, not a successful real-provider completion claim.
+   Preserve deterministic rejection and document/resume contracts; T7 parser
+   extraction remains separate. T9 is complete and superseded by 1.5.2.
 2. Review ga-analytics migration/recovery evidence before further M4 work.
    Continue only with separate per-repository authorization and live discovery
    before removing destination-proven managed links.

@@ -121,3 +121,12 @@ extension command dispatch; they do not establish a complete real-provider
 workflow or exercise the fullscreen approval/cancel/resume UI. Those remaining
 limits above stay open. Both documentation P3 review findings were corrected
 and rechecked; the user authorized committing the reviewed changes, not pushing.
+
+## Real-provider fullscreen follow-up — 2026-11-13
+
+The [bounded pilot](REAL-TUI-2026-11-13.md) supersedes the earlier
+not-attempted limits for this single execution: real planner → native fullscreen
+approval → real developer → passing verification → real reviewer, ending
+`needs_human` on an artifact-scope conflict in the generated acceptance criteria.
+HEAD unchanged and lock released. Successful real-provider completion and
+other unexercised paths remain unverified; see the report and retained evidence.
