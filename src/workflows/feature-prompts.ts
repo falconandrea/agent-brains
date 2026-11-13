@@ -45,11 +45,17 @@ Conversations with the user — including every ask_user_batch question — are 
 SAME LANGUAGE as the feature request above.
 Output the plan as markdown with exactly three top-level sections, in this
 order — and nothing else (no conversational preamble, no transcript of the
-questions you asked):
+questions you asked). The three headings are LITERAL: always emit the exact
+words TITLE, PRD and TASKS as the headings. TITLE is a section label, NOT a
+placeholder to replace with the feature name — the actual title goes on the
+line under \`## TITLE\`. This runtime output contract takes precedence over
+any document template or heading convention from your loaded skills: skills
+inform what you plan, never the shape of this response.
 
 ## TITLE
-A short English title for the feature, at most 6 words. It names the
-directory and artifacts, so make it specific and stable across reruns.
+A short English title for the feature, at most 6 words, on the line below
+the \`## TITLE\` heading. It names the directory and artifacts, so make it
+specific and stable across reruns.
 
 ## PRD
 Concise: problem, user stories (as a <role>, I want <action> so that
@@ -61,6 +67,10 @@ For risky behavior, acceptance criteria name initial state/input, triggering
 event and observable result; include rejection or preservation invariants where
 material. Reuse existing contract boundaries and adequate tests. Keep simple
 changes concise rather than requiring a fixed happy/error scenario quota.
+File-scope acceptance criteria ("changes no files other than ...") constrain
+the IMPLEMENTATION only: the orchestrator itself writes this plan to
+.ai/features/<slug>/ as required workflow artifacts, so no criterion may
+forbid those documents or ask for their removal.
 "Assumptions" lists every decision made without asking the user, one line
 each — the user approves or vetoes these at the gate. If and only if the
 feature has user-facing UI, add a "UI/UX Notes" section; otherwise omit it.
@@ -73,6 +83,12 @@ Every task MUST be a canonical Markdown list entry in this exact shape:
 
 Use granular, ordered, stable IDs (T1, T2, ...). IDs must be unique and must
 appear immediately after the list marker. No vague TODO placeholders.
+
+Before you finish, re-check your final message against this contract: exactly
+the three literal headings \`## TITLE\`, \`## PRD\`, \`## TASKS\` in this
+order, nothing before \`## TITLE\`, and no additional top-level sections
+after the TASKS section (the task list itself lives inside it) — correct the
+output if it deviates.
 
 The orchestrator writes them to .ai/features/<slug>/ under the project root,
 where <slug> is derived from your TITLE.`;
@@ -104,7 +120,15 @@ even if the notes suggest a rename:
 ${a.title}
 
 Return the COMPLETE canonical document, with exactly these top-level sections
-and nothing else:
+and nothing else. The headings \`## TITLE\`, \`## PRD\` and \`## TASKS\` are
+literal section labels — repeat them exactly, with the title on the line
+under \`## TITLE\` and nothing before that heading. This runtime output
+contract takes precedence over any document template from your loaded
+skills. Keep file-scope acceptance criteria about the IMPLEMENTATION only:
+the orchestrator's own planning documents under .ai/features/<slug>/ are
+required workflow artifacts and no criterion may forbid them or ask for
+their removal. Re-check the final message against this contract before
+finishing.
 
 ## TITLE
 ${a.title}
@@ -214,6 +238,13 @@ observation from a demonstrated defect; do not demand a new harness by default.
 Supplied deterministic check results (judge only what these establish; do not
 repeat covered diagnostics or treat an empty list as a successful run):
 ${a.verification.map((v) => `- ${v.command} -> exit ${v.exitCode}`).join("\n") || "- (no results supplied; execution status unavailable)"}
+
+The orchestrator itself writes the approved planning documents to
+.ai/features/<slug>/ (prd-*.md, tasks-*.md and their marker comment). They
+are required workflow artifacts, not implementation changes — they appear in
+the diff as new files on the tree. Do not count them against file-scope
+acceptance criteria and never request their removal; judge the implementation
+against the approved criteria.
 ${
   a.ignoreRulesChanged
     ? `

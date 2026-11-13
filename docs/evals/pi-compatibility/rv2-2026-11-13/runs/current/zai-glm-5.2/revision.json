@@ -1,0 +1,32 @@
+{
+  "arm": "current",
+  "model": {
+    "id": "zai-glm-5.2",
+    "provider": "zai",
+    "model": "glm-5.2",
+    "thinking": "medium"
+  },
+  "case": "revision",
+  "promptSha256": "9f49bedb2d5a8b2a33bb3b9760713c3b8a8b9c5e9798431c56c5ce0a404dcd02",
+  "aborted": false,
+  "output": "## TITLE\nAdd hello.txt fixture\n\n## PRD\nProblem: the compatibility check expects a root-level hello.txt that is absent.\nScope: add hello.txt containing exactly `hello\\n`; document hello.txt with a one-line README section (revision note, authoritative: README.md does not currently exist in the fixture, so it is created); verify with `node check.test.js`.\nOut of scope: changes to check.test.js or AGENTS.md; dependencies; refactors; commits or pushes.\nAcceptance criteria:\n- hello.txt exists at the repository root with content exactly `hello\\n`.\n- README.md exists and contains a one-line section documenting hello.txt.\n- node check.test.js exits 0 from the repository root.\n- check.test.js and AGENTS.md remain unchanged.\n- The implementation changes no files other than hello.txt and README.md.\nAssumptions: verification runs from the repository root; the README addition is documentation-only and is not exercised by check.test.js.\n\n## TASKS\n- T1 — Write hello.txt with content `hello\\n`. Files: `hello.txt`.\n- T2 — Run the verifier. Files: `check.test.js`.\n- T3 — Create README.md whose sole content is one line documenting hello.txt (e.g., `hello.txt — root fixture containing \"hello\", verified by check.test.js.`). Documentation-only; re-running T2 afterwards is harmless but not required. Files: `README.md`.",
+  "validation": {
+    "valid": true,
+    "value": {
+      "title": "Add hello.txt fixture",
+      "prd": "Problem: the compatibility check expects a root-level hello.txt that is absent.\nScope: add hello.txt containing exactly `hello\\n`; document hello.txt with a one-line README section (revision note, authoritative: README.md does not currently exist in the fixture, so it is created); verify with `node check.test.js`.\nOut of scope: changes to check.test.js or AGENTS.md; dependencies; refactors; commits or pushes.\nAcceptance criteria:\n- hello.txt exists at the repository root with content exactly `hello\\n`.\n- README.md exists and contains a one-line section documenting hello.txt.\n- node check.test.js exits 0 from the repository root.\n- check.test.js and AGENTS.md remain unchanged.\n- The implementation changes no files other than hello.txt and README.md.\nAssumptions: verification runs from the repository root; the README addition is documentation-only and is not exercised by check.test.js.",
+      "tasks": "## TASKS\n- T1 — Write hello.txt with content `hello\\n`. Files: `hello.txt`.\n- T2 — Run the verifier. Files: `check.test.js`.\n- T3 — Create README.md whose sole content is one line documenting hello.txt (e.g., `hello.txt — root fixture containing \"hello\", verified by check.test.js.`). Documentation-only; re-running T2 afterwards is harmless but not required. Files: `README.md`."
+    }
+  },
+  "usage": {
+    "input": 953,
+    "output": 2453,
+    "cacheRead": 4736,
+    "cacheWrite": 0,
+    "cost": 0.01335876,
+    "provider": "zai",
+    "model": "glm-5.2",
+    "elapsedMs": 34667
+  },
+  "elapsedMs": 34723
+}

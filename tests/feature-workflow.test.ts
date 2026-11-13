@@ -30,6 +30,12 @@ import {
   validateTaskList,
   type FeatureDeps,
 } from "../src/workflows/feature.ts";
+import {
+  PLANNER_PROMPT,
+  PLAN_REVISION_PROMPT,
+  REVIEWER_PROMPT,
+} from "../src/workflows/feature-prompts.ts";
+import type { ProjectStack } from "../src/stack.ts";
 import { replayRunLog } from "../src/workflows/resume.ts";
 import { usageFromEvents } from "../src/usage.ts";
 import { resolveProfile } from "../src/profiles.ts";
@@ -1586,6 +1592,106 @@ test("the planner's TASKS diagnostics distinguish missing sections, invalid ids 
   assert.equal(missing.reason, "missing_section");
   assert.equal(noIds.reason, "no_valid_ids");
   assert.equal(duplicates.reason, "duplicate_ids");
+});
+
+// --- RV2: the runtime output contract must outrank skill templates, and the
+// implementation scope must stay distinct from orchestrator-written artifacts.
+
+const PROMPT_STACK: ProjectStack = {
+  primary: "nodejs",
+  frameworks: [],
+  languages: [],
+  packageManagers: [],
+  capabilities: [],
+  confidence: 1,
+  evidence: [],
+};
+
+test("the planner prompt declares the literal TITLE/PRD/TASKS contract above skill templates", () => {
+  const prompt = PLANNER_PROMPT({ description: "do the thing", stack: PROMPT_STACK });
+  assert.match(prompt, /headings are LITERAL/);
+  assert.match(prompt, /NOT a\s+placeholder to replace with the feature name/, "TITLE is a label, not a slot for the title");
+  assert.match(prompt, /takes precedence over\s+any document template.*loaded skills/s, "runtime contract outranks skill templates");
+  assert.match(prompt, /re-check your final\s+message against this contract/, "self-check before submission");
+  assert.match(
+    prompt,
+    /no additional top-level sections\s+after the TASKS section/,
+    "the self-check must not forbid the task list that lives inside TASKS",
+  );
+  assert.doesNotMatch(prompt, /nothing after [`']## TASKS[`']/, "the contradictory literal phrasing must stay removed");
+  assert.match(prompt, /## TITLE\nA short English title/, "the title is described as content under the heading");
+  assert.match(
+    prompt,
+    /File-scope acceptance criteria[\s\S]*IMPLEMENTATION only[\s\S]*\.ai\/features\/<slug>\/ as required workflow artifacts[\s\S]*no criterion may\s+forbid those documents or ask for their removal/,
+    "implementation scope stays distinct from orchestrator-written artifacts",
+  );
+});
+
+test("the plan revision prompt repeats the literal-headings and artifact-scope contract", () => {
+  const prompt = PLAN_REVISION_PROMPT({
+    description: "do the thing",
+    stack: PROMPT_STACK,
+    title: "Add Invitations",
+    prd: "current prd",
+    tasks: "## TASKS\n- T1 do it",
+    notes: "tighten the tasks",
+  });
+  assert.match(prompt, /literal section labels/);
+  assert.match(prompt, /## TITLE\nAdd Invitations/, "the stable title stays inline under the literal heading");
+  assert.match(prompt, /takes precedence over any document template from your loaded\s+skills/);
+  assert.match(
+    prompt,
+    /required\s+workflow artifacts and no criterion may forbid them or ask for\s+their removal/,
+  );
+  assert.match(prompt, /Re-check the final message against this contract/);
+});
+
+test("the reviewer prompt treats orchestrator planning artifacts as workflow-owned", () => {
+  const prompt = REVIEWER_PROMPT({
+    prd: "approved prd",
+    tasks: "approved tasks",
+    stack: PROMPT_STACK,
+    diff: "diff --git a/hello.txt",
+    files: ["hello.txt", ".ai/features/x/prd-x.md"],
+    verification: [],
+  });
+  assert.match(prompt, /required workflow artifacts, not implementation changes/);
+  assert.match(prompt, /prd-\*\.md, tasks-\*\.md and their marker comment/);
+  assert.match(prompt, /Do not count them against file-scope\s+acceptance criteria and never request their removal/);
+  assert.match(prompt, /judge the implementation\s+against the approved criteria/);
+});
+
+test("a title emitted as its own heading is still missing_title (historical C4 shape)", () => {
+  // The exact failure shape recorded in the C4 report (docs/evals/pi-usage/
+  // FEATURE-E2E-2026-10-27.md, "pilot-format"): a structurally complete plan
+  // whose first heading is the real title instead of the literal ## TITLE.
+  const historical =
+    "## Cap retryDelay With maxDelayMs\n\n## PRD\nConcise body.\n\n## TASKS\n- T1 — concrete. Files: `src/retry.js`.\n";
+  const validation = validatePlannerOutput(historical);
+  assert.equal(validation.valid, false);
+  if (validation.valid) throw new Error("expected the historical shape to stay rejected");
+  assert.equal(validation.reason, "missing_title");
+});
+
+test("valid initial and revised plan shapes pass the complete validator", () => {
+  const initial =
+    "## TITLE\nAdd Invitations\n\n## PRD\nBuild the thing.\n\n## TASKS\n- T1 — do it. Files: `src/a.ts`.\n";
+  const initialValidation = validatePlannerOutput(initial);
+  assert.equal(initialValidation.valid, true);
+  if (!initialValidation.valid) throw new Error("expected the initial plan to validate");
+  assert.deepEqual(initialValidation.value, {
+    title: "Add Invitations",
+    prd: "Build the thing.",
+    tasks: "## TASKS\n- T1 — do it. Files: `src/a.ts`.",
+  });
+
+  const revised =
+    "## TITLE\nAdd Invitations\n\n## PRD\nBuild the thing, tightened.\n\n## TASKS\n- T1 — do it. Files: `src/a.ts`.\n- T2 — test it. Files: `test/a.test.ts`.\n";
+  const revisedValidation = validatePlannerOutput(revised);
+  assert.equal(revisedValidation.valid, true);
+  if (!revisedValidation.valid) throw new Error("expected the revised plan to validate");
+  assert.equal(revisedValidation.value.title, "Add Invitations");
+  assert.match(revisedValidation.value.tasks, /T2/);
 });
 
 test("a planner response without granular TASKS is escalated before the gate", async () => {

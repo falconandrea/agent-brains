@@ -1,0 +1,13 @@
+7210fc658ece44534b2c763872bd4921ff5e7135597a4568d717b3f281e54ca3  runs/candidate/openai-codex-gpt-5.6-sol/hello-scope.json
+ae3196664e9a05ab9d4295497c33f649b11a484ab04e360e16558a3ac10883fb  runs/candidate/openai-codex-gpt-5.6-sol/retry-c4.json
+ec39dad5fe5177742b8f7237222a0f0d3b6c7af0a47637983ed9c6b8ed511892  runs/candidate/openai-codex-gpt-5.6-sol/revision.json
+63e70409cc84f282bfa847cb66a458ca4dcfcfd1c2dbfb20b4e71771705393c5  runs/candidate/zai-glm-5.2/hello-scope.json
+c38b8918321b8d2d39549f3329170efcb89a76d48c9ddd3972d6df1555b97d1a  runs/candidate/zai-glm-5.2/retry-c4.json
+a8bde28d1910ef509855d75fa937baeb5e8f3802f9c18079f387ff6cbff30df7  runs/candidate/zai-glm-5.2/revision.json
+29d4a7850f48803fab220a8efd37c6c735d20f28b200d8249ca2afa6fb29e416  runs/current/openai-codex-gpt-5.6-sol/hello-scope.json
+195c1db1861f8fc59230c12e94841717fd405d2277c17193eb8608cc855fe273  runs/current/openai-codex-gpt-5.6-sol/retry-c4.json
+5df074a19cbb31314e51c59ee6b97b61e8567eb67eb21b86cdcc53cb9298dee8  runs/current/openai-codex-gpt-5.6-sol/revision.json
+471c77ac3c00a7103e1c5c357f43d55dbaaefc277db6fd2d63581f54160e5a71  runs/current/zai-glm-5.2/hello-scope.json
+667f9237be4e3c099d0a23576957b9f759d314a1fe32e4dabcfff3b87724dc18  runs/current/zai-glm-5.2/retry-c4.json
+59d228217b320f0619e79f2a8653384efec1d8c3e82487b452409d0248f3204d  runs/current/zai-glm-5.2/revision.json
+e7c2bf11c34f76940e2201bcd1109702a3043ce75b3a168d36e4721d32f2eca9  results.json

@@ -107,7 +107,7 @@ items are recorded for implementation; none is fixed by the November 1 reconcili
   skill-loading evidence stays scoped to that CLI.
   [Evidence and limits](../evals/pi-compatibility/T9-2026-11-12.md) ·
   [1.5.2 migration](../evals/pi-compatibility/PI-1.5.2-2026-11-12.md).
-- [ ] **RV2 — Planner generation reliability.** The C4 report records two
+- [x] **RV2 — Planner generation reliability.** The C4 report records two
   rejected plans missing literal `## TITLE`; the production prompt and
   validator still use the heading contract. Evaluate a bounded improvement
   to generation/output delivery with representative real outputs and malformed
@@ -121,6 +121,25 @@ items are recorded for implementation; none is fixed by the November 1 reconcili
   treated required planning artifacts as violating an only-hello.txt criterion.
   Retain that scope-conflict case alongside missing-TITLE cases; the report
   defines the bounded next evaluation. No reliability implementation is delivered.
+  **Resolved (2026-11-13, bounded scope).** Prompt-only change in
+  `src/workflows/feature-prompts.ts`: planner and revision prompts declare the
+  literal `## TITLE`/`## PRD`/`## TASKS` contract with precedence over loaded
+  skill templates and a final self-check, and distinguish implementation-scope
+  criteria from the orchestrator-written `.ai/features/<slug>/` workflow
+  artifacts; the reviewer prompt declares those artifacts workflow-owned and
+  never removable. Validators, rejection persistence, approval, documents,
+  resume and role/tool boundaries are unchanged; the exact historical C4
+  output shape is pinned as still `missing_title`. Pre-declared paired
+  real-provider comparison (current worktree vs HEAD, exact C4 and real-TUI
+  requests plus a revision case; `zai/glm-5.2` and `openai-codex/gpt-5.6-sol`):
+  candidate 6/6 contract-valid versus current 5/6, the one current failure
+  reproducing the historical missing-title class; artifact-scope criteria
+  stated correctly only under the candidate. Costs $0.3448 SDK-estimated,
+  under the declared $1.50 cap. Limits: six pairs, one attempt each,
+  no routed skills injected, reviewer side unexercised live, no reliability
+  rate inferred; the next real `/feature` run is the observation point for
+  the reviewer behavior. Evidence, protocol and limits:
+  [RV2 report](../evals/pi-compatibility/RV2-2026-11-13.md).
 - [ ] **RV3 — Catalog routing guards.** Unknown skills still default to
   `craft`. Add targeted structural/routing checks for catalog skills that
   start workflows, require mutation, or conflict with read-only roles; cover

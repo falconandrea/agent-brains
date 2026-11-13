@@ -1,0 +1,32 @@
+{
+  "arm": "current",
+  "model": {
+    "id": "zai-glm-5.2",
+    "provider": "zai",
+    "model": "glm-5.2",
+    "thinking": "medium"
+  },
+  "case": "hello-scope",
+  "promptSha256": "2c89b2bd004b4c80b48aa741929af511cafa4d1bb18b3dc4289138305d37ce0c",
+  "aborted": false,
+  "output": "## TITLE\nCreate hello.txt Compat Fixture\n\n## PRD\n\n**Problem.** The compatibility fixture defines a verification (`node check.test.js`) that requires a `hello.txt` file containing exactly `hello\\n`, but the file does not exist yet, so the configured check fails.\n\n**User stories.**\n- As a compat-pilot runner, I want `hello.txt` to contain exactly `hello` followed by one newline so that `node check.test.js` passes out of the box.\n- As a repository reviewer, I want `check.test.js` and `AGENTS.md` left untouched so that only the fixture's expected output is added.\n\n**Scope.** Create one new file, `hello.txt`, at the fixture root with exactly the 6 bytes `hello\\n` (LF, no trailing spaces, no BOM). Verify with the configured command.\n\n**Out of scope.** Dependencies, refactors, edits to `check.test.js`, `AGENTS.md`, or `package.json`, commits or pushes, any content beyond the single line.\n\n**Acceptance criteria.**\n- A new file `hello.txt` exists at the fixture root with content exactly `hello\\n` (6 bytes).\n- `node check.test.js` exits 0 and prints `ok`.\n- `check.test.js` and `AGENTS.md` are byte-identical to their initial state (no diff).\n- No other files are added, modified, or deleted; nothing is committed or pushed.\n\n**Alternatives considered.**\n- Write `hello.txt` from within `check.test.js` — rejected: the user requires `check.test.js` unchanged, and the check must remain a pure verifier.\n- Use `npm test` instead of `node check.test.js` — rejected as the primary gate: it merely wraps the same script; the configured verification command is `node check.test.js`.\n\n**Assumptions.**\n- `hello.txt` goes at the fixture root (the CWD), because `check.test.js` reads the relative path `hello.txt`.\n- The newline is LF (`\\n`), not CRLF, as enforced byte-for-byte by the check.\n- Verification runs from the fixture directory; the implementer does not commit or push.\n\n**Architecture/components.** Single new data file `hello.txt`; no code changes. `check.test.js` remains the contract boundary.\n\n**Data flow.** `check.test.js` reads `hello.txt` synchronously and compares to `\"hello\\n\"`; exit code 0/1 is the observable result.\n\n**Error handling.** If `hello.txt` is missing or mismatches, the check already reports the mismatch and exits 1; no additional error handling is needed.\n\n**Testing strategy.** Run the configured `node check.test.js` once after file creation; confirm `ok` and exit 0. No new tests (the fixture check is the test).\n\n## TASKS\n- T1 — Create `hello.txt` at the fixture root containing exactly `hello` followed by a single LF newline (6 bytes, no trailing spaces). Files: `hello.txt`.\n- T2 — Run `node check.test.js` from the fixture directory and confirm it prints `ok` and exits 0, leaving `check.test.js` and `AGENTS.md` unchanged. Files: `check.test.js`.",
+  "validation": {
+    "valid": true,
+    "value": {
+      "title": "Create hello.txt Compat Fixture",
+      "prd": "**Problem.** The compatibility fixture defines a verification (`node check.test.js`) that requires a `hello.txt` file containing exactly `hello\\n`, but the file does not exist yet, so the configured check fails.\n\n**User stories.**\n- As a compat-pilot runner, I want `hello.txt` to contain exactly `hello` followed by one newline so that `node check.test.js` passes out of the box.\n- As a repository reviewer, I want `check.test.js` and `AGENTS.md` left untouched so that only the fixture's expected output is added.\n\n**Scope.** Create one new file, `hello.txt`, at the fixture root with exactly the 6 bytes `hello\\n` (LF, no trailing spaces, no BOM). Verify with the configured command.\n\n**Out of scope.** Dependencies, refactors, edits to `check.test.js`, `AGENTS.md`, or `package.json`, commits or pushes, any content beyond the single line.\n\n**Acceptance criteria.**\n- A new file `hello.txt` exists at the fixture root with content exactly `hello\\n` (6 bytes).\n- `node check.test.js` exits 0 and prints `ok`.\n- `check.test.js` and `AGENTS.md` are byte-identical to their initial state (no diff).\n- No other files are added, modified, or deleted; nothing is committed or pushed.\n\n**Alternatives considered.**\n- Write `hello.txt` from within `check.test.js` — rejected: the user requires `check.test.js` unchanged, and the check must remain a pure verifier.\n- Use `npm test` instead of `node check.test.js` — rejected as the primary gate: it merely wraps the same script; the configured verification command is `node check.test.js`.\n\n**Assumptions.**\n- `hello.txt` goes at the fixture root (the CWD), because `check.test.js` reads the relative path `hello.txt`.\n- The newline is LF (`\\n`), not CRLF, as enforced byte-for-byte by the check.\n- Verification runs from the fixture directory; the implementer does not commit or push.\n\n**Architecture/components.** Single new data file `hello.txt`; no code changes. `check.test.js` remains the contract boundary.\n\n**Data flow.** `check.test.js` reads `hello.txt` synchronously and compares to `\"hello\\n\"`; exit code 0/1 is the observable result.\n\n**Error handling.** If `hello.txt` is missing or mismatches, the check already reports the mismatch and exits 1; no additional error handling is needed.\n\n**Testing strategy.** Run the configured `node check.test.js` once after file creation; confirm `ok` and exit 0. No new tests (the fixture check is the test).",
+      "tasks": "## TASKS\n- T1 — Create `hello.txt` at the fixture root containing exactly `hello` followed by a single LF newline (6 bytes, no trailing spaces). Files: `hello.txt`.\n- T2 — Run `node check.test.js` from the fixture directory and confirm it prints `ok` and exits 0, leaving `check.test.js` and `AGENTS.md` unchanged. Files: `check.test.js`."
+    }
+  },
+  "usage": {
+    "input": 1282,
+    "output": 1157,
+    "cacheRead": 7936,
+    "cacheWrite": 0,
+    "cost": 0.00894896,
+    "provider": "zai",
+    "model": "glm-5.2",
+    "elapsedMs": 17459
+  },
+  "elapsedMs": 17531
+}

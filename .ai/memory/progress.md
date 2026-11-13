@@ -3,9 +3,11 @@
 **Last Updated:** 2026-11-13
 **Current Phase:** Global workflow validation complete; M4 rollout and
 existing technical follow-ups remain open.
-**Active Task:** Pi 1.5.2 real-provider/fullscreen-TUI pilot recorded; all
-pipeline phases ran, ending `needs_human` on a plan/review artifact-scope conflict.
-Next: RV2 planner generation reliability, using the bounded scope in the pilot report.
+**Active Task:** RV2 planner generation reliability resolved at the bounded
+pilot scope: prompt-only output-contract precedence and artifact-scope
+distinction, evaluated with a pre-declared paired real-provider comparison
+(candidate 6/6 valid vs current 5/6). Next: observe the reviewer-side
+behavior on the next real `/feature` run; M4 and RV3 remain open.
 
 ## Current state
 
@@ -47,6 +49,18 @@ Next: RV2 planner generation reliability, using the bounded scope in the pilot r
   reviewer treated required planning artifacts as violating the generated
   only-hello.txt criterion. HEAD unchanged, lock released; no consumer changes.
   [Pilot evidence, limits and RV2 scope](../../docs/evals/pi-compatibility/REAL-TUI-2026-11-13.md).
+  RV2 is now resolved (2026-11-13, bounded scope): planner/revision/reviewer
+  prompts carry the literal TITLE/PRD/TASKS contract with precedence over skill
+  templates, a final self-check, and the implementation-vs-workflow-artifact
+  scope distinction; validators, rejection persistence, approval, documents and
+  resume are unchanged. A pre-declared paired real-provider comparison found
+  the candidate 6/6 contract-valid versus 5/6 current, with the single current
+  failure reproducing the historical missing-title class; unqualified
+  file-scope criteria appeared only under current prompts. Limits: six pairs,
+  one attempt each, no routed skills injected, reviewer side unexercised live,
+  no reliability rate inferred; the next real `/feature` run is the observation
+  point. Evidence and protocol:
+  [RV2 report](../../docs/evals/pi-compatibility/RV2-2026-11-13.md).
   [Migration evidence and limits](../../docs/evals/pi-compatibility/PI-1.5.2-2026-11-12.md).
 
 ## Blockers and validation gaps
@@ -54,9 +68,14 @@ Next: RV2 planner generation reliability, using the bounded scope in the pilot r
 - Pi 1.5.2 now has one real-provider/fullscreen-TUI pipeline observation,
   ending `needs_human`; successful real-provider feature completion, live
   cancel/resume, revision/fix loops and other platforms remain unverified.
-  The planner/reviewer artifact-scope conflict is retained as an RV2 case.
+  The planner/reviewer artifact-scope conflict is addressed at the prompt
+  level by RV2 (2026-11-13); the reviewer-side effect is unexercised live
+  and rides on the next real run.
   Historical skill loading on Pi CLI 0.85.1 does not establish engine
   compatibility with SDK 0.85.1.
+- RV2's paired sample is six pairs, one attempt per cell, without routed
+  skills: it does not establish a general reliability rate for either
+  prompt, and skill-template precedence under conflict was not measured.
 - T7 evidence is mixed-date/version-qualified; residual baselines were
   Codex 0.167.0, OpenCode 2.2.6 and Pi 0.85.1. November 3 selector/refresh
   evidence is user-observed, with no separate raw capture identified.
@@ -75,15 +94,16 @@ Next: RV2 planner generation reliability, using the bounded scope in the pilot r
 
 ## Next actions
 
-1. Address RV2 planner generation reliability with the bounded output-contract
-   scope and cases in the [pilot report](../../docs/evals/pi-compatibility/REAL-TUI-2026-11-13.md#rv2-next-scope).
-   The pilot is recorded, not a successful real-provider completion claim.
-   Preserve deterministic rejection and document/resume contracts; T7 parser
-   extraction remains separate. T9 is complete and superseded by 1.5.2.
+1. Observe RV2's reviewer-side artifact-scope behavior on the next suitable
+   real `/feature` run and record it against the
+   [RV2 report](../../docs/evals/pi-compatibility/RV2-2026-11-13.md);
+   no new evaluation project is opened for it. Preserve deterministic
+   rejection and document/resume contracts; T7 parser extraction remains
+   separate. T9 is complete and superseded by 1.5.2.
 2. Review ga-analytics migration/recovery evidence before further M4 work.
    Continue only with separate per-repository authorization and live discovery
    before removing destination-proven managed links.
-3. Retain RV2 planner reliability and RV3 routing guards; RV1 implements neither.
+3. Retain RV3 routing guards. RV1 and RV2 are resolved.
    Keep optional parser extraction T7 separate. U12/U13/U14 remain open;
    T8 is covered by U6/U8. Apply T10 verification to implementation work.
    [Hardening tasks](../features/main-review-hardening/tasks-main-review-hardening.md).

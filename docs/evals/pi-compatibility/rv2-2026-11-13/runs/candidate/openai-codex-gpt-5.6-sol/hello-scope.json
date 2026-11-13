@@ -1,0 +1,32 @@
+{
+  "arm": "candidate",
+  "model": {
+    "id": "openai-codex-gpt-5.6-sol",
+    "provider": "openai-codex",
+    "model": "gpt-5.6-sol",
+    "thinking": "high"
+  },
+  "case": "hello-scope",
+  "promptSha256": "94c7cec5d3b87afcabd1480dfc1a86f5bf2adabaee77fb29f95c8b973a527569",
+  "aborted": false,
+  "output": "## TITLE\nHello Text Compatibility Fixture\n\n## PRD\n\n### Problem\nThe compatibility fixture requires a root-level text file with exact content matching its existing verification script.\n\n### User Story\n- As a compatibility-test maintainer, I want `hello.txt` to contain the expected text so that the fixture passes its configured verification.\n\n### Scope\n- Add `hello.txt` at the project root.\n- Store exactly `hello` followed by one LF newline.\n- Verify with `node check.test.js`.\n\n### Out of Scope\n- Dependency changes.\n- Refactoring or test changes.\n- Commits or pushes.\n- Changes to existing files.\n\n### Acceptance Criteria\n- When `hello.txt` is read as UTF-8, its content is exactly `hello\\n`.\n- `hello.txt` contains no BOM, additional whitespace, or additional newlines.\n- `node check.test.js` exits successfully and prints `ok`.\n- Feature implementation adds only `hello.txt`; `check.test.js`, `AGENTS.md`, and `package.json` remain unchanged.\n- No dependencies are added or updated.\n- No commit or push is performed.\n\n### Alternatives Considered\n- Generate `hello.txt` during verification. Rejected because the fixture requires a persistent artifact and the existing verifier only reads it.\n- Modify `check.test.js` to accept other content. Rejected because the established compatibility contract must remain unchanged.\n- Add the static file directly. Chosen because it is the smallest change satisfying the existing contract.\n\n### Assumptions\n- `hello.txt` belongs in the current project root beside `check.test.js`.\n- The newline is an LF byte, consistent with the verifier’s exact `hello\\n` expectation.\n- Verification is run from the project root because `check.test.js` uses a relative file path.\n\n### Architecture/Components\n- `hello.txt`: static compatibility fixture.\n- `check.test.js`: unchanged verifier defining the exact content contract.\n\n### Data Flow\n`check.test.js` reads `hello.txt` as UTF-8, compares it with `hello\\n`, and exits successfully only on an exact match.\n\n### Error Handling\nNo new error-handling code is needed. The existing verifier reports missing or mismatched content through an exception or nonzero exit.\n\n### Testing Strategy\nRun `node check.test.js` from the project root and confirm exit code zero with output `ok`.\n\n## TASKS\n- T1 — Create the root fixture file with exactly `hello` followed by one LF newline. Files: `hello.txt`.\n- T2 — Run the configured verification and confirm existing protected files remain unchanged. Files: `hello.txt`, `check.test.js`, `AGENTS.md`, `package.json`.",
+  "validation": {
+    "valid": true,
+    "value": {
+      "title": "Hello Text Compatibility Fixture",
+      "prd": "### Problem\nThe compatibility fixture requires a root-level text file with exact content matching its existing verification script.\n\n### User Story\n- As a compatibility-test maintainer, I want `hello.txt` to contain the expected text so that the fixture passes its configured verification.\n\n### Scope\n- Add `hello.txt` at the project root.\n- Store exactly `hello` followed by one LF newline.\n- Verify with `node check.test.js`.\n\n### Out of Scope\n- Dependency changes.\n- Refactoring or test changes.\n- Commits or pushes.\n- Changes to existing files.\n\n### Acceptance Criteria\n- When `hello.txt` is read as UTF-8, its content is exactly `hello\\n`.\n- `hello.txt` contains no BOM, additional whitespace, or additional newlines.\n- `node check.test.js` exits successfully and prints `ok`.\n- Feature implementation adds only `hello.txt`; `check.test.js`, `AGENTS.md`, and `package.json` remain unchanged.\n- No dependencies are added or updated.\n- No commit or push is performed.\n\n### Alternatives Considered\n- Generate `hello.txt` during verification. Rejected because the fixture requires a persistent artifact and the existing verifier only reads it.\n- Modify `check.test.js` to accept other content. Rejected because the established compatibility contract must remain unchanged.\n- Add the static file directly. Chosen because it is the smallest change satisfying the existing contract.\n\n### Assumptions\n- `hello.txt` belongs in the current project root beside `check.test.js`.\n- The newline is an LF byte, consistent with the verifier’s exact `hello\\n` expectation.\n- Verification is run from the project root because `check.test.js` uses a relative file path.\n\n### Architecture/Components\n- `hello.txt`: static compatibility fixture.\n- `check.test.js`: unchanged verifier defining the exact content contract.\n\n### Data Flow\n`check.test.js` reads `hello.txt` as UTF-8, compares it with `hello\\n`, and exits successfully only on an exact match.\n\n### Error Handling\nNo new error-handling code is needed. The existing verifier reports missing or mismatched content through an exception or nonzero exit.\n\n### Testing Strategy\nRun `node check.test.js` from the project root and confirm exit code zero with output `ok`.",
+      "tasks": "## TASKS\n- T1 — Create the root fixture file with exactly `hello` followed by one LF newline. Files: `hello.txt`.\n- T2 — Run the configured verification and confirm existing protected files remain unchanged. Files: `hello.txt`, `check.test.js`, `AGENTS.md`, `package.json`."
+    }
+  },
+  "usage": {
+    "input": 1582,
+    "output": 1158,
+    "cacheRead": 7680,
+    "cacheWrite": 0,
+    "cost": 0.032560000000000006,
+    "provider": "openai-codex",
+    "model": "gpt-5.6-sol",
+    "elapsedMs": 24114
+  },
+  "elapsedMs": 24192
+}

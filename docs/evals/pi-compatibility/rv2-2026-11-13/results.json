@@ -1,0 +1,156 @@
+{
+  "date": "2026-11-13",
+  "protocol": "docs/evals/pi-compatibility/run-rv2-plan-prompts.mjs (pre-declared)",
+  "recorded_cells": 12,
+  "aborted_first_attempt": "The first invocation crashed on a script bug (missing stack field when building PLAN_REVISION_PROMPT) before the revision cells ran. Its two completed cells (current/zai-glm-5.2 retry-c4 and hello-scope) are KEPT in the recorded sample: their protocol parameters (prompt text, fixture, model config, validator) are identical to the completed invocations and the crash affected only the not-yet-run revision-prompt construction. No cell was run twice.",
+  "totals": {
+    "all_calls_cost_usd": 0.344817,
+    "cost_cap_usd": 1.5
+  },
+  "cells": [
+    {
+      "arm": "candidate",
+      "model": "openai-codex/gpt-5.6-sol",
+      "thinking": "high",
+      "case": "hello-scope",
+      "promptSha256": "94c7cec5d3b87afcabd1480dfc1a86f5bf2adabaee77fb29f95c8b973a527569",
+      "valid": true,
+      "reason": null,
+      "cost": 0.032560000000000006,
+      "elapsedMs": 24192,
+      "artifact": "runs/candidate/openai-codex-gpt-5.6-sol/hello-scope.json"
+    },
+    {
+      "arm": "candidate",
+      "model": "openai-codex/gpt-5.6-sol",
+      "thinking": "high",
+      "case": "retry-c4",
+      "promptSha256": "507eb29acc98dcdaeecff62baf533c05913e200c67cbacefe339b674fcc9b5e2",
+      "valid": true,
+      "reason": null,
+      "cost": 0.07384160000000001,
+      "elapsedMs": 46078,
+      "artifact": "runs/candidate/openai-codex-gpt-5.6-sol/retry-c4.json"
+    },
+    {
+      "arm": "candidate",
+      "model": "openai-codex/gpt-5.6-sol",
+      "thinking": "high",
+      "case": "revision",
+      "promptSha256": "cd44184f95b23fcc3b0ba6406b56492e92bee30ae600367faca5b86e9e6b7732",
+      "valid": true,
+      "reason": null,
+      "cost": 0.023036,
+      "elapsedMs": 13311,
+      "artifact": "runs/candidate/openai-codex-gpt-5.6-sol/revision.json"
+    },
+    {
+      "arm": "candidate",
+      "model": "zai/glm-5.2",
+      "thinking": "medium",
+      "case": "hello-scope",
+      "promptSha256": "94c7cec5d3b87afcabd1480dfc1a86f5bf2adabaee77fb29f95c8b973a527569",
+      "valid": true,
+      "reason": null,
+      "cost": 0.009383200000000001,
+      "elapsedMs": 21596,
+      "artifact": "runs/candidate/zai-glm-5.2/hello-scope.json"
+    },
+    {
+      "arm": "candidate",
+      "model": "zai/glm-5.2",
+      "thinking": "medium",
+      "case": "retry-c4",
+      "promptSha256": "507eb29acc98dcdaeecff62baf533c05913e200c67cbacefe339b674fcc9b5e2",
+      "valid": true,
+      "reason": null,
+      "cost": 0.022415519999999998,
+      "elapsedMs": 57387,
+      "artifact": "runs/candidate/zai-glm-5.2/retry-c4.json"
+    },
+    {
+      "arm": "candidate",
+      "model": "zai/glm-5.2",
+      "thinking": "medium",
+      "case": "revision",
+      "promptSha256": "cd44184f95b23fcc3b0ba6406b56492e92bee30ae600367faca5b86e9e6b7732",
+      "valid": true,
+      "reason": null,
+      "cost": 0.014439280000000002,
+      "elapsedMs": 40581,
+      "artifact": "runs/candidate/zai-glm-5.2/revision.json"
+    },
+    {
+      "arm": "current",
+      "model": "openai-codex/gpt-5.6-sol",
+      "thinking": "high",
+      "case": "hello-scope",
+      "promptSha256": "2c89b2bd004b4c80b48aa741929af511cafa4d1bb18b3dc4289138305d37ce0c",
+      "valid": true,
+      "reason": null,
+      "cost": 0.0363816,
+      "elapsedMs": 22857,
+      "artifact": "runs/current/openai-codex-gpt-5.6-sol/hello-scope.json"
+    },
+    {
+      "arm": "current",
+      "model": "openai-codex/gpt-5.6-sol",
+      "thinking": "high",
+      "case": "retry-c4",
+      "promptSha256": "97f4713787246a8e18bc765477ed35bf554765765ef80c2cc81e9531bd42d1af",
+      "valid": true,
+      "reason": null,
+      "cost": 0.0705616,
+      "elapsedMs": 54897,
+      "artifact": "runs/current/openai-codex-gpt-5.6-sol/retry-c4.json"
+    },
+    {
+      "arm": "current",
+      "model": "openai-codex/gpt-5.6-sol",
+      "thinking": "high",
+      "case": "revision",
+      "promptSha256": "9f49bedb2d5a8b2a33bb3b9760713c3b8a8b9c5e9798431c56c5ce0a404dcd02",
+      "valid": true,
+      "reason": null,
+      "cost": 0.024980000000000002,
+      "elapsedMs": 15262,
+      "artifact": "runs/current/openai-codex-gpt-5.6-sol/revision.json"
+    },
+    {
+      "arm": "current",
+      "model": "zai/glm-5.2",
+      "thinking": "medium",
+      "case": "hello-scope",
+      "promptSha256": "2c89b2bd004b4c80b48aa741929af511cafa4d1bb18b3dc4289138305d37ce0c",
+      "valid": true,
+      "reason": null,
+      "cost": 0.00894896,
+      "elapsedMs": 17531,
+      "artifact": "runs/current/zai-glm-5.2/hello-scope.json"
+    },
+    {
+      "arm": "current",
+      "model": "zai/glm-5.2",
+      "thinking": "medium",
+      "case": "retry-c4",
+      "promptSha256": "97f4713787246a8e18bc765477ed35bf554765765ef80c2cc81e9531bd42d1af",
+      "valid": false,
+      "reason": "missing_title",
+      "cost": 0.014910119999999999,
+      "elapsedMs": 36958,
+      "artifact": "runs/current/zai-glm-5.2/retry-c4.json"
+    },
+    {
+      "arm": "current",
+      "model": "zai/glm-5.2",
+      "thinking": "medium",
+      "case": "revision",
+      "promptSha256": "9f49bedb2d5a8b2a33bb3b9760713c3b8a8b9c5e9798431c56c5ce0a404dcd02",
+      "valid": true,
+      "reason": null,
+      "cost": 0.01335876,
+      "elapsedMs": 34723,
+      "artifact": "runs/current/zai-glm-5.2/revision.json"
+    }
+  ]
+}

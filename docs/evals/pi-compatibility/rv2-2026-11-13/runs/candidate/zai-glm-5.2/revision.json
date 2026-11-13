@@ -1,0 +1,32 @@
+{
+  "arm": "candidate",
+  "model": {
+    "id": "zai-glm-5.2",
+    "provider": "zai",
+    "model": "glm-5.2",
+    "thinking": "medium"
+  },
+  "case": "revision",
+  "promptSha256": "cd44184f95b23fcc3b0ba6406b56492e92bee30ae600367faca5b86e9e6b7732",
+  "aborted": false,
+  "output": "## TITLE\nAdd hello.txt fixture\n\n## PRD\nProblem: the compatibility check expects a root-level hello.txt that is absent.\nScope: add hello.txt containing exactly `hello\\n`; add a one-line README section documenting hello.txt; verify with `node check.test.js`.\nOut of scope: changes to check.test.js or AGENTS.md; dependencies; refactors; commits or pushes.\nAcceptance criteria:\n- hello.txt exists at the repository root with content exactly `hello\\n`.\n- README.md contains a one-line section documenting hello.txt.\n- node check.test.js exits 0 from the repository root.\n- check.test.js and AGENTS.md remain unchanged.\n- The implementation changes no files other than hello.txt and README.md.\nAssumptions: verification runs from the repository root; the README section is a single line (created in README.md if absent).\n\n## TASKS\n- T1 — Write hello.txt with content `hello\\n`. Files: `hello.txt`.\n- T2 — Run the verifier. Files: `check.test.js`.\n- T3 — Add a one-line README section documenting hello.txt (create README.md if absent). Files: `README.md`.",
+  "validation": {
+    "valid": true,
+    "value": {
+      "title": "Add hello.txt fixture",
+      "prd": "Problem: the compatibility check expects a root-level hello.txt that is absent.\nScope: add hello.txt containing exactly `hello\\n`; add a one-line README section documenting hello.txt; verify with `node check.test.js`.\nOut of scope: changes to check.test.js or AGENTS.md; dependencies; refactors; commits or pushes.\nAcceptance criteria:\n- hello.txt exists at the repository root with content exactly `hello\\n`.\n- README.md contains a one-line section documenting hello.txt.\n- node check.test.js exits 0 from the repository root.\n- check.test.js and AGENTS.md remain unchanged.\n- The implementation changes no files other than hello.txt and README.md.\nAssumptions: verification runs from the repository root; the README section is a single line (created in README.md if absent).",
+      "tasks": "## TASKS\n- T1 — Write hello.txt with content `hello\\n`. Files: `hello.txt`.\n- T2 — Run the verifier. Files: `check.test.js`.\n- T3 — Add a one-line README section documenting hello.txt (create README.md if absent). Files: `README.md`."
+    }
+  },
+  "usage": {
+    "input": 392,
+    "output": 3017,
+    "cacheRead": 2368,
+    "cacheWrite": 0,
+    "cost": 0.014439280000000002,
+    "provider": "zai",
+    "model": "glm-5.2",
+    "elapsedMs": 40512
+  },
+  "elapsedMs": 40581
+}

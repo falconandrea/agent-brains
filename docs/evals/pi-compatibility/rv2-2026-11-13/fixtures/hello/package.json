@@ -1,0 +1,6 @@
+{
+  "name": "hello-compat-fixture",
+  "private": true,
+  "type": "commonjs",
+  "scripts": { "test": "node check.test.js" }
+}
