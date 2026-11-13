@@ -299,6 +299,9 @@ developer, verify and reviewer roles) is a separate mechanism and keeps its
 name, its `prd-<slug>.md` / `tasks-<slug>.md` documents and resume
 compatibility with historical runs.
 
+For the local engine's supported Node/Pi/TypeBox baseline and repeatable SDK
+smoke, see [Pi compatibility](docs/pi-brain/README.md#supported-compatibility-baseline).
+
 **Explicit-only activation.** In Codex, the invasive workflows
 (`spec-and-tasks`, `setup`, `laravel`, `nextjs`, `astro`) and the gated
 `solution-capture` workflow carry `agents/openai.yaml` with

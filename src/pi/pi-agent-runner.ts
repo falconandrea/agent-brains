@@ -2,9 +2,15 @@
  * THE ONLY FILE THAT TOUCHES THE PI SDK (with human-input.ts and the extension).
  *
  * Pi ships no stable version pin — everything is confined here so an API change
- * costs one file. Typechecked against @earendil-works/pi-coding-agent 0.84.2.
+ * costs one file. Typechecked against @earendil-works/pi-coding-agent 1.5.2
+ * (migrated from 0.84.2, 2026-11-12).
  *
- * Still unproven at runtime: nothing here has executed. See docs/pi-brain/SPIKE.md.
+ * Runtime status on 1.5.2 (scripted scope): executed by the SDK/workflow smoke
+ * (`npm run smoke:pi`, loopback responses) and by isolated Pi CLI 1.5.2 RPC
+ * fixture runs (gate approval, /flow stop, SIGKILL + /flow resume). Still
+ * unproven on 1.5.2: real-provider runs and the fullscreen TUI. Historical
+ * runtime evidence (spike, 2026-08 live runs) predates this baseline — see
+ * docs/pi-brain/SPIKE.md and docs/evals/pi-compatibility/PI-1.5.2-2026-11-12.md.
  */
 
 import {

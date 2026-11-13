@@ -3,8 +3,11 @@
  *
  * Registers the commands and wires the ports. Everything below the ports is
  * Pi-free and unit-tested; this file plus src/pi/* are the only Pi surface.
- * Typechecked against @earendil-works/pi-coding-agent 0.84.2, NEVER RUN — see
- * docs/pi-brain/SPIKE.md.
+ * Typechecked against @earendil-works/pi-coding-agent 1.5.2 (migrated from
+ * 0.84.2, 2026-11-12). Runtime-verified on 1.5.2 at scripted scope only
+ * (SDK smoke + CLI RPC fixtures — see docs/evals/pi-compatibility/
+ * PI-1.5.2-2026-11-12.md); real-provider and fullscreen-TUI runs remain
+ * unverified on this baseline. Historical evidence: docs/pi-brain/SPIKE.md.
  */
 
 import { execFileSync } from "node:child_process";

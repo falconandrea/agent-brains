@@ -1,6 +1,6 @@
 # Tasks — Code review follow-ups
 
-Status: in progress. T1–T4 are implemented and verified (T1–T3 on 2026-10-08, T4 on 2026-10-11); T5–T6 on 2026-10-12; T7–T10 are pending. Requirements and review evidence are in the [PRD](prd-code-review-follow-ups.md).
+Status: in progress. T1–T4 are implemented and verified (T1–T3 on 2026-10-08, T4 on 2026-10-11); T5–T6 on 2026-10-12. T8 is covered by U6/U8; T9 completed on 2026-11-12. T7 and final T10 closure remain pending. Requirements and review evidence are in the [PRD](prd-code-review-follow-ups.md).
 
 ## Safety fixes and regression coverage
 
@@ -23,7 +23,19 @@ Status: in progress. T1–T4 are implemented and verified (T1–T3 on 2026-10-08
   is queued. Reopen only for a specific remaining duplication. Historical
   validation and limitations are recorded in the U6/U8 task entries.
 
-- [ ] **T9 — Record and declare verified compatibility (F7).** Inspect locked SDK/typebox versions and current runtime requirements. Validate suitable peer ranges and Node support through local checks and a Pi SDK smoke run. Update `package.json` and documentation; update the lockfile if required. Record evidence and any runtime validation still pending.
+- [x] **T9 — Record and declare verified compatibility (F7).** Completed
+  2026-11-12: exact Pi peers 0.84.2 and direct TypeBox 1.3.14; Node
+  `>=24.12.0 <25`, observed on 24.12.0/macOS arm64. Root lock requirements
+  reconciled without upgrades. Added `npm run smoke:pi`: real SDK runner,
+  Git and shell verification through a complete fixture workflow, with scripted
+  loopback model responses. Smoke exit 0, `npm test` 484/484, typecheck,
+  dependency-tree, shell syntax and documentation checks passed. Other SDK/Node
+  majors/platforms, real-provider authentication and a new interactive TUI run
+  remain unverified; Pi CLI 0.85.1 skill-loading evidence does not widen engine
+  compatibility. [Evidence and limits](../../../docs/evals/pi-compatibility/T9-2026-11-12.md).
+  Superseded later the same day by the 1.5.2 baseline migration (same checks
+  re-run on SDK/CLI 1.5.2; peers now 1.5.2 / TypeBox 1.3.27) — see the
+  [migration report](../../../docs/evals/pi-compatibility/PI-1.5.2-2026-11-12.md).
 
 ## Completion
 

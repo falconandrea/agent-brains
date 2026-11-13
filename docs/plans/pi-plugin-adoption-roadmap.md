@@ -92,13 +92,21 @@ items are recorded for implementation; none is fixed by the November 1 reconcili
   clean. Limits: verified against local Git 2.54 (Apple Git-157) only; no
   repeated live `/feature` run was made. Review accepted and commit
   authorized on 2026-11-08.
-- [ ] **Compatibility — existing T9 remains the owner.** Complete
-  [T9](../../.ai/features/code-review-follow-ups/tasks-code-review-follow-ups.md)
-  with supported Node/SDK/TypeBox ranges and appropriate runtime smoke
-  evidence. Peer dependencies remain `*`, no `engines` field is declared,
-  and the lockfile uses SDK 0.84.2. M3 skill-loading evidence on Pi 0.85.1
-  does not establish full `/feature` engine compatibility. The old request
-  to finish this before M3 is superseded; do not create a duplicate task.
+- [x] **Compatibility — existing T9 remains the owner.** Completed 2026-11-12
+  through [T9](../../.ai/features/code-review-follow-ups/tasks-code-review-follow-ups.md):
+  exact SDK peers 0.84.2, direct TypeBox 1.3.14, Node `>=24.12.0 <25` with
+  checks on 24.12.0/macOS arm64, real SDK/workflow smoke with scripted loopback
+  responses, 484/484 tests and typecheck. Superseded the same day by the
+  **1.5.2 migration**: peers now pin `pi-coding-agent`/`pi-ai`/`pi-tui` 1.5.2
+  with direct TypeBox 1.3.27 (the 1.5.0 tool-validation move to `pi-schema`
+  required no code change — all engine schemas are plain JSON Schema). Checks
+  on 1.5.2: typecheck, 484/484 tests, `smoke:pi`, and isolated Pi CLI 1.5.2
+  RPC-mode fixture runs covering gate approval, `/flow stop` cancellation and
+  SIGKILL-interruption `/flow resume` to `completed`. Real-provider runs and
+  fullscreen-TUI interaction remain unverified for 1.5.2; M3's Pi 0.85.1
+  skill-loading evidence stays scoped to that CLI.
+  [Evidence and limits](../evals/pi-compatibility/T9-2026-11-12.md) ·
+  [1.5.2 migration](../evals/pi-compatibility/PI-1.5.2-2026-11-12.md).
 - [ ] **RV2 — Planner generation reliability.** The C4 report records two
   rejected plans missing literal `## TITLE`; the production prompt and
   validator still use the heading contract. Evaluate a bounded improvement
@@ -127,13 +135,14 @@ items are recorded for implementation; none is fixed by the November 1 reconcili
   test-first evidence. On the next suitable task, capture the failing check
   before implementation and the passing check afterward, respecting execution
   ownership. Do not reopen C2 or make this a prerequisite for all migration.
-- [ ] **RV5 — Compact current progress.** `.ai/memory/progress.md` has
-  1,226 lines (about 90 KB) at reconciliation and mixes current status with
-  extensive completion history and superseded summaries. Keep current open
-  items concise, archive historical narrative with resolving links, and remove
-  contradictory current-status summaries while preserving evidence and the
-  roadmap/migration plan's ownership. This records cleanup only; no history
-  has been removed.
+- [x] **RV5 — Compact current progress.** Completed in `5535705`:
+  progress-gardener and the historical progress archive were added, and
+  the tracker was reduced to a current-state snapshot with resolving links.
+  The former 1,226-line/about-90-KB description records the pre-cleanup state.
+  Further condensation and tracker reconciliation were applied on 2026-11-12;
+  no validation criterion or consumer rollout was closed by this cleanup.
+  [Current progress](../../.ai/memory/progress.md) ·
+  [Preserved history](../history/progress-2026-11-04.md).
 
 Verification at reconciliation: 107/107 targeted tests passed across
 `tests/git.test.ts`, `tests/pi-session-injection.test.ts` and

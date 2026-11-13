@@ -1,149 +1,116 @@
 # Progress
 
-**Last Updated:** 2026-11-10
-**Current Phase:** Global workflow validation complete; per-repository migration
-and existing roadmap follow-ups remain separate.
-**Active Task:** Review approved; documentation and evidence archive are being
-committed. The last 34
-invocation cells passed (OpenCode 7, Pi 13, Codex 14); no matrix cell remains.
-T7 is complete, AC8 satisfied and M3's source tracker reconciled. AC5 remains
-satisfied with its recorded limits. The external review found no further
-findings. RV1 remains resolved.
+**Last Updated:** 2026-11-13
+**Current Phase:** Global workflow validation complete; M4 rollout and
+existing technical follow-ups remain open.
+**Active Task:** Progress cleanup and the Pi 1.5.2 migration are implemented,
+verified and reviewed; commit authorized on 2026-11-13, no push requested.
+Next: a bounded real-provider/fullscreen-TUI fixture run on Pi 1.5.2.
 
 ## Current state
 
-- Global workflows: T1–T6 delivered; T7 is complete, AC8 satisfied and M3
-  validation complete as of 2026-11-10, using all 50 route/CWD cells plus
-  previously accepted selector and qualified running-session refresh evidence.
-  The final 34 invocations have green original results, native provenance,
-  zero model tools, exit 0, absent owned groups and clean consumer Git.
-  [Final validation/handoff](../../docs/evals/global-workflows/T7-2026-11-08.md#final-residual-validation-and-acceptance-reconciliation--2026-11-10).
-  AC5 is satisfied against its literal criterion at fixture scope: gate cancel
-  and interrupted-run resume each ran in a real Pi 0.85.1 TUI with persisted
-  outcomes in the existing run schemas (resume ended needs_human via reviewer
-  escalation, not completed).
-  [Tasks](../features/global-workflows/tasks.md) ·
-  [T7 evidence and limits](../../docs/evals/global-workflows/T7-2026-11-03.md) ·
-  [Bounded continuation](../../docs/evals/global-workflows/T7-2026-11-08.md).
-- M1 (`6567873`) and M2 (`06039e9`) are committed. M3 global installation,
-  CLI and interactive validation are verified at the approved pilot scope;
-  the source-plan refresh checkbox is reconciled. The review approved this
-  documentation scope; no new installation or rollout occurred.
-- M4 first wave is reviewed and committed; rollout remains incomplete.
-  The migration log also records ga-analytics work and recovery corrections
-  through 2026-11-04 as uncommitted and awaiting review. Do not infer rollout
-  completion from the first wave or CLI evidence.
+- Global workflows T1–T7 are delivered; T7/AC8/M3 validation completed
+  on 2026-11-10 at the approved CLI/TUI pilot scope. All 50 route/CWD
+  cells are accounted for; no repeated matrix, selector, refresh or
+  AC5 check is pending. Documentation/evidence committed as `9ce1a8e`.
+  [Acceptance and limits](../../docs/evals/global-workflows/T7-2026-11-08.md#final-residual-validation-and-acceptance-reconciliation--2026-11-10).
+- M1 (`6567873`) and M2 (`06039e9`) are committed. M4's first wave is
+  reviewed and committed; rollout remains incomplete. The migration log
+  records ga-analytics/recovery work through 2026-11-04 as uncommitted
+  and awaiting review; its current checkout has not been re-inspected.
   [Migration status and log](../../docs/plans/cross-harness-workflow-migration.md).
-- progress-gardener is locally implemented in common (inherited by full), with
-  operational routing and README guidance; user reviewed and authorized commit.
-  Creation checks passed 476/476 tests, typecheck and diff check; skill-creator's
-  Python validator was unavailable because PyYAML was missing.
-- RV1 is resolved: `snapshotTree` builds the scratch index in steps that
-  keep git's untracked-files machinery away from a bulk add — `git add -u`
-  for tracked updates, `git ls-files --others --exclude-standard` (runtime
-  paths excluded) to enumerate untracked files, `git update-index --stdin`
-  to add those exact paths — so the exact historical excludes
-  (`.pi/pi-brain.lock*`, `.pi/pi-brain/`) no longer trip git's ignored-path
-  complaint for any ignore-rule shape, and .gitattributes clean filters run
-  only on applicative content (rounds P2: post-add removal was too late for
-  failing filters; wildcard-broken pathspecs swallowed lookalike
-  applicative files and still collected an ignored `.pi`). Real-Git
-  regressions cover ignored runtime, failing filters on runtime and
-  applicative files, lookalike-path precision, the whole-`.pi` ignore case,
-  user-index preservation, and a subprocess test proving a mid-stream stdin
-  failure (EPIPE when git dies on bulk input) rejects catchably with the
-  command's real cause instead of crashing the Node process; non-ignored and
-  tracked-runtime cases reuse existing coverage. `npm test` 484/484,
-  typecheck and diff check pass.
-  Review accepted and commit authorized on 2026-11-08.
-  Limits: verified on local Git 2.54 only; no repeated live `/feature` run.
-  [RV1 record](../../docs/plans/pi-plugin-adoption-roadmap.md).
+- RV1 is resolved and committed as `9c1647d`. Historical verification:
+  484/484 tests, typecheck and diff check passed. Limits: local Git 2.54
+  only; no repeated live `/feature` run.
+  [Implementation, regressions and review](../../docs/plans/pi-plugin-adoption-roadmap.md#review-reconciliation-follow-ups-verified-2026-11-01).
+- progress-gardener is committed as `5535705`, in common/inherited full,
+  with routing and README guidance. Creation checks: 476/476 tests,
+  typecheck and diff check passed; the Python skill validator was
+  unavailable because PyYAML was missing.
+- T9 completed on 2026-11-12: exact Pi SDK peers 0.84.2, direct TypeBox
+  1.3.14 and Node `>=24.12.0 <25` (observed 24.12.0/macOS arm64).
+  Scripted-loopback SDK/workflow smoke, 484/484 tests and typecheck passed.
+  [Evidence and compatibility limits](../../docs/evals/pi-compatibility/T9-2026-11-12.md).
+  Superseded the same day by the 1.5.2 migration: peers now pin
+  `pi-coding-agent`/`pi-ai`/`pi-tui` 1.5.2 and direct TypeBox 1.3.27; no
+  source change was required (all engine tool schemas are plain JSON Schema,
+  so Pi 1.5's `pi-schema` validation applies unchanged). Verified on 1.5.2:
+  typecheck, 484/484 tests, `smoke:pi`, plus isolated Pi CLI 1.5.2 RPC-mode
+  fixture runs — gate approval, `/flow stop` cancellation and SIGKILL
+  interruption resumed with `/flow resume` to `completed`. Real-provider and
+  full-workflow fullscreen-TUI runs remain unverified on 1.5.2. Global CLI
+  1.5.2 was independently confirmed on 2026-11-13; the user reported a working
+  `/stack` response (nodejs, 70%). This establishes command dispatch only,
+  not real-provider workflow completion.
+  [Migration evidence and limits](../../docs/evals/pi-compatibility/PI-1.5.2-2026-11-12.md).
 
 ## Blockers and validation gaps
 
-- No T7 invocation or AC8 refresh check remains pending. Evidence is mixed-date
-  and version-qualified: new residual baselines Codex 0.167.0 / OpenCode 2.2.6,
-  Pi 0.85.1; existing approved observations are reused. Earlier failed driver
-  verdicts and the November 9 stop-rule deviation remain in the report. The
-  last 34 invocations passed with no stop-rule exception. Private packages were
-  preserved at `/Users/andreafalcon/.local/state/agent-brains/t7-final-validation-20261110/`;
-  the final manifest and byte-for-byte package copies were verified. Three live
-  batch packages have no root manifest. The historical AC5, OpenCode root and
-  residual packages, earlier attempts, and available T7 runner artifacts were
-  also archived and inventoried. The November 3 selector/refresh observations
-  have no separate raw capture identified; their evidence remains the report's
-  account of user-supplied observations. This private archive is evidence
-  custody, not a durable test suite. [Archive index](../../docs/evals/global-workflows/T7-evidence-archive-index-2026-11-10.md).
-  [Full evidence and limits](../../docs/evals/global-workflows/T7-2026-11-08.md#final-residual-validation-and-acceptance-reconciliation--2026-11-10).
-- OpenCode marker removal was not reliably visible in the existing conversation;
-  a fresh conversation in the same process returned ABSENT. Cache versus model
-  context reuse remains undetermined. Codex/Pi observed removal in conversation.
-- AC5 live cancel/resume is now observed at disposable-fixture scope: gate
-  cancel (planner completed, plan present, no approval/developer, content
-  unchanged, cancelled outcome persisted, lock released) and interrupted-run
-  resume (authentic post-approval SIGKILL, `/flow resume` from the persisted
-  log, resumed develop phase, no re-planning or re-baselining, original
-  artifacts, terminal needs_human outcome persisted). The earlier Pi `-p`
-  stale-context limit is a separate, already-recorded observation. Formal AC5
-  reconciliation confirms compatibility; resume-to-completed is unobserved
-  and not required by AC5.
-  [Scenario evidence and limits](../../docs/evals/global-workflows/T7-2026-11-08.md#scenario-2--live-interrupted-run-resume-observed).
-- T9 compatibility remains open: skill-loading evidence does not establish full
-  Pi engine compatibility. Specific owners are not assigned in this tracker.
+- The 1.5.2 baseline is verified at scripted-fixture scope only: real-provider
+  execution and a full workflow in the fullscreen TUI on 1.5.2 remain
+  unverified, as do other Node majors/platforms. Global CLI 1.5.2 is now
+  installed; the user-reported `/stack` result is a bounded command check.
+  Historical skill loading on Pi CLI 0.85.1 does not establish engine
+  compatibility with SDK 0.85.1.
+- T7 evidence is mixed-date/version-qualified; residual baselines were
+  Codex 0.167.0, OpenCode 2.2.6 and Pi 0.85.1. November 3 selector/refresh
+  evidence is user-observed, with no separate raw capture identified.
+  OpenCode removal required a fresh conversation in the same process;
+  cache versus context reuse is unresolved. Codex/Pi saw removal in conversation.
+- AC5 cancel/resume passed at disposable-fixture scope in a real Pi TUI;
+  resumed execution ended `needs_human`, not `completed`. Resume-to-completed
+  is unobserved and is not required by AC5. The earlier Pi `-p` stale-context
+  observation remains separate.
+  [Scenario evidence](../../docs/evals/global-workflows/T7-2026-11-08.md#scenario-2--live-interrupted-run-resume-observed).
+- The private archive preserves final/historical evidence and runner artifacts;
+  it is evidence custody, not a durable test suite. Earlier failed verdicts
+  and the November 9 stop-rule deviation remain in the report. Three live
+  batch packages lack root manifests; available copies were verified.
+  [Archive inventory and verification](../../docs/evals/global-workflows/T7-evidence-archive-index-2026-11-10.md).
 
 ## Next actions
 
-1. Keep RV2 planner reliability and RV3 routing guards in their existing
-   backlog; RV1's snapshot fix does not implement them.
-2. Review the final evidence/documents and confirm the historical evidence
-   inventory in the [archive index](../../docs/evals/global-workflows/T7-evidence-archive-index-2026-11-10.md).
-   Available AC5 and earlier OpenCode packages are preserved; no separate raw
-   selector/refresh capture was identified, so retain the report's stated
-   user-observation limit. No repeated manual matrix, selector, refresh, AC5 or
-   RV1 test is pending. T7/AC8/M3 validation is complete at the approved CLI/TUI
-   scope; M4 and T9 remain separate. User review approved the documentation
-   changes for commit; no push was requested.
-   [Final validation and handoff](../../docs/evals/global-workflows/T7-2026-11-08.md#final-residual-validation-and-acceptance-reconciliation--2026-11-10).
-
-3. Review ga-analytics migration/recovery evidence, then continue M4 only through
-   separately authorized per-repository work with live discovery before link removal.
-4. Retain existing source-plan tasks: code-review-follow-ups T7/T9/T10 and
-   main-review-hardening U12/U13/U14. T8 is covered by U6/U8; no duplicate task.
-   [Review follow-ups](../features/code-review-follow-ups/tasks-code-review-follow-ups.md) ·
+1. Run one bounded real-provider/fullscreen-TUI `/feature` pilot in a disposable
+   project on Pi 1.5.2; preserve evidence and qualify any unobserved behavior.
+   Migration review is complete with both documentation P3s resolved. T7 parser
+   extraction and final T10 closure remain open; T9 is complete and superseded
+   by the 1.5.2 migration.
+   [Task owner](../features/code-review-follow-ups/tasks-code-review-follow-ups.md) ·
+   [Migration report](../../docs/evals/pi-compatibility/PI-1.5.2-2026-11-12.md).
+2. Review ga-analytics migration/recovery evidence before further M4 work.
+   Continue only with separate per-repository authorization and live discovery
+   before removing destination-proven managed links.
+3. Retain RV2 planner reliability and RV3 routing guards; RV1 implements neither.
+   Keep optional parser extraction T7 separate. U12/U13/U14 remain open;
+   T8 is covered by U6/U8. Apply T10 verification to implementation work.
    [Hardening tasks](../features/main-review-hardening/tasks-main-review-hardening.md).
-5. RV4: on the next suitable real task capture observed failing/passing checks.
-   The local verification pilot has no selected target; explicit verification
-   outcomes remain pending. C3-V awaits the next explicitly requested real
-   security review; no efficacy gain is established.
-   [Follow-ups and priorities](../../docs/plans/pi-plugin-adoption-roadmap.md).
-6. Reconcile RV5's source-roadmap checkbox with the approved and verified progress
-   cleanup; the roadmap was left unchanged in this task.
+4. RV4: capture observed failing/passing checks on the next suitable real task.
+   The local verification pilot has no target; explicit verification outcomes
+   remain pending. C3-V requires an explicitly requested real security review;
+   no efficacy gain is established.
+   [Priorities and criteria](../../docs/plans/pi-plugin-adoption-roadmap.md).
 
 ## Retained decisions and deferred work
 
-- C1/C2/C3 instruction work is complete. C4 is closed as a bounded assessment:
-  corrected S1 A/B showed no detectable benefit, the full-workflow comparison
-  is inconclusive, and its unmet criterion was explicitly retired. C5 is a
-  bounded closure; no broad skill-efficacy or causal savings claim.
-  [Decisions and evidence](../../docs/plans/pi-plugin-adoption-roadmap.md).
-- W1/W4 are complete; W2/W3/R2/S3, automatic hooks, code-writing workers and Jev
-  retain their deferrals/conditions. Property/mutation work is deferred.
-  R1 trials need an explicit request; no Portal, full Cloudflare installation,
-  OS sandbox or extra mandatory reviewer is selected. Analytics remains excluded.
-- test-review stays an explicit experimental extra; useful checks were folded
-  into C2. Two unlink preservation probes were verified only in a temporary
-  fixture; shipping tests were not changed by that experiment.
+- C1/C2/C3 instruction work is complete. C4 is closed with no detectable
+  S1 A/B benefit and an inconclusive full-workflow comparison whose unmet
+  criterion was explicitly retired. C5 is bounded; no broad efficacy or
+  causal savings claim. W1/W4 are complete.
+- W2/W3/R2/S3, automatic hooks, code-writing workers, Jev and property/mutation
+  work retain their deferrals/conditions. R1 needs an explicit request.
+  No Portal, full Cloudflare installation, OS sandbox or extra mandatory
+  reviewer is selected. Analytics remains excluded.
+  [Decisions and deferred scope](../../docs/plans/pi-plugin-adoption-roadmap.md).
+- test-review remains an explicit experimental extra; useful checks entered
+  C2. Its two unlink probes used temporary fixtures, not changed shipping tests.
   [Pilot evidence](../../docs/evals/test-review/README.md).
-- Curated consumer refreshes and independent manual copies remain per-consumer
-  work; humanizer copies need the whole folder.
-  [Adaptation note](../../docs/research/alfonso-skills-adaptation.md).
-- Preserve C1/C2/C3 behavior, Pi commands and resume artifacts. Migration is
-  per repository; remove only destination-proven managed links. Keep private
-  backup/recovery details in the relevant ignored local notes.
+- Consumer refreshes/manual copies remain per-consumer; humanizer needs its
+  whole folder. [Adaptation note](../../docs/research/alfonso-skills-adaptation.md).
+- Preserve C1/C2/C3 behavior, Pi commands and resume artifacts. Keep private
+  backup/recovery details in ignored local notes.
 
 ## History
 
-The [historical snapshot](../../docs/history/progress-2026-11-04.md) preserves
-all 64 original entries, including superseded status, decisions, limits and
-verification history. Read it only for historical evidence; current task detail
-and priorities remain owned by the linked feature documents and plans.
+[Historical snapshot](../../docs/history/progress-2026-11-04.md) preserves
+all 64 original entries, including superseded status and verification history.
+Read it only when historical evidence is needed; linked owners retain task detail.
