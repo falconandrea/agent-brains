@@ -3,8 +3,8 @@
   "roles": {
     "planner": {
       "provider": "openai-codex",
-      "model": "gpt-5.6-sol",
-      "thinking": "high"
+      "model": "gpt-6.1-sol",
+      "thinking": "low"
     },
     "developer": {
       "provider": "zai",
@@ -13,10 +13,13 @@
     },
     "reviewer": {
       "provider": "openai-codex",
-      "model": "gpt-5.6-sol",
-      "thinking": "high",
+      "model": "gpt-6.1-sol",
+      "thinking": "low",
       "readOnly": true
     }
   },
-  "verify": ["npm run typecheck", "npm test"]
+  "verify": [
+    "npm run typecheck",
+    "npm test"
+  ]
 }

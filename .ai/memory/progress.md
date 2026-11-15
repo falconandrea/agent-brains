@@ -47,6 +47,11 @@ remains queued.
 
 ## Current state
 
+- Local model configuration updated on 2026-11-13: global Pi Brain and
+  this checkout use `openai-codex/gpt-6.1-sol` with `low` thinking for
+  planner and reviewer. Developer settings and the interactive Pi default
+  are unchanged. Configuration checked on disk; no live workflow has
+  validated the new model/reasoning combination yet.
 - Global workflows T1–T7 are delivered; T7/AC8/M3 validation completed
   on 2026-11-10 at the approved CLI/TUI pilot scope. All 50 route/CWD
   cells are accounted for; no repeated matrix, selector, refresh or
@@ -249,6 +254,9 @@ remains queued.
 
 ## Retained decisions and deferred work
 
+- Kostysh methodology assessed: no adoption or new workstream. Revisit test
+  scheduling only after observed redundant verification cost; retain existing
+  plan-revision priority. [Assessment and conditions](../../docs/research/kostysh-methodology-assessment.md).
 - C1/C2/C3 instruction work is complete. C4 is closed with no detectable
   S1 A/B benefit and an inconclusive full-workflow comparison whose unmet
   criterion was explicitly retired. C5 is bounded; no broad efficacy or
