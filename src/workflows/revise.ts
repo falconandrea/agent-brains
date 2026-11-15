@@ -1,7 +1,10 @@
 /**
  * Post-stop plan revision (`/flow revise`, spec.md): eligibility, lifecycle,
- * successor id, launch completeness, the Pi-free revision session core, and
- * the ordinary-resume interplay refusals.
+ * successor id, launch completeness, the Pi-free revision session core, the
+ * ordinary-resume interplay refusals, and the T6 promotion sequence —
+ * approval binding verification, archive-then-overwrite promotion, the
+ * deterministic successor seed with prefix-verified recovery, the idempotent
+ * pointer, and the B2b–B8 launch repair behind an injected launch port.
  *
  * Same discipline as `replayRunLog` (workflows/resume.ts): pure, Pi-free,
  * state always reconstructed from persisted evidence (events + files), never
@@ -10,13 +13,30 @@
  */
 
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join } from "node:path";
 
 import type { GitBaseline, GitService, HumanInput, WorkflowEvent } from "../ports.ts";
 import { UserDismissedError } from "../ports.ts";
 import type { AgentRunResult, AgentRunner, ModelSelection } from "../agent.ts";
-import { RunLog, CriticalAppendError, canonicalEventJson, deriveEventId, readRunLog, withEventId } from "../run-log.ts";
+import {
+  RunLog,
+  CriticalAppendError,
+  canonicalEventJson,
+  deriveEventId,
+  readRunLog,
+  runLogPath,
+  stableJson,
+  withEventId,
+} from "../run-log.ts";
 import type { AcquireResult } from "../run-lock.ts";
 import { acquireRunLock, describeLock } from "../run-lock.ts";
 import { changedScriptKeys, type VerifyFreeze } from "../verify.ts";
@@ -1537,4 +1557,812 @@ function pendingCandidate(
     return { round: lifecycle.round, prdSha: lifecycle.candidate.prdSha, tasksSha: lifecycle.candidate.tasksSha };
   }
   return undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Promotion, successor seed and launch repair (tasks T6, spec.md §7/§9/§14)
+// ---------------------------------------------------------------------------
+
+type ShaPair = { prdSha: string; tasksSha: string };
+
+/** The predecessor-side and sidecar paths one promotion touches. */
+interface PromotionPaths {
+  sidecarDir: string;
+  prd: string;
+  tasks: string;
+  archivePrd: string;
+  archiveTasks: string;
+}
+
+/**
+ * §7 step 0: the approval authorizes promotion only as a VERIFIED-PERSISTED
+ * event. The caller re-reads P's log FILE from disk (never caller memory and
+ * never session.json), and this check locates the well-formed
+ * `revision.approved` for `revision` in it — shape, eventId binding and
+ * candidate/contract hash forms included (§8 parsing). An absent or corrupt
+ * approval refuses before any archive, artifact write, seed, pointer or
+ * launch: no promotion without a persisted approval, ever.
+ */
+export function persistedApproval(
+  events: WorkflowEvent[],
+  revision: number,
+): { ok: true; approval: RevisionApprovedEvent } | { ok: false; reason: string } {
+  const collected = collectRevisionEvents(events);
+  if (!collected.ok) return { ok: false, reason: collected.reason };
+  const found = collected.items.find(
+    (item): item is Extract<ParsedRevisionEvent, { kind: "approved" }> =>
+      item.kind === "approved" && item.event.revision === revision,
+  );
+  if (found === undefined) {
+    return {
+      ok: false,
+      reason: `no verified-persisted revision.approved for revision ${revision} exists in the predecessor log — promotion requires a persisted approval`,
+    };
+  }
+  return { ok: true, approval: found.event };
+}
+
+/** The revision.started event of `revision` — the archive tree's baseContract authority. */
+function revisionStartedOf(events: WorkflowEvent[], revision: number): RevisionStartedEvent | undefined {
+  const collected = collectRevisionEvents(events);
+  if (!collected.ok) return undefined;
+  const found = collected.items.find(
+    (item): item is Extract<ParsedRevisionEvent, { kind: "started" }> =>
+      item.kind === "started" && item.event.revision === revision,
+  );
+  return found?.event;
+}
+
+/**
+ * The deterministic successor seed (§7 step 5): re-derived from the approval
+ * event and the predecessor's `workflow.started` — no timestamps, so a
+ * partial seed recovers by PREFIX VERIFICATION. The successor inherits the
+ * ORIGINAL description, stack, baseline commit, ignore-rules digest,
+ * repository-state digest and verify freeze — their ABSENCE in legacy logs
+ * included: the successor's `workflow.started` omits what the predecessor
+ * omitted, so its behavior converges with a legacy resume. `carriedUsage`
+ * carries the predecessor's replayed usage totals (omitted when none were
+ * reported), and `revision` links the chain with the verbatim correction.
+ * It never re-snapshots a baseline and never re-resolves a frozen input.
+ */
+export function canonicalSuccessorSeed(
+  predecessorStarted: Extract<WorkflowEvent, { type: "workflow.started" }>,
+  approval: RevisionApprovedEvent,
+  carriedUsage: UsageByRole,
+): {
+  started: Extract<WorkflowEvent, { type: "workflow.started" }>;
+  spec: Extract<WorkflowEvent, { type: "spec.approved" }>;
+} {
+  const successorId = successorRunId(predecessorStarted.runId);
+  const usageEntries = Object.entries(carriedUsage);
+  return {
+    started: {
+      type: "workflow.started",
+      runId: successorId,
+      workflow: "feature",
+      ...(predecessorStarted.description !== undefined
+        ? { description: predecessorStarted.description }
+        : {}),
+      ...(predecessorStarted.stack !== undefined ? { stack: predecessorStarted.stack } : {}),
+      ...(predecessorStarted.baseline !== undefined ? { baseline: predecessorStarted.baseline } : {}),
+      ...(predecessorStarted.ignoreRulesDigest !== undefined
+        ? { ignoreRulesDigest: predecessorStarted.ignoreRulesDigest }
+        : {}),
+      ...(predecessorStarted.repoStateDigest !== undefined
+        ? { repoStateDigest: predecessorStarted.repoStateDigest }
+        : {}),
+      ...(predecessorStarted.verify !== undefined ? { verify: predecessorStarted.verify } : {}),
+      ...(usageEntries.length > 0
+        ? { carriedUsage: Object.fromEntries(usageEntries) as UsageByRole }
+        : {}),
+      revision: {
+        predecessorRunId: predecessorStarted.runId,
+        revision: approval.revision,
+        correction: approval.correction,
+      },
+    },
+    spec: {
+      type: "spec.approved",
+      runId: successorId,
+      prdSha: approval.contract.prdSha,
+      tasksSha: approval.contract.tasksSha,
+    },
+  };
+}
+
+export type SeedVerification =
+  | { status: "empty" }
+  | { status: "missing-spec" }
+  | { status: "complete" }
+  | { status: "divergent"; reason: string };
+
+/**
+ * B5a prefix verification (§7 step 5, §9 B5a): compare the successor log's
+ * seed PREFIX against the canonical seed, field by field. Trailing events
+ * after the seed are not part of the prefix: a legitimate `workflow.resumed`
+ * (B7c repair) or `phase.started` never counts as a collision. Any
+ * divergence — a different value in ANY field of the prefix (optional fields
+ * included), `spec.approved` without a preceding `workflow.started` (the
+ * impossible order), an unrelated log — is fail-closed: the log is never
+ * rewritten.
+ */
+export function verifySuccessorSeed(
+  events: WorkflowEvent[],
+  seed: {
+    started: Extract<WorkflowEvent, { type: "workflow.started" }>;
+    spec: Extract<WorkflowEvent, { type: "spec.approved" }>;
+  },
+): SeedVerification {
+  if (events.length === 0) return { status: "empty" };
+  const first = events[0]!;
+  if (first.type !== "workflow.started") {
+    return {
+      status: "divergent",
+      reason:
+        first.type === "spec.approved"
+          ? "the log starts with spec.approved — an impossible order (workflow.started must come first)"
+          : `the log starts with ${first.type} instead of the canonical workflow.started`,
+    };
+  }
+  const startedDiff = firstDifference("workflow.started", first, seed.started);
+  if (startedDiff !== undefined) {
+    return {
+      status: "divergent",
+      reason: `the persisted workflow.started diverges from the canonical seed at ${startedDiff}`,
+    };
+  }
+  if (events.length === 1) return { status: "missing-spec" };
+  const second = events[1]!;
+  if (second.type !== "spec.approved") {
+    return {
+      status: "divergent",
+      reason: `the log holds ${second.type} where the canonical seed expects spec.approved — an impossible order`,
+    };
+  }
+  const specDiff = firstDifference("spec.approved", second, seed.spec);
+  if (specDiff !== undefined) {
+    return {
+      status: "divergent",
+      reason: `the persisted spec.approved diverges from the canonical seed at ${specDiff}`,
+    };
+  }
+  return { status: "complete" };
+}
+
+/**
+ * Path of the first field where `a` and `b` differ (stable-json equality per
+ * node), or undefined when identical. Powers the field-by-field seed
+ * divergence messages; not a general deep-equality utility.
+ */
+function firstDifference(path: string, a: unknown, b: unknown): string | undefined {
+  if (stableJson(a) === stableJson(b)) return undefined;
+  if (isRecord(a) && isRecord(b)) {
+    const keys = [...new Set([...Object.keys(a), ...Object.keys(b)])].sort();
+    for (const key of keys) {
+      const diff = firstDifference(`${path}.${key}`, a[key], b[key]);
+      if (diff !== undefined) return diff;
+    }
+    return path;
+  }
+  if (Array.isArray(a) && Array.isArray(b)) {
+    for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
+      const diff = firstDifference(`${path}[${i}]`, a[i], b[i]);
+      if (diff !== undefined) return diff;
+    }
+    return path;
+  }
+  return path;
+}
+
+/**
+ * The §7 step 2 archive decision tree, per artifact file. `previous-*` is
+ * WRITE-ONCE and verified against `revision.started.baseContract`:
+ * - a verified existing copy is skipped and NEVER rewritten (an archive
+ *   damaged after a crash refuses without being modified, byte-identical);
+ * - an absent copy is written from the on-disk artifact hashing to
+ *   `baseContract` and hash-verified after the write (the normal path), or
+ *   — in verify-only mode (the step-1→5 skip) — left alone, since no
+ *   archiving write is possible on that path;
+ * - an absent copy with already-promoted artifacts (hashing to `contract`)
+ *   reports the old-contract copy as explicitly LOST and proceeds: promoted
+ *   contents are never archived as if they were the original contract.
+ * A crash between the two archive writes leaves a partial archive; the
+ * per-file rule repairs it without overwriting the surviving copy.
+ */
+function ensureArchived(
+  archivePath: string,
+  artifactPath: string,
+  baseSha: string,
+  contractSha: string,
+  label: string,
+  writeMode: boolean,
+): { ok: true; loss?: string } | { ok: false; reason: string } {
+  // ABSENT (ENOENT) and UNREADABLE are different facts (§7 step 2): an
+  // existing-but-unreadable archive cannot be verified against baseContract,
+  // and treating it as absent would bypass the written-once rule (a loss
+  // report, a later overwrite) — fail-closed refuse instead, in BOTH modes.
+  let archived: string | undefined;
+  try {
+    archived = readFileSync(archivePath, "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      return {
+        ok: false,
+        reason:
+          `the ${label} archive exists but cannot be read (${(err as Error).message}) — ` +
+          "refusing repair: an existing archive must be verified against revision.started.baseContract, never bypassed as absent",
+      };
+    }
+    archived = undefined;
+  }
+  if (archived !== undefined) {
+    const archivedSha = sha256Hex(archived);
+    if (archivedSha === baseSha) return { ok: true }; // written once; never rewritten
+    return {
+      ok: false,
+      reason:
+        `the ${label} archive does not hash to revision.started.baseContract ` +
+        `(expected ${baseSha.slice(0, 12)}…, found ${archivedSha.slice(0, 12)}…) — ` +
+        "a mismatch is damage or tampering; refusing repair without overwriting the only content copy of the old contract",
+    };
+  }
+  const onDisk = readTextFile(artifactPath);
+  if (onDisk === undefined) {
+    return { ok: false, reason: `the approved artifact ${artifactPath} cannot be read to build the ${label} archive` };
+  }
+  const artifactSha = sha256Hex(onDisk);
+  if (artifactSha === baseSha) {
+    if (!writeMode) return { ok: true }; // verify-only: the original still exists under its approved hash
+    try {
+      mkdirSync(dirname(archivePath), { recursive: true });
+      writeFileSync(archivePath, onDisk, "utf8");
+    } catch (err) {
+      return { ok: false, reason: `could not write the ${label} archive: ${(err as Error).message}` };
+    }
+    const written = readTextFile(archivePath);
+    if (written === undefined || sha256Hex(written) !== baseSha) {
+      return { ok: false, reason: `the ${label} archive could not be verified after writing — refusing` };
+    }
+    return { ok: true };
+  }
+  if (artifactSha === contractSha) {
+    return {
+      ok: true,
+      loss:
+        `the ${label} archive is absent and the original contract content was already promoted — ` +
+        "the old-contract file copy is unrecoverable (it survives in the log as hashes only); " +
+        "the approved launch is not blocked by the lost convenience copy",
+    };
+  }
+  return {
+    ok: false,
+    reason: `the approved artifact ${artifactPath} hashes to neither baseContract nor the approved contract — refusing`,
+  };
+}
+
+/** True when both on-disk artifacts hash to the approval's contract. */
+function promotedArtifactsVerify(paths: PromotionPaths, contract: ShaPair): boolean {
+  const prd = readTextFile(paths.prd);
+  const tasks = readTextFile(paths.tasks);
+  return (
+    prd !== undefined &&
+    tasks !== undefined &&
+    sha256Hex(prd) === contract.prdSha &&
+    sha256Hex(tasks) === contract.tasksSha
+  );
+}
+
+/** Expected-vs-actual hash report for the B8 messages (§14 honesty). */
+function artifactShaReport(paths: PromotionPaths, expected: ShaPair): string {
+  const prd = readTextFile(paths.prd);
+  const tasks = readTextFile(paths.tasks);
+  const actualPrd = prd === undefined ? "unreadable" : sha256Hex(prd);
+  const actualTasks = tasks === undefined ? "unreadable" : sha256Hex(tasks);
+  return (
+    `expected prd ${expected.prdSha.slice(0, 12)}…, tasks ${expected.tasksSha.slice(0, 12)}…; ` +
+    `found prd ${actualPrd.slice(0, 12)}…, tasks ${actualTasks.slice(0, 12)}…`
+  );
+}
+
+/**
+ * Locate the feature artifact directory for a REPAIR. Identity must be
+ * marker-VERIFIABLE and UNIQUE: the gate writes the run's description
+ * marker into BOTH artifacts of exactly one directory, so the repair
+ * counts the description-marker matches across every directory — on the
+ * PRD (the gate rule) and on the tasks artifact (which may be the only
+ * intact file when a mid-promotion crash truncated the PRD) — and:
+ * - exactly one directory with marker evidence → found (a single match is
+ *   enough: every crash point of the promotion sequence leaves at least
+ *   one artifact intact under our marker);
+ * - MORE THAN ONE directory with marker evidence (same-marker PRDs
+ *   included — `findExistingFeatureSlug` would silently pick the first
+ *   match) → ambiguous identity, fail-closed refuse, never "first match";
+ * - no marker evidence at all → the location is unprovable — refuse
+ *   without ANY write. There is deliberately NO name-based fallback: a
+ *   directory name is not feature identity (the gate can name directories
+ *   from the planner TITLE, and an unrelated feature's directory can share
+ *   the description's slug shape).
+ */
+function locateRepairSlug(
+  cwd: string,
+  description: string,
+): { found: string } | { ambiguous: true } | { missing: true } {
+  const root = join(cwd, ".ai", "features");
+  if (!existsSync(root)) return { missing: true };
+  const marker = descriptionMarker(description);
+  const evidence = new Map<string, { prd: boolean; tasks: boolean }>();
+  for (const entry of readdirSync(root)) {
+    const dir = join(root, entry);
+    if (!statSync(dir).isDirectory()) continue;
+    const prd = join(dir, `prd-${entry}.md`);
+    const tasks = join(dir, `tasks-${entry}.md`);
+    const prdMatches = existsSync(prd) && readFileSync(prd, "utf8").startsWith(marker);
+    const tasksMatches = existsSync(tasks) && readFileSync(tasks, "utf8").startsWith(marker);
+    if (prdMatches || tasksMatches) evidence.set(entry, { prd: prdMatches, tasks: tasksMatches });
+  }
+  if (evidence.size === 0) return { missing: true };
+  if (evidence.size > 1) return { ambiguous: true };
+  const [slug] = evidence.keys();
+  return { found: slug! };
+}
+
+/**
+ * Classify the malformed (unparseable) lines of the successor log's RAW
+ * content (B5a/AC-13). `readRunLog` silently skips unparseable lines — the
+ * right discipline for torn append tails, but it would also let internal
+ * corruption pass as an approved seed. The distinction:
+ * - a malformed line is a TORN APPEND only when it is a strict byte-prefix
+ *   of one of the canonical seed lines (exactly the shape a crash
+ *   mid-append leaves, and what torn-line healing preserves), AND it sits
+ *   in an append window its prefix can belong to: the seed is appended
+ *   workflow.started → spec.approved, so a started-prefix is possible only
+ *   BEFORE the complete started line, and a spec-prefix only between the
+ *   two. A SHORT prefix below the canonical lines' common head
+ *   (`{"type":"`) is a prefix of BOTH and names no event by itself — it is
+ *   classified by the window open at its position, so it never refuses a
+ *   reachable state. A torn prefix for which NO window is open is an
+ *   IMPOSSIBLE seed order (B5a) — refuse;
+ * - malformed lines AFTER the canonical seed is complete are the successor's
+ *   ordinary execution tail, where the existing torn-line discipline applies;
+ * - ANY other malformed line is internal corruption: refuse with its line
+ *   number, without altering the log.
+ */
+export function successorSeedCorruption(
+  raw: string,
+  seed: {
+    started: Extract<WorkflowEvent, { type: "workflow.started" }>;
+    spec: Extract<WorkflowEvent, { type: "spec.approved" }>;
+  },
+): string | undefined {
+  const startedLine = JSON.stringify(seed.started);
+  const specLine = JSON.stringify(seed.spec);
+  const lines = raw.split("\n");
+  let startedSeen = false;
+  let seedComplete = false;
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]!;
+    if (line.trim() === "") continue;
+    let parses = true;
+    try {
+      JSON.parse(line);
+    } catch {
+      parses = false;
+    }
+    if (parses) {
+      if (line === startedLine) startedSeen = true;
+      if (line === specLine) seedComplete = true;
+      continue;
+    }
+    if (seedComplete) continue; // post-seed execution tail: existing discipline
+    // Prefix identity. A prefix SHORTER than the canonical lines' common
+    // head (`{"type":"`) matches BOTH lines and names no event by itself:
+    // resolve it by the append window open at its position — before the
+    // complete started line it can only be a torn started append, between
+    // the two lines only a torn spec append. An unambiguous prefix outside
+    // its own window (and a shared prefix can never be outside every
+    // window) is an impossible seed order; anything matching neither line
+    // is corruption.
+    const isStartedPrefix = startedLine.startsWith(line);
+    const isSpecPrefix = specLine.startsWith(line);
+    if (!isStartedPrefix && !isSpecPrefix) {
+      return (
+        `line ${index + 1} is corrupt and is not a torn append of the canonical seed — ` +
+        "inspect and repair the successor log manually; the repair refuses to run over it"
+      );
+    }
+    const startedFits = isStartedPrefix && !startedSeen;
+    const specFits = isSpecPrefix && startedSeen;
+    if (!startedFits && !specFits) {
+      const claimed = isStartedPrefix ? "workflow.started" : "spec.approved";
+      return (
+        `line ${index + 1} holds a torn append of the canonical ${claimed} line in an impossible seed order — ` +
+        "the seed is appended workflow.started→spec.approved; refusing without rewriting the log"
+      );
+    }
+  }
+  return undefined;
+}
+
+/**
+ * The launch request the repair hands to the injected launcher (§7 step 7).
+ * `resumedPhase: "develop"` is carried ONLY when the successor stub does not
+ * yet hold `workflow.resumed` — the launcher emits the marker synchronously
+ * before the workflow body. It is OMITTED when the stub already carries the
+ * marker (B7c): at most one `workflow.resumed` ever lands on disk, so the
+ * repair and the launcher are never two competing writers of it.
+ */
+export interface SuccessorLaunchRequest {
+  successorRunId: string;
+  resumedPhase?: "develop";
+}
+
+/**
+ * The injected launch port. T6 verifies the repair's launch decisions
+ * (`resumedPhase` present vs omitted) against a fake; T7 wires the real
+ * `launchRun` with the constructed `ResumeState` behind it. The repair never
+ * builds the baseline/ResumeState itself and never launches a real run.
+ */
+export type SuccessorLauncher = (request: SuccessorLaunchRequest) => Promise<void> | void;
+
+export interface RepairLaunchDeps {
+  /** Repository root (the predecessor's repo). */
+  cwd: string;
+  /** The predecessor run id. */
+  runId: string;
+  /** User decisions (B8 forced abandonment). */
+  human: HumanInput;
+  /** The predecessor's log — the CRITICAL sink for revision.launched/revision.abandoned. */
+  events: RunLog;
+  /** The injected launch port (§7 step 7). */
+  launch: SuccessorLauncher;
+}
+
+export type RepairLaunchOutcome =
+  | {
+      kind: "launched";
+      successorRunId: string;
+      /** "develop" when the launch request carried it; absent when the marker already existed (B7c). */
+      resumedPhase?: "develop";
+      /** Non-empty when an original-contract archive copy was reported lost (§7 step 2). */
+      archiveLosses: string[];
+    }
+  | { kind: "refused"; reason: string }
+  | { kind: "failed"; error: string }
+  | {
+      /** B8 forced abandonment: the only exit that lifts the block (§14). */
+      kind: "abandoned-forced";
+      revision: number;
+      artifactState: "untouched" | "indeterminate";
+      report: string;
+    };
+
+/**
+ * The §9 launch-repair entry, doubling as the §7 promotion executor after the
+ * session's approval. Reachable from lifecycle `approved-pending-launch` AND
+ * from `launched` while `launchIncomplete` holds; a successor that already
+ * recorded its first `phase.started` is really running and refuses with a
+ * pointer to it (T12). Every step re-derives its authority from a DISK
+ * re-read inside the held lock; nothing runs without the step-0 persisted
+ * approval; the sequence is deterministic and verified — never atomic, never
+ * rolled back.
+ */
+export async function repairRevisionLaunch(deps: RepairLaunchDeps): Promise<RepairLaunchOutcome> {
+  const { cwd, runId } = deps;
+  try {
+    const gate = launchRepairGate(readRunLog(cwd, runId), cwd);
+    if (gate !== undefined) return { kind: "refused", reason: gate };
+    const lock = acquireRunLock(cwd, { runId, workflow: "revision" });
+    if (!lock.ok) return { kind: "refused", reason: describeLockRefusal(lock) };
+    try {
+      return await repairUnderLock(deps);
+    } finally {
+      lock.release();
+    }
+  } catch (err) {
+    if (err instanceof UserDismissedError) {
+      return { kind: "refused", reason: "decision dismissed — the revision stays blocked; run /flow revise again" };
+    }
+    if (err instanceof CriticalAppendError) {
+      return { kind: "failed", error: `critical append failed: ${err.message}` };
+    }
+    return { kind: "failed", error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/**
+ * The §9 reachability rule as a gate: `approved-pending-launch`, or
+ * `launched` with an incomplete launch, pass; everything else refuses with
+ * the reason. Undefined means "proceed".
+ */
+function launchRepairGate(events: WorkflowEvent[], cwd: string): string | undefined {
+  const lifecycle = revisionLifecycle(events);
+  switch (lifecycle.state) {
+    case "invalid":
+      return `revision evidence is corrupt (${lifecycle.reason}) — the affected paths refuse until resolved`;
+    case "approved-pending-launch":
+      return undefined;
+    case "launched":
+      return launchIncomplete(cwd, lifecycle.successorRunId)
+        ? undefined
+        : `the successor ${lifecycle.successorRunId} already recorded its first phase and is running — revise the successor run instead`;
+    case "open":
+    case "candidate-pending":
+      return "the revision has no persisted approval yet — approve the candidate first; nothing can be promoted";
+    case "none":
+    case "abandoned":
+      return "no approved revision launch to repair on this run";
+  }
+}
+
+async function repairUnderLock(deps: RepairLaunchDeps): Promise<RepairLaunchOutcome> {
+  const { cwd, runId } = deps;
+
+  // --- Fresh state under the lock: authority is always a disk re-read. ---
+  const events = readRunLog(cwd, runId);
+  const gate = launchRepairGate(events, cwd);
+  if (gate !== undefined) return { kind: "refused", reason: gate };
+  const lifecycle = revisionLifecycle(events);
+  if (lifecycle.state !== "approved-pending-launch" && lifecycle.state !== "launched") {
+    return { kind: "refused", reason: gate ?? "no repairable launch state" };
+  }
+  const revision = lifecycle.approval.revision;
+  const pointerExists = lifecycle.state === "launched";
+
+  // --- §7 step 0: the persisted approval is the promotion precondition. ---
+  const persisted = persistedApproval(events, revision);
+  if (!persisted.ok) return { kind: "refused", reason: persisted.reason };
+  const approval = persisted.approval;
+
+  const startedEvent = events.find(
+    (event): event is Extract<WorkflowEvent, { type: "workflow.started" }> =>
+      event.type === "workflow.started",
+  );
+  if (startedEvent === undefined || startedEvent.description === undefined || startedEvent.baseline === undefined) {
+    return {
+      kind: "refused",
+      reason: "the predecessor log lacks description/baseline — the successor seed cannot inherit the original inputs",
+    };
+  }
+  const startedRevision = revisionStartedOf(events, revision);
+  if (startedRevision === undefined) {
+    return {
+      kind: "refused",
+      reason: `revision.started for revision ${revision} is missing — the archive baseContract cannot be verified`,
+    };
+  }
+
+  // --- Artifact and sidecar locations. B4: the slug locator survives a
+  // PRD the crash truncated past its marker (see locateRepairSlug). ---
+  const located = locateRepairSlug(cwd, startedEvent.description);
+  if (!("found" in located)) {
+    return {
+      kind: "refused",
+      reason:
+        "ambiguous" in located
+          ? "the feature artifact directory is ambiguous — several directories verify the description marker (PRD and/or tasks); refusing to promote into the wrong one"
+          : "cannot locate the approved PRD/tasks files — the description marker verifies in no artifact, and the repair never guesses a directory by its name; refusing without any writes",
+    };
+  }
+  const slug = located.found;
+  const sidecarDir = revisionSidecarDir(cwd, runId);
+  const paths: PromotionPaths = {
+    sidecarDir,
+    prd: join(cwd, ".ai", "features", slug, `prd-${slug}.md`),
+    tasks: join(cwd, ".ai", "features", slug, `tasks-${slug}.md`),
+    archivePrd: join(sidecarDir, "previous-prd.md"),
+    archiveTasks: join(sidecarDir, "previous-tasks.md"),
+  };
+  const marker = descriptionMarker(startedEvent.description);
+
+  // --- §7 step 1: verify the candidate; fall back to already-promoted
+  // artifacts before refusing. B8 only when NEITHER source verifies. ---
+  const candidatePrd = readTextFile(candidatePrdPath(sidecarDir));
+  const candidateTasks = readTextFile(candidateTasksPath(sidecarDir));
+  const candidateVerifies =
+    candidatePrd !== undefined &&
+    candidateTasks !== undefined &&
+    sha256Hex(candidatePrd) === approval.candidate.prdSha &&
+    sha256Hex(candidateTasks) === approval.candidate.tasksSha;
+
+  let writeMode = candidateVerifies;
+  const archiveLosses: string[] = [];
+
+  if (!candidateVerifies) {
+    if (!promotedArtifactsVerify(paths, approval.contract)) {
+      // B8: fail-closed — no repair, no execution, no implicit restore.
+      return await forcedAbandonmentOrRefusal(deps, startedRevision, paths, {
+        candidate:
+          `candidate sidecar prd ${candidatePrd === undefined ? "missing" : sha256Hex(candidatePrd).slice(0, 12)}…, ` +
+          `tasks ${candidateTasks === undefined ? "missing" : sha256Hex(candidateTasks).slice(0, 12)}… ` +
+          `(expected ${approval.candidate.prdSha.slice(0, 12)}…/${approval.candidate.tasksSha.slice(0, 12)}…)`,
+        artifacts: artifactShaReport(paths, approval.contract),
+      });
+    }
+    // §7 step 1 skip: the artifacts already verify against the contract —
+    // do NOT skip the archive decision; run it in VERIFY-ONLY mode (no
+    // archiving write is possible on this path), then jump to the seed.
+    writeMode = false;
+  }
+
+  // --- §7 step 2: the archive decision tree (both files, before any overwrite). ---
+  const base = startedRevision.baseContract;
+  const archivePrd = ensureArchived(paths.archivePrd, paths.prd, base.prdSha, approval.contract.prdSha, "previous-prd.md", writeMode);
+  if (!archivePrd.ok) return { kind: "refused", reason: archivePrd.reason };
+  if (archivePrd.loss !== undefined) archiveLosses.push(archivePrd.loss);
+  const archiveTasks = ensureArchived(paths.archiveTasks, paths.tasks, base.tasksSha, approval.contract.tasksSha, "previous-tasks.md", writeMode);
+  if (!archiveTasks.ok) return { kind: "refused", reason: archiveTasks.reason };
+  if (archiveTasks.loss !== undefined) archiveLosses.push(archiveTasks.loss);
+
+  // --- §7 steps 3–4: promote with the description marker rule, then verify
+  // BOTH final hashes. Never launch an unverified contract; no rollback. ---
+  if (writeMode) {
+    if (candidatePrd === undefined || candidateTasks === undefined) {
+      return { kind: "failed", error: "the candidate sidecar contents vanished mid-promotion" };
+    }
+    try {
+      mkdirSync(dirname(paths.prd), { recursive: true });
+      writeFileSync(paths.prd, `${marker}\n${candidatePrd}`, "utf8");
+      writeFileSync(paths.tasks, `${marker}\n${candidateTasks}`, "utf8");
+    } catch (err) {
+      return { kind: "failed", error: `could not write the promoted artifacts: ${(err as Error).message}` };
+    }
+    const writtenPrd = readTextFile(paths.prd);
+    const writtenTasks = readTextFile(paths.tasks);
+    if (
+      writtenPrd === undefined ||
+      writtenTasks === undefined ||
+      sha256Hex(writtenPrd) !== approval.contract.prdSha ||
+      sha256Hex(writtenTasks) !== approval.contract.tasksSha
+    ) {
+      return {
+        kind: "failed",
+        error:
+          "the promoted artifacts do not hash to the approved contract — refusing to seed, point or launch an unverified contract",
+      };
+    }
+  }
+
+  // --- §7 step 5: the deterministic successor seed with B5a prefix recovery.
+  // Corruption readRunLog would silently skip is classified first (AC-13):
+  // only torn appends of canonical seed lines (and the post-seed execution
+  // tail) are allowed; anything else refuses without rewriting the log. ---
+  const successorId = successorRunId(runId);
+  const seed = canonicalSuccessorSeed(startedEvent, approval, foldLogUsage(events));
+  const scanSeedCorruption = (): string | undefined => {
+    const raw = readTextFile(runLogPath(cwd, successorId));
+    return raw === undefined ? undefined : successorSeedCorruption(raw, seed);
+  };
+  const corruption = scanSeedCorruption();
+  if (corruption !== undefined) {
+    return {
+      kind: "refused",
+      reason: `the successor log ${successorId} is corrupt — refusing without rewriting: ${corruption}`,
+    };
+  }
+  const seedCheck = verifySuccessorSeed(readRunLog(cwd, successorId), seed);
+  if (seedCheck.status === "divergent") {
+    return {
+      kind: "refused",
+      reason: `the successor log ${successorId} diverges from the canonical seed — refusing without rewriting: ${seedCheck.reason}`,
+    };
+  }
+  if (seedCheck.status !== "complete") {
+    const successorLog = RunLog.open(cwd, successorId);
+    if (seedCheck.status === "empty") successorLog.append(seed.started);
+    successorLog.append(seed.spec);
+    const after = verifySuccessorSeed(readRunLog(cwd, successorId), seed);
+    const afterCorruption = scanSeedCorruption();
+    if (after.status !== "complete" || afterCorruption !== undefined) {
+      return {
+        kind: "failed",
+        error: `the successor seed could not be verified after writing (${after.status === "divergent" ? after.reason : afterCorruption !== undefined ? afterCorruption : after.status})`,
+      };
+    }
+  }
+
+  // --- §7 step 6: the pointer, idempotent through appendCritical. ---
+  if (!pointerExists) {
+    deps.events.appendCritical(
+      withEventId({
+        type: "revision.launched" as const,
+        runId,
+        revision,
+        successorRunId: successorId,
+        at: new Date().toISOString(),
+      }),
+    );
+  }
+
+  // --- §7 step 7: launch through the injected port. The resumedPhase
+  // decision is observable: "develop" when the stub lacks the marker,
+  // omitted when it already holds one (B7c). ---
+  const successorEvents = readRunLog(cwd, successorId);
+  const resumedPresent = successorEvents.some((event) => event.type === "workflow.resumed");
+  const request: SuccessorLaunchRequest = {
+    successorRunId: successorId,
+    ...(resumedPresent ? {} : { resumedPhase: "develop" as const }),
+  };
+  await deps.launch(request);
+  return {
+    kind: "launched",
+    successorRunId: successorId,
+    ...(request.resumedPhase !== undefined ? { resumedPhase: request.resumedPhase } : {}),
+    archiveLosses,
+  };
+}
+
+/**
+ * B8 exit (§14): neither the candidate nor the promoted artifacts verify
+ * against the persisted approval. Execution is refused unconditionally; the
+ * revision block lifts ONLY through the explicit forced abandonment with
+ * reason "approval contents unrecoverable", whose report states the ACTUAL
+ * on-disk state — untouched (artifacts still hash to the old contract) or
+ * indeterminate with both sha sets — and never promises a restore or claims
+ * the predecessor is automatically resumable. The sidecar is kept: its
+ * archive may be the only restorable old-contract copy.
+ */
+async function forcedAbandonmentOrRefusal(
+  deps: RepairLaunchDeps,
+  started: RevisionStartedEvent,
+  paths: PromotionPaths,
+  evidence: { candidate: string; artifacts: string },
+): Promise<RepairLaunchOutcome> {
+  const b8Reason =
+    "neither the candidate sidecar nor the promoted artifacts verify against the persisted approval " +
+    `(B8: ${evidence.candidate}; ${evidence.artifacts})`;
+  const choice = await deps.human.select({
+    message:
+      "The approved contents are unrecoverable: candidate and promoted artifacts both fail the persisted approval's hashes. " +
+      "Execution is refused. Only an explicit forced abandonment lifts the revision block.",
+    options: [
+      {
+        label: "Force abandonment",
+        value: "force",
+        description:
+          "Record revision.abandoned (approval contents unrecoverable), report the on-disk state honestly, keep the sidecar archive.",
+      },
+      {
+        label: "Leave blocked",
+        value: "leave",
+        description: "Keep the revision block; inspect the artifacts manually first.",
+      },
+    ],
+    defaultValue: "leave",
+  });
+  if (choice !== "force") return { kind: "refused", reason: b8Reason };
+
+  const actualPrd = readTextFile(paths.prd);
+  const actualTasks = readTextFile(paths.tasks);
+  const actualPrdSha = actualPrd === undefined ? "unreadable" : sha256Hex(actualPrd);
+  const actualTasksSha = actualTasks === undefined ? "unreadable" : sha256Hex(actualTasks);
+  const untouched = actualPrdSha === started.baseContract.prdSha && actualTasksSha === started.baseContract.tasksSha;
+  const archiveAvailable =
+    readTextFile(paths.archivePrd) !== undefined && readTextFile(paths.archiveTasks) !== undefined;
+  const report = untouched
+    ? "Untouched: the approved artifacts still hash to the predecessor's old contract. " +
+      "The revision block is lifted; whether /flow resume works again depends on the predecessor's own status " +
+      "(a cancelled/needs_human run stays terminal). Partial code was never touched."
+    : "Indeterminate: the approved artifacts do NOT hash to the predecessor's old contract and are NOT known-good. " +
+      `Expected prd ${started.baseContract.prdSha}, tasks ${started.baseContract.tasksSha}; ` +
+      `found prd ${actualPrdSha}, tasks ${actualTasksSha}. ` +
+      (archiveAvailable
+        ? "Restore manually from the sidecar archive, or open a new revision. "
+        : "The sidecar archive is also unavailable — manual restoration needs another source; or open a new revision. ") +
+      "The revision block is lifted; whether /flow resume works again depends on the predecessor's own status. " +
+      "Partial code was never touched. No rollback was attempted.";
+  deps.events.appendCritical(
+    withEventId({
+      type: "revision.abandoned" as const,
+      runId: deps.runId,
+      revision: started.revision,
+      reason: "approval contents unrecoverable",
+      at: new Date().toISOString(),
+    }),
+  );
+  return {
+    kind: "abandoned-forced",
+    revision: started.revision,
+    artifactState: untouched ? "untouched" : "indeterminate",
+    report,
+  };
 }

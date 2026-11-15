@@ -4,8 +4,73 @@
 **Current Phase:** Global workflow validation complete; M4 rollout and
 existing technical follow-ups remain open. Post-stop plan revision: first
 tranche (T1–T5) implemented, reviewed and review fixes applied in this
-repository (2026-11-14); T6–T11 remain.
-**Active Task:** Post-stop plan revision T1–T5 delivered (2026-11-14,
+repository (2026-11-14); T6 implemented and final review approved
+(2026-11-15), local commit authorized; T7–T11 remain.
+**Active Task:** Post-stop plan revision T6 approved (2026-11-15):
+approval binding, promotion and crash repair as Pi-free
+logic following spec §§7–9/§14 (AC-9/12/13), all in
+`src/workflows/revise.ts` — `persistedApproval` step 0 (re-reads P's log
+FILE; absent, unreadable or incoherent approvals promote nothing),
+candidate verification with the already-promoted fallback (B8 only when
+neither source verifies), the write-once `previous-*` archive decision
+tree incl. the verify-only step-1→5 skip path (a damaged archive refuses
+byte-identically on BOTH paths; absent-with-promoted artifacts reports the
+loss and proceeds, never archiving promoted contents as the original;
+partial archives gain only the missing copy), marker-rule promotion with
+post-write hash verification of BOTH artifacts, the deterministic
+successor seed with B5a prefix verification (any field-by-field divergence
+and the impossible `spec.approved`-first order refuse without rewriting;
+legacy absence of freeze/digest is inherited), the idempotent
+`revision.launched` pointer, and B7a–B7c repair coordination through an
+injected `SuccessorLauncher` port whose request carries
+`resumedPhase: "develop"` only when the successor stub lacks
+`workflow.resumed` (at most one marker ever; no second concurrent writer
+for the future launcher). B8 executes nothing; the forced-abandon exit
+(explicit choice, reason "approval contents unrecoverable") reports
+untouched or indeterminate artifact state with both sha sets, never rolls
+back, and keeps the sidecar archive for manual restoration. The session
+core's approval (T4/T5) is reused — promotion re-reads that persisted
+event and never builds a second approval path. Observed: 612/612 tests
+(41 boundary tests B2b–B8 in `tests/revise.test.ts` incl. the 10
+review-fix regressions; the pre-existing B0–B2 coverage stays green),
+`npm run typecheck`, `git diff --check`. Second review round (2026-11-15,
+three reproduced defects closed, T7 still on hold): B4 slug recovery no
+longer depends on an intact PRD marker (`locateRepairSlug`: tasks-marker
+fallback, then slug-shaped directory names, ambiguity refuses — a PRD
+truncated mid-marker recovers); B5a/AC-13 internal corruption is
+classified on the raw successor log (`successorSeedCorruption`: only
+torn appends of canonical seed lines and the post-seed execution tail are
+tolerated, any other malformed line refuses byte-identically with its
+line number — garbage between the seed events can no longer pass as an
+approved seed); B4a distinguishes an absent archive (ENOENT: loss report
+or write, as before) from an existing-but-unreadable one (fail-closed
+refusal on BOTH paths, never bypassed as absent). Third review round
+(2026-11-15, two more reproduced defects closed, T7 still on hold): the
+name-shaped directory fallback is removed — a directory name is not
+feature identity, so `locateRepairSlug` accepts only marker-verifiable
+evidence (PRD marker, then tasks marker; ambiguity and no-match refuse
+without ANY write, and a foreign same-shaped feature's directory stays
+byte-identical) while every reachable promotion crash still recovers via
+the surviving intact artifact; `successorSeedCorruption` is order-aware —
+torn prefixes are tolerated only inside their own append window
+(started-prefix before the complete started, spec-prefix between the
+two), so a torn spec.approved before workflow.started refuses as an
+impossible seed order, byte-identically; a SHORT prefix below the
+canonical lines' common head (`{"type":"`) is shared by both lines and
+is classified by the window open at its position, so reachable torn
+tails and healed shapes with shared prefixes no longer false-refuse
+while really impossible orders keep refusing (2026-11-15, fourth
+classifier fix); and `locateRepairSlug` requires a UNIQUE
+marker-verifiable directory — PRD-marker matches are counted like
+tasks-marker ones, so two same-marker PRDs refuse as ambiguous instead
+of promoting into the first match (fifth fix). Observed: 617/617 tests,
+typecheck, `git diff --check`. Limits: real `launchRun`, the constructed
+`ResumeState`, the rebuilt baseline and the two `replayRunLog` changes
+(`carriedUsage` seeding, `revision` reconstruction) are T7 — the launch
+was verified against a fake mirroring `launchRun`'s synchronous
+`resumedPhase` behavior only; no real launch was executed or claimed.
+The `/flow revise` command and resume-revision dialogs are T8.
+Prior state: post-stop plan revision T1–T5 delivered (2026-11-14,
 `/flow revise` design in
 [spec](../features/post-stop-plan-revision/spec.md)): event schema with
 content-derived `eventId`, verified idempotent `appendCritical`, revision
@@ -40,8 +105,7 @@ accounting loses it), the planner TITLE is recovered from the feature slug
 (approved artifacts carry only section bodies), and the resume-path
 enforcement is verified structurally (source-position assertions on
 `handleResume`), not by executing the command handler, which is Pi-coupled
-and belongs to T8's extension test scope. Next: T6 (approval binding,
-promotion, repair) in the next tranche; T1–T5 review is complete and its
+and belongs to T8's extension test scope. T1–T5 review is complete and its
 local commit is user-authorized (2026-11-15). RV2 observation
 remains queued.
 
@@ -230,8 +294,25 @@ remains queued.
   to every known event type.
   T1–T5 review complete; local commit authorized (2026-11-15).
   No push; consumer repositories untouched.
-  **Next: T6 approval binding, promotion and repair, followed by review
-  before T7–T11.**
+  **T6 approved (2026-11-15, all review fixes verified,
+  local commit authorized):** approval binding, promotion and crash repair
+  implemented and verified as recorded in the Active Task (spec §§7–9/§14;
+  AC-9/12/13; boundary tests B2b–B8; 617/617 tests, typecheck, diff
+  check). Review rounds two, three, the shared-prefix classifier fix and
+  the slug-ambiguity fix addressed seven reproduced findings (B4
+  truncated-PRD refusal, B5a silently-tolerated seed corruption, B4a
+  unreadable-archive bypass, slug-name fallback able to overwrite a
+  foreign feature, torn-seed impossible order accepted, shared short
+  prefixes false-refused as impossible orders, same-marker PRD
+  ambiguity promoted into the first match) — each with regressions
+  mirroring the reproductions.
+  Final review observed: 617/617 full-suite tests, 101/101 revision tests,
+  typecheck and diff check pass; all seven defect reproductions and the
+  exhaustive seed-prefix check pass. No remaining confirmed finding.
+  Next session: prepare the developer prompt for ONLY T7 (successor
+  construction, real launch integration and replay changes), followed by
+  orchestrator review before T8. T7 is NOT started; no real successor
+  launch was executed. No push authorized; consumer repositories untouched.
 
 1. Observe RV2's reviewer-side artifact-scope behavior on the next suitable
    real `/feature` run and record it against the

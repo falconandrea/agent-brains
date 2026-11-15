@@ -1,11 +1,12 @@
 # Tasks — post-stop plan revision (`/flow revise`)
 
-Status: T1–T5 implemented and reviewed; T6–T11 remain. The user authorized
-the first tranche and its local commit. Each task has one concrete
-deliverable, its dependencies, and its verification; tasks are ordered so
-every step leaves the tree green (`npm test`, `npm run typecheck`) and
-ordinary resume compatible. The role prompts (T2) deliberately precede the
-revision session core (T4), which consumes them.
+Status: T1–T6 implemented and reviewed (T6 final review approved
+2026-11-15; local commit authorized); T7–T11 remain. The user authorized the first
+tranche and its local commit. Each task has one concrete deliverable, its
+dependencies, and its verification; tasks are ordered so every step leaves
+the tree green (`npm test`, `npm run typecheck`) and ordinary resume
+compatible. The role prompts (T2) deliberately precede the revision session
+core (T4), which consumes them.
 
 Ground rules for every task: preserve unrelated local edits and all consumer
 repositories; no commit, no push; English documentation; new Pi-free logic
@@ -164,6 +165,110 @@ duplication across B7a–B7c; exactly one `workflow.resumed` after B7c
 repair; B8 refusing execution.
 
 Verification: `npm test -- tests/revise.test.ts`; `npm run typecheck`.
+
+Delivered (2026-11-15, awaiting review): the §7 sequence lives in
+`src/workflows/revise.ts` as Pi-free functions — `persistedApproval`
+(step 0 disk re-read), candidate verification with the already-promoted
+fallback (B8 only when neither verifies), `ensureArchived` (the write-once
+archive decision tree, also in verify-only mode on the step-1→5 skip
+path), marker-rule promotion with post-write hash verification,
+`canonicalSuccessorSeed`/`verifySuccessorSeed` (deterministic seed, B5a
+prefix verification with field-by-field divergence refusals), the
+idempotent `revision.launched` pointer, B7a/B7b/B7c coordination through an
+injected `SuccessorLauncher` port (the request carries `resumedPhase:
+"develop"` only when the successor stub lacks `workflow.resumed`), and the
+B8 forced-abandonment exit reporting untouched/indeterminate artifact state
+(§14). The approval append itself is unchanged from the session core (T4/T5)
+— promotion re-reads and verifies that persisted event, it never builds a
+second one. Fault injection covers B2b–B8 in `tests/revise.test.ts`
+(31 new tests; the B0–B2 coverage is unchanged and green). Observed:
+602/602 tests, `npm run typecheck`, `git diff --check`. Boundary: the
+launch port is verified against a fake mirroring `launchRun`'s synchronous
+`resumedPhase` behavior; the real `launchRun`, the constructed
+`ResumeState`, the rebuilt baseline and the two `replayRunLog` changes are
+T7 — no real launch was executed or claimed.
+
+Review fixes (2026-11-15, second round — three reproduced defects closed,
+T7 still on hold):
+1. B4 slug recovery: the repair no longer depends on an intact PRD
+   description marker. `locateRepairSlug` falls back, most verifiable
+   first, to the tasks artifact's marker, then to the slug-shaped
+   directory names `featureSlug` generates (base + collision suffixes)
+   with both artifact files present by name; several candidates refuse as
+   ambiguous instead of promoting into the wrong directory. A PRD
+   truncated mid-marker (or empty) with valid candidate and archive now
+   recovers and launches.
+2. B5a/AC-13 internal corruption: the repair classifies the successor
+   log's raw lines via `successorSeedCorruption` before and after the seed
+   step. A malformed line is tolerated only as a torn append (a strict
+   byte-prefix of a canonical seed line — the shape crash healing leaves)
+   or after the canonical seed is complete (the successor's ordinary
+   execution tail); any other malformed line refuses with its line number,
+   byte-identical log. Internal garbage between `workflow.started` and
+   `spec.approved` can no longer pass as an approved seed, and garbage-only
+   logs refuse instead of receiving a seed.
+3. B4a unreadable archive: `ensureArchived` distinguishes ENOENT (absent —
+   loss report or archive write, as before) from an existing-but-unreadable
+   archive (any other read error — fail-closed refusal in BOTH the normal
+   and the verify-only skip path; never bypassed as absent, never reported
+   lost).
+
+Ten regression tests added (`tests/revise.test.ts`, incl. the three
+reviewer reproductions and the torn-tail vs corruption distinction):
+612/612 tests, typecheck and `git diff --check` pass; the reviewer's
+reproduction file run against the fixed source shows all three repros
+green (its one unrelated failure is the T5 structural test's
+repo-relative path, an artifact of running the copy outside the
+repository).
+
+Review fixes (2026-11-15, third round — two more reproduced defects
+closed, T7 still on hold):
+4. Slug identity (P1): the name-shaped directory fallback introduced in
+   the previous round is REMOVED — a directory name is not feature
+   identity (the gate can name directories from the planner TITLE, and an
+   unrelated feature's directory can share the description's slug shape),
+   so promoting by name could overwrite another feature's artifacts.
+   `locateRepairSlug` now accepts only marker-verifiable evidence: the
+   PRD's description marker, then the tasks artifact's description
+   marker; several matches refuse as ambiguous; no match refuses without
+   ANY write. Every crash point of the promotion sequence leaves at least
+   one artifact intact under our marker (before the PRD write both are
+   original; between the writes exactly one is), so reachable B4 states
+   still recover — a PRD truncated mid-marker with intact tasks launches;
+   both-artifacts-markerless is unreachable from promotion and now refuses
+   honestly.
+5. Seed order (P2): `successorSeedCorruption` is order-aware — the seed is
+   appended workflow.started → spec.approved, so a torn prefix is
+   tolerated only inside its own append window: a torn started-prefix only
+   before the complete started line, a torn spec-prefix only between the
+   two. A torn spec-prefix BEFORE workflow.started (or a torn
+   started-prefix after it) is an impossible seed order and refuses
+   byte-identically, per B5a. Fourth fix in the same classifier: a SHORT
+   prefix below the canonical lines' common head (`{"type":"`) is shared
+   by both lines and names no event by itself — it is classified by the
+   append window open at its position (before started → a torn started
+   append; between the two → a torn spec append), so a reachable torn
+   tail or healed shape with a shared prefix no longer false-refuses as
+   an impossible order, while unambiguous prefixes outside their window
+   keep refusing.
+6. Slug ambiguity (P2): `locateRepairSlug` no longer returns the gate
+   lookup's FIRST match — it counts description-marker matches across
+   every directory, on the PRD and on the tasks artifact alike, and
+   requires a UNIQUE directory with marker evidence: two same-marker PRDs
+   (or any marker evidence spanning two directories) refuse as ambiguous,
+   byte-identical, with no seed, pointer or launch; a single match still
+   recovers every reachable B4 crash state.
+
+Regression updates: the previous round's two name-shape tests were
+rewritten to the corrected expectations (unverifiable identity refuses
+with zero writes; a foreign same-shaped feature's directory stays
+byte-identical — mirroring the reviewer's reproduction; marker-based
+ambiguity refuses), plus a repair-level impossible-order regression and
+two new classifier order assertions. Observed: 614/614 tests, typecheck,
+`git diff --check`; both round-2 reviewer reproductions run green against
+the fixed source (the repro copy's extra failures are its stale pre-fix
+test expectations and the T5 structural test's repo-relative path — both
+artifacts of running the copy outside the repository).
 
 ## T7 — Successor construction, launch, and replay changes
 

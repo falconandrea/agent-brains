@@ -1,36 +1,45 @@
 /**
- * Post-stop plan revision (tasks T3–T5, spec.md §5/§6/§9/§10/§11/§16):
+ * Post-stop plan revision (tasks T3–T6, spec.md §5/§6/§7/§9/§10/§11/§16):
  * eligibility, lifecycle, successor id, launch completeness, the Pi-free
- * revision session core, and the ordinary-resume interplay refusals.
+ * revision session core, the ordinary-resume interplay refusals, and the
+ * promotion/seed/repair sequence behind an injected launch port.
  * Run: `node --test tests/revise.test.ts`.
  */
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  canonicalSuccessorSeed,
   capPartialPatch,
   chainRootOf,
   launchIncomplete,
   nextPlannerRound,
   nextRevisionNumber,
+  persistedApproval,
   plannerRoundsUsed,
+  repairRevisionLaunch,
   resumeRevisionRefusal,
   revisionEligibility,
   revisionLifecycle,
   revisionSidecarDir,
   runRevisionSessionCore,
   successorRunId,
+  successorSeedCorruption,
+  verifySuccessorSeed,
+  type RepairLaunchDeps,
+  type RepairLaunchOutcome,
   type RevisionSessionDeps,
+  type SuccessorLaunchRequest,
 } from "../src/workflows/revise.ts";
-import { descriptionMarker } from "../src/workflows/feature.ts";
+import { descriptionMarker, splitPlannerOutput, validatePlannerOutput } from "../src/workflows/feature.ts";
 import { replayRunLog } from "../src/workflows/resume.ts";
-import { CriticalAppendError, RunLog, readRunLog, runsDir, withEventId } from "../src/run-log.ts";
+import { CriticalAppendError, RunLog, readRunLog, runsDir, stableJson, withEventId } from "../src/run-log.ts";
 import { acquireRunLock } from "../src/run-lock.ts";
 import type {
   GitBaseline,
@@ -1459,4 +1468,1253 @@ test("capPartialPatch: a single oversized hunk is hard-tailed, never empty", () 
   assert.match(capped, /\[truncated\]/);
   assert.ok(capped.includes("+x"), "some evidence survives");
   assert.ok(capped.length > 0);
+});
+
+// ---------------------------------------------------------------------------
+// T6 — promotion, successor seed and launch repair (spec.md §7/§9/§14)
+// ---------------------------------------------------------------------------
+
+const planValidation = validatePlannerOutput(VALID_PLAN_A);
+if (!planValidation.valid) throw new Error("fixture plan must validate");
+const CANDIDATE_PRD = planValidation.value.prd;
+const CANDIDATE_TASKS = planValidation.value.tasks;
+const CANDIDATE_PAIR = { prdSha: sha(CANDIDATE_PRD), tasksSha: sha(CANDIDATE_TASKS) };
+/** The promoted artifact contents (marker included) the approval binds. */
+const CONTRACT = {
+  prdSha: sha(`${MARKER}\n${CANDIDATE_PRD}`),
+  tasksSha: sha(`${MARKER}\n${CANDIDATE_TASKS}`),
+};
+/** The still-approved artifacts at revision open (the baseContract). */
+const BASE_CONTRACT = {
+  prdSha: sha(`${MARKER}\n${PRD_BODY}`),
+  tasksSha: sha(`${MARKER}\n${TASKS_BODY}`),
+};
+
+const fileBytes = (path: string): string => readFileSync(path, "utf8");
+const fileSha = (path: string): string => sha(fileBytes(path));
+const fileMtime = (path: string): number => statSync(path).mtimeMs;
+
+function t6RevisionStarted(runId: string, correction = "make auth optional") {
+  return withEventId({
+    type: "revision.started" as const,
+    runId,
+    revision: 1,
+    correction,
+    correctionSha: sha(correction),
+    baseContract: BASE_CONTRACT,
+    at: "2026-01-01T00:00:00.000Z",
+  });
+}
+
+function t6RevisionCandidate(runId: string) {
+  return withEventId({
+    type: "revision.candidate" as const,
+    runId,
+    revision: 1,
+    round: 1,
+    prdSha: CANDIDATE_PAIR.prdSha,
+    tasksSha: CANDIDATE_PAIR.tasksSha,
+    at: "2026-01-01T00:01:00.000Z",
+  });
+}
+
+function t6RevisionApproval(runId: string, candidate = CANDIDATE_PAIR, correction = "make auth optional") {
+  return withEventId({
+    type: "revision.approved" as const,
+    runId,
+    revision: 1,
+    round: 1,
+    correction,
+    correctionSha: sha(correction),
+    candidate,
+    contract: CONTRACT,
+    predecessorStatus: "cancelled",
+    approvedBy: { via: "/flow revise", pid: 4321, at: "2026-01-01T00:03:00.000Z" },
+  });
+}
+
+interface ApprovedStateOptions {
+  /** Sidecar candidate files: "valid" (default) | "damaged" | "absent". */
+  sidecar?: "valid" | "damaged" | "absent";
+  /** On-disk approved artifacts: "original" (default) | "promoted" | "mixed-prd-promoted" | "foreign". */
+  artifacts?: "original" | "promoted" | "mixed-prd-promoted" | "foreign";
+  /** previous-* archive: "none" (default) | "valid" | "damaged" | "only-prd". */
+  archive?: "none" | "valid" | "damaged" | "only-prd";
+  /** Append revision.launched to P's log (B7 entry states). */
+  pointer?: boolean;
+  /** Successor log: "absent" (default) | "empty-file" | "started-only" | "full" | "full+resumed" | "spec-first". */
+  successor?: "absent" | "empty-file" | "started-only" | "full" | "full+resumed" | "spec-first";
+}
+
+interface ApprovedState {
+  approval: ReturnType<typeof t6RevisionApproval>;
+  sidecarDir: string;
+  paths: { prd: string; tasks: string; archivePrd: string; archiveTasks: string };
+}
+
+/**
+ * A predecessor frozen at `approved-pending-launch` (or further, per opts):
+ * P's log carries started/candidate/approved (+ pointer), the sidecar holds
+ * the candidate files, and the artifacts/archive/successor are laid out per
+ * opts to stage each crash boundary.
+ */
+function approvedState(root: string, runId: string, opts: ApprovedStateOptions = {}): ApprovedState {
+  writePredecessorLog(root, runId, predecessorEvents(root, runId, { status: "cancelled" }));
+  const correction = "make auth optional";
+  appendRevisionEvent(root, runId, t6RevisionStarted(runId, correction));
+  appendRevisionEvent(root, runId, t6RevisionCandidate(runId));
+  const approval = t6RevisionApproval(runId, CANDIDATE_PAIR, correction);
+  appendRevisionEvent(root, runId, approval);
+
+  const sidecarDir = revisionSidecarDir(root, runId);
+  mkdirSync(sidecarDir, { recursive: true });
+  if ((opts.sidecar ?? "valid") !== "absent") {
+    writeFileSync(join(sidecarDir, "candidate-prd.md"), opts.sidecar === "damaged" ? "corrupted-prd" : CANDIDATE_PRD, "utf8");
+    writeFileSync(join(sidecarDir, "candidate-tasks.md"), opts.sidecar === "damaged" ? "corrupted-tasks" : CANDIDATE_TASKS, "utf8");
+  }
+
+  const featureDir = join(root, ".ai", "features", SLUG);
+  const paths = {
+    prd: join(featureDir, `prd-${SLUG}.md`),
+    tasks: join(featureDir, `tasks-${SLUG}.md`),
+    archivePrd: join(sidecarDir, "previous-prd.md"),
+    archiveTasks: join(sidecarDir, "previous-tasks.md"),
+  };
+  switch (opts.artifacts ?? "original") {
+    case "promoted":
+      writeFileSync(paths.prd, `${MARKER}\n${CANDIDATE_PRD}`, "utf8");
+      writeFileSync(paths.tasks, `${MARKER}\n${CANDIDATE_TASKS}`, "utf8");
+      break;
+    case "mixed-prd-promoted":
+      writeFileSync(paths.prd, `${MARKER}\n${CANDIDATE_PRD}`, "utf8"); // tasks stays original
+      break;
+    case "foreign":
+      writeFileSync(paths.prd, `${MARKER}\nsomeone edited this`, "utf8");
+      writeFileSync(paths.tasks, `${MARKER}\nsomeone edited the tasks`, "utf8");
+      break;
+    default:
+      break; // original, as writeArtifacts wrote them
+  }
+
+  switch (opts.archive ?? "none") {
+    case "valid":
+      writeFileSync(paths.archivePrd, `${MARKER}\n${PRD_BODY}`, "utf8");
+      writeFileSync(paths.archiveTasks, `${MARKER}\n${TASKS_BODY}`, "utf8");
+      break;
+    case "damaged":
+      writeFileSync(paths.archivePrd, `${MARKER}\ndamaged archive body`, "utf8");
+      writeFileSync(paths.archiveTasks, `${MARKER}\ndamaged archive tasks`, "utf8");
+      break;
+    case "only-prd":
+      writeFileSync(paths.archivePrd, `${MARKER}\n${PRD_BODY}`, "utf8");
+      break;
+    default:
+      break;
+  }
+
+  if (opts.pointer) {
+    appendRevisionEvent(
+      root,
+      runId,
+      withEventId({
+        type: "revision.launched" as const,
+        runId,
+        revision: 1,
+        successorRunId: successorRunId(runId),
+        at: "2026-01-01T00:04:00.000Z",
+      }),
+    );
+  }
+
+  const successorId = successorRunId(runId);
+  switch (opts.successor ?? "absent") {
+    case "empty-file":
+      RunLog.open(root, successorId);
+      break;
+    case "started-only":
+    case "full":
+    case "full+resumed": {
+      // The canonical seed, derived exactly as the repair derives it.
+      const events = readRunLog(root, runId);
+      const predStarted = events.find(
+        (event): event is Extract<WorkflowEvent, { type: "workflow.started" }> => event.type === "workflow.started",
+      )!;
+      const verdict = expectEligible(revisionEligibility(events));
+      const seed = canonicalSuccessorSeed(predStarted, approval, verdict.usage);
+      const log = RunLog.open(root, successorId);
+      log.append(seed.started);
+      if (opts.successor !== "started-only") log.append(seed.spec);
+      if (opts.successor === "full+resumed") {
+        log.append({ type: "workflow.resumed", runId: successorId, phase: "develop" } as WorkflowEvent);
+      }
+      break;
+    }
+    case "spec-first": {
+      const log = RunLog.open(root, successorId);
+      log.append({ type: "spec.approved", runId: successorId, ...CONTRACT } as WorkflowEvent);
+      break;
+    }
+    default:
+      break;
+  }
+
+  return { approval, sidecarDir, paths };
+}
+
+function repairDeps(
+  root: string,
+  runId: string,
+  human: HumanInput,
+  launch: (request: SuccessorLaunchRequest) => Promise<void> | void,
+): RepairLaunchDeps {
+  return { cwd: root, runId, human, events: new RunLog(runLogPathOf(root, runId)), launch };
+}
+
+function expectRepairRefusal(outcome: RepairLaunchOutcome): string {
+  if (outcome.kind !== "refused") throw new Error(`expected a refusal, got ${outcome.kind}`);
+  return outcome.reason;
+}
+
+/**
+ * Mirrors `launchRun`'s documented synchronous behavior — a provided
+ * `resumedPhase` emits `workflow.resumed` before the workflow body runs —
+ * and records every request so the repair's `resumedPhase` decision
+ * ("develop" vs omitted, B7c) is observable. The real launchRun integration
+ * is T7; nothing here launches a real run.
+ */
+class RecordingLauncher {
+  readonly requests: SuccessorLaunchRequest[] = [];
+  readonly #root: string;
+  readonly #emitPhaseStarted: boolean;
+  readonly #fail: boolean;
+  constructor(root: string, opts: { emitPhaseStarted?: boolean; fail?: boolean } = {}) {
+    this.#root = root;
+    this.#emitPhaseStarted = opts.emitPhaseStarted ?? false;
+    this.#fail = opts.fail ?? false;
+  }
+  async run(request: SuccessorLaunchRequest): Promise<void> {
+    this.requests.push(request);
+    if (request.resumedPhase !== undefined) {
+      RunLog.open(this.#root, request.successorRunId).append({
+        type: "workflow.resumed",
+        runId: request.successorRunId,
+        phase: request.resumedPhase,
+      } as WorkflowEvent);
+    }
+    if (this.#emitPhaseStarted) {
+      RunLog.open(this.#root, request.successorRunId).append({
+        type: "phase.started",
+        runId: request.successorRunId,
+        phase: request.resumedPhase ?? "develop",
+      } as WorkflowEvent);
+    }
+    if (this.#fail) throw new Error("injected launcher failure");
+  }
+}
+
+test("repair: B2b — an approval append failure aborts before promotion; repair refuses and nothing changes", async () => {
+  const root = fixture();
+  const runId = "run-b2b-fail";
+  writePredecessorLog(root, runId, predecessorEvents(root, runId, { status: "cancelled" }));
+  const events = new FaultedLog(runLogPathOf(root, runId));
+  events.failOnce = ["revision.approved"];
+  const human = new ScriptedHuman();
+  human.inputs = ["make auth optional"];
+  human.selects = ["approve"];
+  const outcome = await runRevisionSessionCore(
+    sessionDeps(root, runId, new ScriptedPlanner({ text: VALID_PLAN_A }), human, new FakeGit(), events),
+  );
+  assert.equal(outcome.kind, "failed");
+  assert.equal(revisionLifecycle(readRunLog(root, runId)).state, "candidate-pending", "provably absent: the approval never persisted");
+
+  const prdPath = join(root, ".ai", "features", SLUG, `prd-${SLUG}.md`);
+  const prdBefore = fileBytes(prdPath);
+  const repair = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
+  assert.match(expectRepairRefusal(repair), /no persisted approval/);
+  assert.equal(fileBytes(prdPath), prdBefore, "zero promotion without a persisted approval");
+  assert.deepEqual(revisionTypes(root, runId).filter((t) => t === "revision.launched"), []);
+  assert.equal(existsSync(runLogPathOf(root, successorRunId(runId))), false, "no successor seed");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: step 0 — the approval is located in the re-read log FILE, absent or malformed refuses", () => {
+  const root = fixture();
+  const runId = "run-step0";
+  writePredecessorLog(root, runId, predecessorEvents(root, runId, { status: "cancelled" }));
+  const absent = persistedApproval(readRunLog(root, runId), 1);
+  assert.equal(absent.ok, false, "no approval in the file → no promotion authority");
+  if (!absent.ok) assert.match(absent.reason, /persisted approval/);
+
+  approvedState(root, runId, {});
+  const onDisk = persistedApproval(readRunLog(root, runId), 1);
+  assert.equal(onDisk.ok, true, "the verified-persisted approval is the authority");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: an approval that does not bind the pending candidate is corrupt evidence — refuse, zero promotion", async () => {
+  const root = fixture();
+  const runId = "run-incoherent";
+  writePredecessorLog(root, runId, predecessorEvents(root, runId, { status: "cancelled" }));
+  appendRevisionEvent(root, runId, t6RevisionStarted(runId));
+  appendRevisionEvent(root, runId, t6RevisionCandidate(runId));
+  appendRevisionEvent(
+    root,
+    runId,
+    t6RevisionApproval(runId, { prdSha: "e".repeat(64), tasksSha: "f".repeat(64) }),
+  );
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
+  assert.match(expectRepairRefusal(outcome), /does not bind the pending candidate/);
+  assert.deepEqual(revisionTypes(root, runId).filter((t) => t === "revision.launched"), []);
+  assert.equal(existsSync(runLogPathOf(root, successorRunId(runId))), false);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: B2b — a landed-but-unverified approval reconciles to ONE copy; the fresh-timestamp retry never duplicates", async () => {
+  const root = fixture();
+  const runId = "run-b2b-reconcile";
+  writePredecessorLog(root, runId, predecessorEvents(root, runId, { status: "cancelled" }));
+  appendRevisionEvent(root, runId, t6RevisionStarted(runId));
+  appendRevisionEvent(root, runId, t6RevisionCandidate(runId));
+  const sidecarDir = revisionSidecarDir(root, runId);
+  mkdirSync(sidecarDir, { recursive: true });
+  writeFileSync(join(sidecarDir, "candidate-prd.md"), CANDIDATE_PRD, "utf8");
+  writeFileSync(join(sidecarDir, "candidate-tasks.md"), CANDIDATE_TASKS, "utf8");
+
+  // The approval write LANDS, but strict verification fails (a concurrent
+  // foreign line follows). Reconciliation finds the event canonically intact.
+  const log = new RunLog(runLogPathOf(root, runId));
+  const approval = t6RevisionApproval(runId);
+  log.appendCritical(approval, {
+    injectFaultAfterAppend: () => {
+      appendFileSync(
+        runLogPathOf(root, runId),
+        `${JSON.stringify({ type: "phase.started", runId, phase: "foreign" })}\n`,
+        "utf8",
+      );
+    },
+  });
+  const approvals = () => readRunLog(root, runId).filter((e) => e.type === "revision.approved");
+  assert.equal(approvals().length, 1, "reconciliation leaves exactly one copy");
+
+  // The same logical event retried with a REGENERATED timestamp: idempotent no-op.
+  log.appendCritical({ ...approval, approvedBy: { ...approval.approvedBy, at: "2030-01-01T00:00:00.000Z" } });
+  assert.equal(approvals().length, 1, "the fresh-timestamp retry does not duplicate");
+
+  // The reconciled approval authorizes promotion — the repair completes.
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
+  assert.equal(outcome.kind, "launched");
+  assert.equal(approvals().length, 1, "still exactly one approval after the repair");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: an unreadable predecessor log fails before any promotion", async () => {
+  const root = fixture();
+  const runId = "run-unreadable-repair";
+  mkdirSync(dirname(runLogPathOf(root, runId)), { recursive: true });
+  mkdirSync(runLogPathOf(root, runId)); // the log path IS a directory
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
+  assert.equal(outcome.kind, "failed");
+  assert.equal(existsSync(runLogPathOf(root, successorRunId(runId))), false, "no promotion, no seed");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: B3 — completes the approved launch: archives the original, promotes with the marker, seeds, points, launches", async () => {
+  const root = fixture();
+  const runId = "run-b3";
+  const state = approvedState(root, runId, {});
+  const launcher = new RecordingLauncher(root);
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), (req) => launcher.run(req)));
+  assert.equal(outcome.kind, "launched");
+  if (outcome.kind !== "launched") throw new Error("expected launch");
+  assert.deepEqual(outcome.archiveLosses, []);
+  assert.equal(outcome.resumedPhase, "develop");
+  assert.equal(outcome.successorRunId, successorRunId(runId));
+
+  assert.deepEqual(
+    revisionTypes(root, runId),
+    ["revision.started", "revision.candidate", "revision.approved", "revision.launched"],
+    "the pointer lands last, nothing else appended to P",
+  );
+
+  // The archive holds the EXACT original artifacts, written once.
+  assert.equal(fileBytes(state.paths.archivePrd), `${MARKER}\n${PRD_BODY}`);
+  assert.equal(fileBytes(state.paths.archiveTasks), `${MARKER}\n${TASKS_BODY}`);
+
+  // Promotion uses the description marker rule; both hashes bind the contract.
+  assert.equal(fileBytes(state.paths.prd), `${MARKER}\n${CANDIDATE_PRD}`);
+  assert.equal(fileBytes(state.paths.tasks), `${MARKER}\n${CANDIDATE_TASKS}`);
+  assert.equal(fileSha(state.paths.prd), CONTRACT.prdSha);
+  assert.equal(fileSha(state.paths.tasks), CONTRACT.tasksSha);
+
+  // The successor seed: exactly two deterministic events inheriting the originals
+  // (the launcher's synchronous workflow.resumed marker follows them).
+  const successorId = successorRunId(runId);
+  const successorEvents = readRunLog(root, successorId);
+  assert.deepEqual(successorEvents.map((e) => e.type), ["workflow.started", "spec.approved", "workflow.resumed"]);
+  const sStarted = successorEvents[0] as Extract<WorkflowEvent, { type: "workflow.started" }>;
+  assert.equal(sStarted.runId, successorId);
+  assert.equal(sStarted.workflow, "feature");
+  assert.equal(sStarted.description, DESCRIPTION, "the ORIGINAL description");
+  assert.equal(sStarted.baseline, "snap-base", "the ORIGINAL baseline — never re-snapshotted");
+  assert.deepEqual(sStarted.stack, { primary: "nodejs", frameworks: ["express"] });
+  assert.deepEqual(sStarted.revision, {
+    predecessorRunId: runId,
+    revision: 1,
+    correction: "make auth optional",
+  });
+  assert.equal(sStarted.carriedUsage?.planner?.input, 100, "carriedUsage seeds from the predecessor replayed totals");
+  assert.equal(sStarted.carriedUsage?.planner?.calls, 1);
+  assert.equal("verify" in sStarted, false, "legacy absence is inherited, never invented");
+  assert.equal("repoStateDigest" in sStarted, false);
+  assert.equal("ignoreRulesDigest" in sStarted, false);
+  const sSpec = successorEvents[1] as Extract<WorkflowEvent, { type: "spec.approved" }>;
+  assert.equal(sSpec.prdSha, CONTRACT.prdSha);
+  assert.equal(sSpec.tasksSha, CONTRACT.tasksSha);
+
+  // The predecessor's own workflow.started gained nothing.
+  const pStarted = readRunLog(root, runId)[0] as Extract<WorkflowEvent, { type: "workflow.started" }>;
+  assert.equal("carriedUsage" in pStarted, false);
+  assert.equal("revision" in pStarted, false);
+
+  // The launch request carried resumedPhase develop.
+  assert.deepEqual(launcher.requests, [{ successorRunId: successorId, resumedPhase: "develop" }]);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: B4 — a crash with one artifact already promoted rewrites BOTH deterministically", async () => {
+  const root = fixture();
+  const runId = "run-b4";
+  const state = approvedState(root, runId, { artifacts: "mixed-prd-promoted", archive: "valid" });
+  assert.equal(fileSha(state.paths.tasks), BASE_CONTRACT.tasksSha, "staged: tasks not yet promoted");
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
+  assert.equal(outcome.kind, "launched");
+  assert.equal(fileSha(state.paths.prd), CONTRACT.prdSha);
+  assert.equal(fileSha(state.paths.tasks), CONTRACT.tasksSha, "the transient mixture never executes");
+  assert.equal(fileBytes(state.paths.archivePrd), `${MARKER}\n${PRD_BODY}`, "the verified archive copy survived");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: B4a — a verified archive is skipped, never rewritten (hash and mtime unchanged)", async () => {
+  const root = fixture();
+  const runId = "run-b4a-valid";
+  const state = approvedState(root, runId, { archive: "valid" });
+  const prdShaBefore = fileSha(state.paths.archivePrd);
+  const tasksShaBefore = fileSha(state.paths.archiveTasks);
+  const prdMtimeBefore = fileMtime(state.paths.archivePrd);
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
+  assert.equal(outcome.kind, "launched");
+  assert.equal(fileSha(state.paths.archivePrd), prdShaBefore);
+  assert.equal(fileSha(state.paths.archiveTasks), tasksShaBefore);
+  assert.equal(fileMtime(state.paths.archivePrd), prdMtimeBefore, "not even touched");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: B4a — a damaged archive refuses repair byte-identically on the normal path", async () => {
+  const root = fixture();
+  const runId = "run-b4a-damaged";
+  const state = approvedState(root, runId, { archive: "damaged" });
+  const prdBytes = fileBytes(state.paths.archivePrd);
+  const tasksBytes = fileBytes(state.paths.archiveTasks);
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
+  assert.match(expectRepairRefusal(outcome), /does not hash to revision\.started\.baseContract/);
+  assert.equal(fileBytes(state.paths.archivePrd), prdBytes, "never overwritten");
+  assert.equal(fileBytes(state.paths.archiveTasks), tasksBytes);
+  assert.equal(existsSync(runLogPathOf(root, successorRunId(runId))), false, "no seed after refusal");
+  assert.deepEqual(revisionTypes(root, runId).filter((t) => t === "revision.launched"), []);
+  assert.equal(fileSha(state.paths.prd), BASE_CONTRACT.prdSha, "artifacts untouched");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: B4a — a damaged archive refuses byte-identically on the step-1→5 skip path too", async () => {
+  const root = fixture();
+  const runId = "run-b4a-damaged-skip";
+  const state = approvedState(root, runId, { archive: "damaged", artifacts: "promoted", sidecar: "damaged" });
+  const prdBytes = fileBytes(state.paths.archivePrd);
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
+  assert.match(expectRepairRefusal(outcome), /does not hash to revision\.started\.baseContract/);
+  assert.equal(fileBytes(state.paths.archivePrd), prdBytes, "the skip path never overwrites either");
+  assert.equal(existsSync(runLogPathOf(root, successorRunId(runId))), false);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: B4a — a partial archive gains only the missing copy; the surviving copy is untouched", async () => {
+  const root = fixture();
+  const runId = "run-b4a-partial";
+  const state = approvedState(root, runId, { archive: "only-prd" });
+  const prdBytes = fileBytes(state.paths.archivePrd);
+  const prdMtime = fileMtime(state.paths.archivePrd);
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
+  assert.equal(outcome.kind, "launched");
+  assert.equal(fileBytes(state.paths.archivePrd), prdBytes, "the surviving copy is not rewritten");
+  assert.equal(fileMtime(state.paths.archivePrd), prdMtime);
+  assert.equal(
+    fileBytes(state.paths.archiveTasks),
+    `${MARKER}\n${TASKS_BODY}`,
+    "only the missing copy was written, from the original artifact",
+  );
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: an absent archive with already-promoted artifacts reports the loss and proceeds — never archiving promoted contents as the original", async () => {
+  const root = fixture();
+  const runId = "run-loss-normal";
+  const state = approvedState(root, runId, { artifacts: "promoted", archive: "none" });
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
+  assert.equal(outcome.kind, "launched");
+  if (outcome.kind !== "launched") throw new Error("expected launch");
+  assert.equal(outcome.archiveLosses.length, 2);
+  assert.match(outcome.archiveLosses[0]!, /previous-prd\.md/);
+  assert.match(outcome.archiveLosses[0]!, /unrecoverable/);
+  assert.match(outcome.archiveLosses[1]!, /previous-tasks\.md/);
+  assert.equal(existsSync(state.paths.archivePrd), false, "promoted contents are NOT archived as the original contract");
+  assert.equal(existsSync(state.paths.archiveTasks), false);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: the step-1→5 skip path with an absent archive reports the loss and completes (candidate lost, promoted artifacts valid)", async () => {
+  const root = fixture();
+  const runId = "run-loss-skip";
+  const state = approvedState(root, runId, { artifacts: "promoted", archive: "none", sidecar: "damaged" });
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
+  assert.equal(outcome.kind, "launched");
+  if (outcome.kind !== "launched") throw new Error("expected launch");
+  assert.equal(outcome.archiveLosses.length, 2, "the loss is reported explicitly even on the skip path");
+  assert.equal(existsSync(state.paths.archivePrd), false);
+  assert.deepEqual(
+    readRunLog(root, successorRunId(runId)).map((e) => e.type),
+    ["workflow.started", "spec.approved"],
+    "the approved launch proceeds from the verified contract",
+  );
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: B5 — promoted artifacts with no successor log gain the exact canonical seed", async () => {
+  const root = fixture();
+  const runId = "run-b5";
+  const state = approvedState(root, runId, { artifacts: "promoted", archive: "valid" });
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
+  assert.equal(outcome.kind, "launched");
+  const successorId = successorRunId(runId);
+  const successorEvents = readRunLog(root, successorId);
+  assert.deepEqual(successorEvents.map((e) => e.type), ["workflow.started", "spec.approved"]);
+  const sStarted = successorEvents[0] as Extract<WorkflowEvent, { type: "workflow.started" }>;
+  assert.equal(sStarted.baseline, "snap-base");
+  assert.equal((successorEvents[1] as Extract<WorkflowEvent, { type: "spec.approved" }>).prdSha, CONTRACT.prdSha);
+  assert.equal(fileSha(state.paths.prd), CONTRACT.prdSha);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: B5a — a started-only seed gains ONLY spec.approved; the verified prefix is never rewritten", async () => {
+  const root = fixture();
+  const runId = "run-b5a-partial";
+  approvedState(root, runId, { archive: "valid", successor: "started-only" });
+  const successorId = successorRunId(runId);
+  const before = readRunLog(root, successorId);
+  assert.deepEqual(before.map((e) => e.type), ["workflow.started"]);
+  const startedJson = stableJson(before[0]!);
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
+  assert.equal(outcome.kind, "launched");
+  const after = readRunLog(root, successorId);
+  assert.deepEqual(after.map((e) => e.type), ["workflow.started", "spec.approved"], "only the missing event was appended");
+  assert.equal(stableJson(after[0]!), startedJson, "the prefix byte-stable");
+  assert.equal((after[1] as Extract<WorkflowEvent, { type: "spec.approved" }>).prdSha, CONTRACT.prdSha);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: B5a — an empty successor log file gains both seed events", async () => {
+  const root = fixture();
+  const runId = "run-b5a-empty";
+  approvedState(root, runId, { archive: "valid", successor: "empty-file" });
+  const successorId = successorRunId(runId);
+  assert.equal(existsSync(runLogPathOf(root, successorId)), true);
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
+  assert.equal(outcome.kind, "launched");
+  assert.deepEqual(readRunLog(root, successorId).map((e) => e.type), ["workflow.started", "spec.approved"]);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: B5a — spec.approved without a preceding workflow.started is an impossible order — refuse byte-identically", async () => {
+  const root = fixture();
+  const runId = "run-b5a-spec-first";
+  approvedState(root, runId, { archive: "valid", successor: "spec-first" });
+  const successorPath = runLogPathOf(root, successorRunId(runId));
+  const bytesBefore = fileBytes(successorPath);
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
+  assert.match(expectRepairRefusal(outcome), /impossible order/);
+  assert.equal(fileBytes(successorPath), bytesBefore, "never rewritten");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: B5a — ANY seed divergence refuses field-by-field without rewriting the log", async () => {
+  const root = fixture();
+  const runId = "run-b5a-divergent";
+  const state = approvedState(root, runId, { archive: "valid" });
+  const successorId = successorRunId(runId);
+  const events = readRunLog(root, runId);
+  const predStarted = events.find(
+    (event): event is Extract<WorkflowEvent, { type: "workflow.started" }> => event.type === "workflow.started",
+  )!;
+  const verdict = expectEligible(revisionEligibility(events));
+  const seed = canonicalSuccessorSeed(predStarted, state.approval, verdict.usage);
+
+  const divergences: Array<[string, WorkflowEvent[]]> = [
+    ["workflow.started.description", [{ ...seed.started, description: "another feature" } as WorkflowEvent, seed.spec]],
+    ["workflow.started.baseline", [{ ...seed.started, baseline: "fresh-snap" } as WorkflowEvent, seed.spec]],
+    ["workflow.started.stack", [{ ...seed.started, stack: { primary: "python", frameworks: [] } } as WorkflowEvent, seed.spec]],
+    ["workflow.started.carriedUsage (absent)", [{ ...seed.started, carriedUsage: {} } as WorkflowEvent, seed.spec]],
+    [
+      "workflow.started.carriedUsage.planner.input",
+      [
+        {
+          ...seed.started,
+          carriedUsage: { planner: { ...seed.started.carriedUsage!.planner!, input: 999 } },
+        } as WorkflowEvent,
+        seed.spec,
+      ],
+    ],
+    [
+      "workflow.started.revision.correction",
+      [{ ...seed.started, revision: { ...seed.started.revision!, correction: "other" } } as WorkflowEvent, seed.spec],
+    ],
+    [
+      "workflow.started.revision.revision",
+      [{ ...seed.started, revision: { ...seed.started.revision!, revision: 2 } } as WorkflowEvent, seed.spec],
+    ],
+    [
+      "workflow.started.verify (optional present unexpectedly)",
+      [
+        { ...seed.started, verify: { commands: [], scripts: {}, scriptsDigest: "x" } } as WorkflowEvent,
+        seed.spec,
+      ],
+    ],
+    ["spec.approved.prdSha (contract)", [seed.started, { ...seed.spec, prdSha: "a".repeat(64) } as WorkflowEvent]],
+    [
+      "unrelated log",
+      [{ type: "workflow.started", runId: successorId, workflow: "feature", description: "unrelated", baseline: "x" } as WorkflowEvent],
+    ],
+    [
+      "non-seed event before spec.approved",
+      [seed.started, { type: "phase.started", runId: successorId, phase: "develop" } as WorkflowEvent],
+    ],
+  ];
+  for (const [label, logEvents] of divergences) {
+    writeFileSync(runLogPathOf(root, successorId), `${logEvents.map((e) => JSON.stringify(e)).join("\n")}\n`, "utf8");
+    const bytesBefore = fileBytes(runLogPathOf(root, successorId));
+    const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
+    if (outcome.kind !== "refused") throw new Error(`${label}: expected a refusal, got ${outcome.kind}`);
+    assert.match(outcome.reason, /diverges|impossible order/, `${label}: divergence named`);
+    assert.equal(fileBytes(runLogPathOf(root, successorId)), bytesBefore, `${label}: the log was never rewritten`);
+  }
+  // The lifecycle never advanced: still approved-pending-launch after every refusal.
+  assert.equal(revisionLifecycle(readRunLog(root, runId)).state, "approved-pending-launch");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("seed verification: trailing legitimate markers (workflow.resumed, phase.started) are not a collision", () => {
+  const predStarted = {
+    type: "workflow.started",
+    runId: "run-x",
+    workflow: "feature",
+    description: DESCRIPTION,
+    baseline: "snap-base",
+  } as Extract<WorkflowEvent, { type: "workflow.started" }>;
+  const seed = canonicalSuccessorSeed(predStarted, t6RevisionApproval("run-x"), {});
+  const successorId = seed.started.runId;
+  const events: WorkflowEvent[] = [
+    seed.started,
+    seed.spec,
+    { type: "workflow.resumed", runId: successorId, phase: "develop" },
+    { type: "phase.started", runId: successorId, phase: "develop" },
+  ];
+  assert.equal(verifySuccessorSeed(events, seed).status, "complete", "the prefix matches; trailing B7c markers are legitimate");
+  const partial = verifySuccessorSeed(events.slice(0, 1), seed);
+  assert.equal(partial.status, "missing-spec");
+});
+
+test("repair: B6 — the pointer is appended idempotently once the seed exists, then launch proceeds", async () => {
+  const root = fixture();
+  const runId = "run-b6";
+  approvedState(root, runId, { artifacts: "promoted", archive: "valid", successor: "full" });
+  const launcher = new RecordingLauncher(root);
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), (req) => launcher.run(req)));
+  assert.equal(outcome.kind, "launched");
+  assert.deepEqual(
+    revisionTypes(root, runId),
+    ["revision.started", "revision.candidate", "revision.approved", "revision.launched"],
+    "exactly one pointer",
+  );
+  assert.deepEqual(launcher.requests, [{ successorRunId: successorRunId(runId), resumedPhase: "develop" }]);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: B7a — reachable from launched via launchIncomplete; the seed is created once, never duplicated", async () => {
+  const root = fixture();
+  const runId = "run-b7a";
+  approvedState(root, runId, { artifacts: "promoted", archive: "valid", pointer: true });
+  const launcher = new RecordingLauncher(root);
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), (req) => launcher.run(req)));
+  assert.equal(outcome.kind, "launched", "the pointer proves intent, not a run — repair completes it");
+  const successorId = successorRunId(runId);
+  const successorEvents = readRunLog(root, successorId);
+  assert.deepEqual(successorEvents.map((e) => e.type), ["workflow.started", "spec.approved", "workflow.resumed"]);
+  assert.equal(successorEvents.filter((e) => e.type === "workflow.started").length, 1, "never a second workflow.started");
+  assert.equal(readRunLog(root, runId).filter((e) => e.type === "revision.launched").length, 1, "the pointer is not duplicated");
+  assert.deepEqual(launcher.requests, [{ successorRunId: successorId, resumedPhase: "develop" }]);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: B7b — the seeded stub without workflow.resumed launches with resumedPhase develop; exactly one marker lands", async () => {
+  const root = fixture();
+  const runId = "run-b7b";
+  approvedState(root, runId, { artifacts: "promoted", archive: "valid", pointer: true, successor: "full" });
+  const launcher = new RecordingLauncher(root);
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), (req) => launcher.run(req)));
+  assert.equal(outcome.kind, "launched");
+  if (outcome.kind !== "launched") throw new Error("expected launch");
+  assert.equal(outcome.resumedPhase, "develop");
+  assert.deepEqual(launcher.requests, [{ successorRunId: successorRunId(runId), resumedPhase: "develop" }]);
+  const markers = readRunLog(root, successorRunId(runId)).filter((e) => e.type === "workflow.resumed");
+  assert.equal(markers.length, 1);
+  assert.equal((markers[0] as Extract<WorkflowEvent, { type: "workflow.resumed" }>).phase, "develop");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: B7c — an existing workflow.resumed omits resumedPhase; at most one marker ever", async () => {
+  const root = fixture();
+  const runId = "run-b7c";
+  approvedState(root, runId, { artifacts: "promoted", archive: "valid", pointer: true, successor: "full+resumed" });
+  const launcher = new RecordingLauncher(root);
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), (req) => launcher.run(req)));
+  assert.equal(outcome.kind, "launched");
+  if (outcome.kind !== "launched") throw new Error("expected launch");
+  assert.equal(outcome.resumedPhase, undefined, "B7c: the request OMITS resumedPhase");
+  assert.deepEqual(launcher.requests, [{ successorRunId: successorRunId(runId) }], "no resumedPhase key at all");
+  assert.equal(
+    readRunLog(root, successorRunId(runId)).filter((e) => e.type === "workflow.resumed").length,
+    1,
+    "no second marker",
+  );
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: run twice — stable state, no duplicated events (idempotence)", async () => {
+  const root = fixture();
+  const runId = "run-twice";
+  approvedState(root, runId, { artifacts: "promoted", archive: "valid", pointer: true, successor: "full" });
+  const launcher = new RecordingLauncher(root); // never emits phase.started: the launch stays incomplete
+  const first = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), (req) => launcher.run(req)));
+  assert.equal(first.kind, "launched");
+  const successorPath = runLogPathOf(root, successorRunId(runId));
+  const successorBytes = fileBytes(successorPath);
+  const predecessorBytes = fileBytes(runLogPathOf(root, runId));
+  const second = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), (req) => launcher.run(req)));
+  assert.equal(second.kind, "launched");
+  assert.equal(fileBytes(successorPath), successorBytes, "the successor log is stable");
+  assert.equal(fileBytes(runLogPathOf(root, runId)), predecessorBytes, "the predecessor log is stable");
+  assert.equal(readRunLog(root, runId).filter((e) => e.type === "revision.launched").length, 1);
+  assert.equal(readRunLog(root, successorRunId(runId)).filter((e) => e.type === "workflow.started").length, 1);
+  assert.equal(readRunLog(root, successorRunId(runId)).filter((e) => e.type === "workflow.resumed").length, 1);
+  assert.equal(launcher.requests.length, 2);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: a successor that already recorded phase.started refuses and points at the successor", async () => {
+  const root = fixture();
+  const runId = "run-complete";
+  approvedState(root, runId, { artifacts: "promoted", archive: "valid", pointer: true, successor: "full" });
+  const successorId = successorRunId(runId);
+  RunLog.open(root, successorId).append({ type: "phase.started", runId: successorId, phase: "develop" } as WorkflowEvent);
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
+  const reason = expectRepairRefusal(outcome);
+  assert.match(reason, /already recorded its first phase/);
+  assert.match(reason, new RegExp(successorId), "the refusal names the successor");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: a launch-port failure keeps the state repairable (pointer precedes launch-completion)", async () => {
+  const root = fixture();
+  const runId = "run-launch-fail";
+  approvedState(root, runId, { artifacts: "promoted", archive: "valid" });
+  const outcome = await repairRevisionLaunch(
+    repairDeps(root, runId, new ScriptedHuman(), async () => {
+      throw new Error("injected launcher failure");
+    }),
+  );
+  assert.equal(outcome.kind, "failed");
+  // The pointer persisted; the lifecycle is launched-with-incomplete-launch → repairable again.
+  assert.equal(revisionLifecycle(readRunLog(root, runId)).state, "launched");
+  assert.equal(resumeRevisionRefusal(readRunLog(root, runId), root)?.type, "revision_launch_incomplete");
+  const retry = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
+  assert.equal(retry.kind, "launched", "the retry completes the launch");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: B8 — candidate and promoted artifacts both invalid refuse execution; declining keeps the block", async () => {
+  const root = fixture();
+  const runId = "run-b8-decline";
+  const state = approvedState(root, runId, { sidecar: "damaged", artifacts: "foreign", archive: "none" });
+  const human = new ScriptedHuman();
+  human.selects = ["leave"];
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, human, async () => {}));
+  const reason = expectRepairRefusal(outcome);
+  assert.match(reason, /neither the candidate sidecar nor the promoted artifacts verify/);
+  assert.match(reason, /found prd/, "the refusal reports the actual hashes");
+  assert.deepEqual(revisionTypes(root, runId).filter((t) => t === "revision.launched"), [], "no execution");
+  assert.equal(existsSync(runLogPathOf(root, successorRunId(runId))), false);
+  assert.equal(fileBytes(state.paths.prd), `${MARKER}\nsomeone edited this`, "no implicit restore");
+  assert.equal(revisionLifecycle(readRunLog(root, runId)).state, "approved-pending-launch", "declining keeps the block");
+
+  // A dismissed decision also refuses without touching anything.
+  const dismissed = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
+  assert.match(expectRepairRefusal(dismissed), /decision dismissed/);
+  assert.equal(revisionLifecycle(readRunLog(root, runId)).state, "approved-pending-launch");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: B8 — forced abandonment reports untouched artifacts, lifts the block, keeps the sidecar archive", async () => {
+  const root = fixture();
+  const runId = "run-b8-untouched";
+  const state = approvedState(root, runId, { sidecar: "damaged", artifacts: "original", archive: "valid" });
+  const human = new ScriptedHuman();
+  human.selects = ["force"];
+  const prdBytes = fileBytes(state.paths.prd);
+  const tasksBytes = fileBytes(state.paths.tasks);
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, human, async () => {}));
+  assert.equal(outcome.kind, "abandoned-forced");
+  if (outcome.kind !== "abandoned-forced") throw new Error("expected forced abandonment");
+  assert.equal(outcome.revision, 1);
+  assert.equal(outcome.artifactState, "untouched");
+  assert.match(outcome.report, /still hash to the predecessor's old contract/);
+  assert.match(outcome.report, /depends on the predecessor's own status/, "never promises resume");
+  assert.equal(fileBytes(state.paths.prd), prdBytes, "no rollback");
+  assert.equal(fileBytes(state.paths.tasks), tasksBytes);
+  const abandoned = readRunLog(root, runId).find((e) => e.type === "revision.abandoned") as
+    | { reason?: string }
+    | undefined;
+  assert.equal(abandoned?.reason, "approval contents unrecoverable");
+  assert.equal(existsSync(state.paths.archivePrd), true, "the sidecar archive is kept for manual restoration");
+  assert.equal(existsSync(state.paths.archiveTasks), true);
+  assert.equal(resumeRevisionRefusal(readRunLog(root, runId), root), undefined, "the lifecycle block is lifted");
+  assert.equal(existsSync(runLogPathOf(root, successorRunId(runId))), false, "nothing launched");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: B8 — forced abandonment reports indeterminate state with both sha sets; no rollback, no partial-code changes", async () => {
+  const root = fixture();
+  const runId = "run-b8-indeterminate";
+  const state = approvedState(root, runId, { sidecar: "damaged", artifacts: "foreign", archive: "none" });
+  const human = new ScriptedHuman();
+  human.selects = ["force"];
+  const prdBytes = fileBytes(state.paths.prd);
+  const tasksBytes = fileBytes(state.paths.tasks);
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, human, async () => {}));
+  assert.equal(outcome.kind, "abandoned-forced");
+  if (outcome.kind !== "abandoned-forced") throw new Error("expected forced abandonment");
+  assert.equal(outcome.artifactState, "indeterminate");
+  assert.match(outcome.report, /NOT known-good/);
+  assert.match(outcome.report, new RegExp(`${BASE_CONTRACT.prdSha.slice(0, 12)}`), "the expected sha is printed");
+  assert.match(outcome.report, new RegExp(`${sha(`${MARKER}\nsomeone edited this`).slice(0, 12)}`), "the actual sha is printed");
+  assert.match(outcome.report, /No rollback was attempted/);
+  assert.equal(fileBytes(state.paths.prd), prdBytes, "no implicit restore");
+  assert.equal(fileBytes(state.paths.tasks), tasksBytes);
+  assert.equal(existsSync(runLogPathOf(root, successorRunId(runId))), false, "nothing launched");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("promotion: the session approval authorizes the launch repair end-to-end (T5 → T6 handoff)", async () => {
+  const root = fixture();
+  const runId = "run-e2e";
+  writePredecessorLog(root, runId, predecessorEvents(root, runId, { status: "cancelled" }));
+  const human = new ScriptedHuman();
+  human.inputs = ["make auth optional"];
+  human.selects = ["approve"];
+  const session = await runRevisionSessionCore(
+    sessionDeps(root, runId, new ScriptedPlanner({ text: VALID_PLAN_A }), human, new FakeGit()),
+  );
+  assert.equal(session.kind, "approved");
+  const launcher = new RecordingLauncher(root);
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, human, (req) => launcher.run(req)));
+  assert.equal(outcome.kind, "launched");
+  assert.deepEqual(
+    revisionTypes(root, runId),
+    ["revision.started", "revision.candidate", "revision.approved", "revision.launched"],
+  );
+  assert.deepEqual(
+    readRunLog(root, successorRunId(runId)).map((e) => e.type),
+    ["workflow.started", "spec.approved", "workflow.resumed"],
+  );
+  const featureDir = join(root, ".ai", "features", SLUG);
+  assert.equal(fileSha(join(featureDir, `prd-${SLUG}.md`)), CONTRACT.prdSha);
+  assert.equal(fileSha(join(featureDir, `tasks-${SLUG}.md`)), CONTRACT.tasksSha);
+  assert.equal(fileBytes(join(revisionSidecarDir(root, runId), "previous-prd.md")), `${MARKER}\n${PRD_BODY}`);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: a held lock refuses without promotion", async () => {
+  const root = fixture();
+  const runId = "run-lock-repair";
+  approvedState(root, runId, {});
+  const lock = acquireRunLock(root, { runId: "other", workflow: "other" });
+  assert.equal(lock.ok, true);
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
+  assert.match(expectRepairRefusal(outcome), /held by/);
+  if (lock.ok) lock.release();
+  rmSync(root, { recursive: true, force: true });
+});
+
+// ---------------------------------------------------------------------------
+// T6 review fixes — B4 slug recovery, B5a internal corruption, B4a unreadable
+// archive (each regression mirrors a reproduced review defect)
+// ---------------------------------------------------------------------------
+
+/** The canonical successor seed derived exactly as the repair derives it. */
+function canonicalSeedOf(root: string, runId: string, approval: ApprovedState["approval"]) {
+  const events = readRunLog(root, runId);
+  const predStarted = events.find(
+    (event): event is Extract<WorkflowEvent, { type: "workflow.started" }> => event.type === "workflow.started",
+  )!;
+  const verdict = expectEligible(revisionEligibility(events));
+  return canonicalSuccessorSeed(predStarted, approval, verdict.usage);
+}
+
+test("repair: B4 — a PRD truncated mid-marker still recovers (candidate and archive valid)", async () => {
+  const root = fixture();
+  const runId = "run-b4-truncated-prd";
+  const state = approvedState(root, runId, { archive: "valid" });
+  // A real truncation: the crash cut the file INSIDE the description marker,
+  // so the gate-time marker lookup cannot recognize the directory anymore.
+  writeFileSync(state.paths.prd, MARKER.slice(0, 12), "utf8");
+  assert.equal(existsSync(runLogPathOf(root, successorRunId(runId))), false);
+  const launcher = new RecordingLauncher(root);
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), (req) => launcher.run(req)));
+  assert.equal(outcome.kind, "launched", "B4 recovery must not depend on an intact PRD marker");
+  assert.equal(fileSha(state.paths.prd), CONTRACT.prdSha, "the truncated PRD was rewritten from the candidate");
+  assert.equal(fileSha(state.paths.tasks), CONTRACT.tasksSha);
+  assert.equal(fileBytes(state.paths.archivePrd), `${MARKER}\n${PRD_BODY}`, "the verified archive survived");
+  assert.deepEqual(
+    readRunLog(root, successorRunId(runId)).map((e) => e.type),
+    ["workflow.started", "spec.approved", "workflow.resumed"],
+  );
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: B4 — an empty PRD and a marker-less tasks file refuse: no verifiable directory identity, no writes", async () => {
+  const root = fixture();
+  const runId = "run-b4-both-markerless";
+  const state = approvedState(root, runId, { archive: "valid" });
+  // Both artifacts lost their markers. This state is unreachable from the
+  // promotion sequence (every crash point leaves one artifact intact under
+  // our marker), so it is external damage: no directory identity is
+  // provable, and the repair must not guess by name.
+  writeFileSync(state.paths.prd, "", "utf8");
+  writeFileSync(state.paths.tasks, "truncated garbage without any marker", "utf8");
+  const prdBytes = fileBytes(state.paths.prd);
+  const tasksBytes = fileBytes(state.paths.tasks);
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
+  const reason = expectRepairRefusal(outcome);
+  assert.match(reason, /cannot locate/);
+  assert.match(reason, /never guesses a directory by its name/);
+  assert.equal(fileBytes(state.paths.prd), prdBytes, "refusing writes nothing");
+  assert.equal(fileBytes(state.paths.tasks), tasksBytes);
+  assert.deepEqual(revisionTypes(root, runId).filter((t) => t === "revision.launched"), []);
+  assert.equal(existsSync(runLogPathOf(root, successorRunId(runId))), false);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: B4 — a directory that merely matches the description's slug shape is never adopted (another feature's artifacts stay byte-identical)", async () => {
+  const root = fixture();
+  const runId = "run-b4-foreign-slug-dir";
+  const state = approvedState(root, runId, { archive: "valid" });
+  // The REAL artifacts live in a title-named directory (the gate can name
+  // directories from the planner TITLE), both truncated past their marker.
+  const featureRoot = join(root, ".ai", "features");
+  const actualDir = join(featureRoot, "planner-chosen-title");
+  mkdirSync(actualDir, { recursive: true });
+  writeFileSync(join(actualDir, "prd-planner-chosen-title.md"), MARKER.slice(0, 12), "utf8");
+  writeFileSync(join(actualDir, "tasks-planner-chosen-title.md"), MARKER.slice(0, 12), "utf8");
+  // An UNRELATED feature happens to own the description-shaped directory
+  // (add-user-auth), with ITS OWN intact markers — the tempting wrong target.
+  const foreignMarker = descriptionMarker("add user auth for a different feature");
+  const foreignPrd = `${foreignMarker}\nforeign PRD`;
+  const foreignTasks = `${foreignMarker}\nforeign tasks`;
+  writeFileSync(state.paths.prd, foreignPrd, "utf8");
+  writeFileSync(state.paths.tasks, foreignTasks, "utf8");
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
+  const reason = expectRepairRefusal(outcome);
+  assert.match(reason, /cannot locate/);
+  assert.match(reason, /never guesses a directory by its name/);
+  assert.equal(fileBytes(state.paths.prd), foreignPrd, "the other feature's PRD is never overwritten");
+  assert.equal(fileBytes(state.paths.tasks), foreignTasks, "the other feature's TASKS are never overwritten");
+  assert.equal(existsSync(join(actualDir, "prd-planner-chosen-title.md")), true);
+  assert.deepEqual(revisionTypes(root, runId).filter((t) => t === "revision.launched"), [], "no launch over a guessed directory");
+  assert.equal(existsSync(runLogPathOf(root, successorRunId(runId))), false);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: two directories with the same PRD description marker refuse as ambiguous — identity is never 'first match'", async () => {
+  const root = fixture();
+  const runId = "run-b4-prd-ambiguous";
+  const state = approvedState(root, runId, {});
+  // A twin directory whose PRD verifies the SAME description marker: the
+  // gate-time lookup would silently promote into the first match.
+  const twin = join(root, ".ai", "features", `${SLUG}-2`);
+  mkdirSync(twin, { recursive: true });
+  writeFileSync(join(twin, `prd-${SLUG}-2.md`), `${MARKER}\nTwin PRD.`, "utf8");
+  writeFileSync(join(twin, `tasks-${SLUG}-2.md`), `${MARKER}\nTwin tasks.`, "utf8");
+  const ourPrd = fileBytes(state.paths.prd);
+  const ourTasks = fileBytes(state.paths.tasks);
+  const twinPrd = fileBytes(join(twin, `prd-${SLUG}-2.md`));
+  const twinTasks = fileBytes(join(twin, `tasks-${SLUG}-2.md`));
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
+  const reason = expectRepairRefusal(outcome);
+  assert.match(reason, /ambiguous/);
+  assert.match(reason, /description marker/);
+  assert.equal(fileBytes(state.paths.prd), ourPrd, "the first-match directory is never written");
+  assert.equal(fileBytes(state.paths.tasks), ourTasks);
+  assert.equal(fileBytes(join(twin, `prd-${SLUG}-2.md`)), twinPrd, "the twin is never written either");
+  assert.equal(fileBytes(join(twin, `tasks-${SLUG}-2.md`)), twinTasks);
+  assert.deepEqual(revisionTypes(root, runId).filter((t) => t === "revision.launched"), [], "no pointer");
+  assert.equal(existsSync(runLogPathOf(root, successorRunId(runId))), false, "no seed");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: several directories verifying the tasks marker refuse as ambiguous", async () => {
+  const root = fixture();
+  const runId = "run-b4-ambiguous";
+  const state = approvedState(root, runId, {});
+  // Damage the PRD so the primary lookup fails; two directories then verify
+  // the tasks marker — identity is ambiguous, fail-closed.
+  writeFileSync(state.paths.prd, MARKER.slice(0, 12), "utf8");
+  const twin = join(root, ".ai", "features", `${SLUG}-2`);
+  mkdirSync(twin, { recursive: true });
+  writeFileSync(join(twin, `prd-${SLUG}-2.md`), "no marker", "utf8");
+  writeFileSync(join(twin, `tasks-${SLUG}-2.md`), `${MARKER}\nTwin.`, "utf8");
+  const tasksBytes = fileBytes(state.paths.tasks);
+  const twinBytes = fileBytes(join(twin, `tasks-${SLUG}-2.md`));
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
+  assert.match(expectRepairRefusal(outcome), /ambiguous/);
+  assert.equal(fileBytes(state.paths.tasks), tasksBytes);
+  assert.equal(fileBytes(join(twin, `tasks-${SLUG}-2.md`)), twinBytes);
+  assert.equal(existsSync(runLogPathOf(root, successorRunId(runId))), false);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: B5a/AC-13 — internal corruption inside the seed refuses without rewriting the log", async () => {
+  const root = fixture();
+  const runId = "run-b5a-corrupt";
+  const state = approvedState(root, runId, { archive: "valid" });
+  const successorId = successorRunId(runId);
+  const seed = canonicalSeedOf(root, runId, state.approval);
+  writeFileSync(
+    runLogPathOf(root, successorId),
+    `${JSON.stringify(seed.started)}\n{broken interior\n${JSON.stringify(seed.spec)}\n`,
+    "utf8",
+  );
+  const bytesBefore = fileBytes(runLogPathOf(root, successorId));
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
+  const reason = expectRepairRefusal(outcome);
+  assert.match(reason, /is corrupt/);
+  assert.match(reason, /line 2/, "the refusal names the offending line");
+  assert.equal(fileBytes(runLogPathOf(root, successorId)), bytesBefore, "never rewritten");
+  assert.deepEqual(revisionTypes(root, runId).filter((t) => t === "revision.launched"), [], "no launch over corruption");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: B5a — a torn append of a canonical seed line is completed, and its healed shape never bricks re-entry", async () => {
+  const root = fixture();
+  const runId = "run-b5a-torn-tail";
+  const state = approvedState(root, runId, { archive: "valid" });
+  const successorId = successorRunId(runId);
+  const seed = canonicalSeedOf(root, runId, state.approval);
+  // Crash mid-append: the spec.approved line is a strict PREFIX, no newline.
+  writeFileSync(runLogPathOf(root, successorId), `${JSON.stringify(seed.started)}\n${JSON.stringify(seed.spec).slice(0, 24)}`, "utf8");
+  const launcher = new RecordingLauncher(root); // never emits phase.started → launch stays incomplete
+  const first = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), (req) => launcher.run(req)));
+  assert.equal(first.kind, "launched", "the allowed torn tail is completed, not refused");
+  assert.deepEqual(
+    readRunLog(root, successorId).map((e) => e.type),
+    ["workflow.started", "spec.approved", "workflow.resumed"],
+    "only spec.approved was appended to the torn prefix (the resumed marker comes from the launcher)",
+  );
+  // The healed shape (torn prefix line BEFORE the completed event) must not
+  // brick a re-entry: it is exactly what the healing discipline leaves.
+  const second = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), (req) => launcher.run(req)));
+  assert.equal(second.kind, "launched", "the healed torn line is tolerated as a canonical-line prefix");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: B5a — a healed torn seed line inside a complete seed is tolerated without rewriting", async () => {
+  const root = fixture();
+  const runId = "run-b5a-healed";
+  const state = approvedState(root, runId, { archive: "valid" });
+  const successorId = successorRunId(runId);
+  const seed = canonicalSeedOf(root, runId, state.approval);
+  writeFileSync(
+    runLogPathOf(root, successorId),
+    `${JSON.stringify(seed.started)}\n${JSON.stringify(seed.spec).slice(0, 24)}\n${JSON.stringify(seed.spec)}\n`,
+    "utf8",
+  );
+  const bytesBefore = fileBytes(runLogPathOf(root, successorId));
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
+  assert.equal(outcome.kind, "launched", "the torn prefix is inert: the canonical spec.approved is present and verified");
+  assert.equal(fileBytes(runLogPathOf(root, successorId)), bytesBefore, "the complete seed is reused, never rewritten (no launcher append)");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: B5a — a torn spec.approved append BEFORE workflow.started is an impossible order — refuse byte-identically", async () => {
+  const root = fixture();
+  const runId = "run-b5a-order";
+  const state = approvedState(root, runId, { archive: "valid" });
+  const successorId = successorRunId(runId);
+  const seed = canonicalSeedOf(root, runId, state.approval);
+  writeFileSync(
+    runLogPathOf(root, successorId),
+    `${JSON.stringify(seed.spec).slice(0, 30)}\n${JSON.stringify(seed.started)}\n${JSON.stringify(seed.spec)}\n`,
+    "utf8",
+  );
+  const bytesBefore = fileBytes(runLogPathOf(root, successorId));
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
+  const reason = expectRepairRefusal(outcome);
+  assert.match(reason, /impossible seed order/);
+  assert.match(reason, /torn append of the canonical spec\.approved line/);
+  assert.equal(fileBytes(runLogPathOf(root, successorId)), bytesBefore, "never rewritten");
+  assert.deepEqual(revisionTypes(root, runId).filter((t) => t === "revision.launched"), [], "no launch over an impossible order");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: B5a — a SHORT shared-prefix torn tail is completed (the prefix names no event; the open window decides)", async () => {
+  const root = fixture();
+  const runId = "run-b5a-shared-tail";
+  const state = approvedState(root, runId, { archive: "valid" });
+  const successorId = successorRunId(runId);
+  const seed = canonicalSeedOf(root, runId, state.approval);
+  // `{"type":"` — shorter than the canonical lines' common head: a prefix of
+  // BOTH seed lines, so it names no event by itself.
+  const shared = JSON.stringify(seed.spec).slice(0, 9);
+  assert.equal(shared, `{"type":"`);
+  assert.equal(JSON.stringify(seed.started).startsWith(shared), true, "fixture: genuinely shared");
+  writeFileSync(runLogPathOf(root, successorId), `${JSON.stringify(seed.started)}\n${shared}`, "utf8");
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
+  assert.equal(
+    outcome.kind,
+    "launched",
+    "the ambiguous tail sits between the two lines: the only possible append there is spec.approved",
+  );
+  assert.deepEqual(readRunLog(root, successorId).map((e) => e.type), ["workflow.started", "spec.approved"]);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: B5a — a healed SHORT shared-prefix line inside the seed is tolerated without rewriting", async () => {
+  const root = fixture();
+  const runId = "run-b5a-shared-healed";
+  const state = approvedState(root, runId, { archive: "valid" });
+  const successorId = successorRunId(runId);
+  const seed = canonicalSeedOf(root, runId, state.approval);
+  const shared = JSON.stringify(seed.started).slice(0, 9); // `{"type":"`
+  writeFileSync(
+    runLogPathOf(root, successorId),
+    `${JSON.stringify(seed.started)}\n${shared}\n${JSON.stringify(seed.spec)}\n`,
+    "utf8",
+  );
+  const bytesBefore = fileBytes(runLogPathOf(root, successorId));
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
+  assert.equal(outcome.kind, "launched", "the healed shared prefix is inert: the canonical seed is present and verified");
+  assert.equal(fileBytes(runLogPathOf(root, successorId)), bytesBefore, "the complete seed is reused, never rewritten");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: malformed lines after the verified seed are the successor's ordinary execution tail", async () => {
+  const root = fixture();
+  const runId = "run-b5a-post-seed";
+  const state = approvedState(root, runId, { archive: "valid" });
+  const successorId = successorRunId(runId);
+  const seed = canonicalSeedOf(root, runId, state.approval);
+  writeFileSync(
+    runLogPathOf(root, successorId),
+    `${JSON.stringify(seed.started)}\n${JSON.stringify(seed.spec)}\n{"type":"phase.star`,
+    "utf8",
+  );
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
+  assert.equal(outcome.kind, "launched", "post-seed torn tails keep the existing crash tolerance");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("seed corruption: classification distinguishes torn appends, internal garbage and the post-seed tail", () => {
+  const predStarted = {
+    type: "workflow.started",
+    runId: "run-x",
+    workflow: "feature",
+    description: DESCRIPTION,
+    baseline: "snap-base",
+  } as Extract<WorkflowEvent, { type: "workflow.started" }>;
+  const seed = canonicalSuccessorSeed(predStarted, t6RevisionApproval("run-x"), {});
+  const startedLine = JSON.stringify(seed.started);
+  const specLine = JSON.stringify(seed.spec);
+
+  // Internal garbage inside the seed → corruption.
+  assert.match(successorSeedCorruption(`${startedLine}\ngarbage\n${specLine}\n`, seed)!, /line 2 is corrupt/);
+  // Garbage-only log → corruption (an empty-seed append must never sit on garbage).
+  assert.match(successorSeedCorruption(`garbage\n`, seed)!, /line 1 is corrupt/);
+  // A divergent-but-parseable line is NOT this scanner's concern (seed divergence does that).
+  assert.equal(successorSeedCorruption(`${startedLine}\n${specLine}\n{"type":"phase.started","runId":"x"}\n`, seed), undefined);
+  // Torn appends in their OWN append window → tolerated.
+  assert.equal(successorSeedCorruption(`${startedLine}\n${specLine.slice(0, 20)}\n${specLine}\n`, seed), undefined);
+  assert.equal(successorSeedCorruption(`${startedLine.slice(0, 30)}\n${specLine}\n`, seed), undefined);
+  // A SHORT prefix below the common head (`{"type":"`) is shared by BOTH
+  // canonical lines and names no event by itself: the open window classifies
+  // it — before started → a torn started append; between the lines → a torn
+  // spec append; after the seed → the ordinary execution tail.
+  const shared = specLine.slice(0, 9);
+  assert.equal(shared, `{"type":"`, "fixture: the prefix really is the common head");
+  assert.equal(startedLine.startsWith(shared), true);
+  assert.equal(successorSeedCorruption(`${startedLine}\n${shared}`, seed), undefined, "shared torn tail in the spec window");
+  assert.equal(
+    successorSeedCorruption(`${startedLine}\n${shared}\n${specLine}\n`, seed),
+    undefined,
+    "healed shared prefix in the spec window",
+  );
+  assert.equal(successorSeedCorruption(`${shared}\n${startedLine}\n${specLine}\n`, seed), undefined, "shared torn head in the started window");
+  assert.equal(successorSeedCorruption(`{\n${startedLine}\n${specLine}\n`, seed), undefined, "a one-character shared prefix too");
+  // A torn prefix OUTSIDE its window is an impossible seed order → refuse
+  // (unambiguous prefixes only: a shared prefix always has an open window).
+  assert.match(
+    successorSeedCorruption(`${specLine.slice(0, 20)}\n${startedLine}\n${specLine}\n`, seed)!,
+    /impossible seed order/,
+    "a spec.approved append cannot precede workflow.started",
+  );
+  assert.match(
+    successorSeedCorruption(`${startedLine}\n${startedLine.slice(0, 30)}\n${specLine}\n`, seed)!,
+    /impossible seed order/,
+    "workflow.started is never appended twice",
+  );
+  // Malformed lines after the completed seed → the ordinary execution tail.
+  assert.equal(successorSeedCorruption(`${startedLine}\n${specLine}\ngarbage\n`, seed), undefined);
+  // Truncated multi-byte garbage that matches no canonical prefix → corruption.
+  assert.match(successorSeedCorruption(`${startedLine}\n${specLine.slice(0, 20)}???\n${specLine}\n`, seed)!, /corrupt/);
+});
+
+test("repair: B4a — an archive that exists but cannot be read refuses on the normal path", async () => {
+  const root = fixture();
+  const runId = "run-b4a-archive-eisdir";
+  const state = approvedState(root, runId, { artifacts: "promoted", archive: "none" });
+  mkdirSync(state.paths.archivePrd); // previous-prd.md present AS a directory
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
+  const reason = expectRepairRefusal(outcome);
+  assert.match(reason, /exists but cannot be read/);
+  assert.match(reason, /never bypassed as absent/);
+  assert.deepEqual(revisionTypes(root, runId).filter((t) => t === "revision.launched"), [], "no launch, no false loss report");
+  assert.equal(existsSync(runLogPathOf(root, successorRunId(runId))), false);
+  assert.equal(existsSync(state.paths.archiveTasks), false, "nothing archived from promoted contents");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("repair: B4a — an unreadable archive refuses on the step-1→5 skip path too", async () => {
+  const root = fixture();
+  const runId = "run-b4a-archive-eisdir-skip";
+  const state = approvedState(root, runId, { artifacts: "promoted", sidecar: "damaged", archive: "none" });
+  mkdirSync(state.paths.archivePrd);
+  const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
+  assert.match(expectRepairRefusal(outcome), /exists but cannot be read/);
+  assert.equal(existsSync(runLogPathOf(root, successorRunId(runId))), false);
+  rmSync(root, { recursive: true, force: true });
 });
