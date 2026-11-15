@@ -137,6 +137,22 @@ export type WorkflowEvent =
        * present-but-corrupt value refuses the resume outright.
        */
       verify?: VerifyFreeze;
+      /**
+       * Post-stop revision linkage (spec.md §8), successor runs only: which
+       * predecessor run this log revises, the chain-wide revision number and
+       * the verbatim user correction. Ordinary logs never carry the field, so
+       * ordinary replays leave it undefined and prompts stay byte-identical.
+       * Replay reconstructs ResumeState.revision from it, which keeps the
+       * correction context alive at EVERY resume of the successor.
+       */
+      revision?: { predecessorRunId: string; revision: number; correction: string };
+      /**
+       * Successor runs only (spec.md §8): the predecessor's replayed usage
+       * totals, folded into usage reconstruction so repeated resumes and
+       * outcome totals stay chain-cumulative. Per-call detail remains in each
+       * log's own agent.completed events.
+       */
+      carriedUsage?: Partial<Record<string, UsageTotals>>;
     }
   | {
       type: "phase.started";
@@ -262,4 +278,108 @@ export type WorkflowEvent =
       round: number;
       reason: string;
       artifactPath: string;
+    }
+  | {
+      /**
+       * A post-stop plan revision was OPENED for this run (`/flow revise`,
+       * spec.md §6 row T1). Appended to the predecessor log before any planner
+       * call; the run's ordinary resume refuses while the lifecycle it opens is
+       * active. `eventId` is stable and content-derived (sha256 of the canonical
+       * projection: the event minus `eventId` and minus every timestamp field),
+       * so a retry of the same logical step reconstructs the SAME id from the
+       * same persisted evidence.
+       */
+      type: "revision.started";
+      eventId: string;
+      runId: string;
+      /** Chain-wide, 1-based; counts EVERY revision.started in the chain, abandoned included. */
+      revision: number;
+      /** Verbatim user correction. */
+      correction: string;
+      correctionSha: string;
+      /** Hashes of the still-approved artifacts (the last replayed spec.approved). */
+      baseContract: { prdSha: string; tasksSha: string };
+      /** Evidence captured at open (spec.md §10): sha256 of the partial patch. */
+      partialPatchSha?: string;
+      /** Evidence captured at open: files changed against the original baseline. */
+      partialFiles?: string[];
+      /** ISO timestamp; excluded from eventId. */
+      at: string;
+    }
+  | {
+      /** A post-stop revision planner round produced a valid candidate (§6 row T3). */
+      type: "revision.candidate";
+      eventId: string;
+      runId: string;
+      revision: number;
+      /** 1-based; the round budget is recounted from these events. */
+      round: number;
+      prdSha: string;
+      tasksSha: string;
+      at: string;
+    }
+  | {
+      /**
+       * A candidate was rejected before approval — planner validation failure
+       * (consumes no round) or user rejection with replacement notes (§6 T4/T6).
+       */
+      type: "revision.candidate.rejected";
+      eventId: string;
+      runId: string;
+      revision: number;
+      round: number;
+      /** Validation failure reason or "rejected by user". */
+      reason: string;
+      /** Rejected raw output, when persisted beside the run log. */
+      artifactPath: string;
+      /** Replacement notes when rejected by user. */
+      notes?: string;
+      at: string;
+    }
+  | {
+      /**
+       * AUTHORITATIVE approval (§6 row T5, §7): binds the exact candidate and
+       * promoted-contract contents by hash, the full correction, the
+       * predecessor's terminal status at revision time and the approval
+       * identity. Promotion without this event verified on disk is impossible.
+       */
+      type: "revision.approved";
+      eventId: string;
+      runId: string;
+      revision: number;
+      round: number;
+      correction: string;
+      correctionSha: string;
+      candidate: { prdSha: string; tasksSha: string };
+      contract: { prdSha: string; tasksSha: string };
+      /** cancelled | needs_human | failed | interrupted */
+      predecessorStatus: string;
+      approvedBy: { via: string; pid: number; at: string };
+    }
+  | {
+      /**
+       * The revision was abandoned by explicit user choice (§6 row T7) or
+       * forced because the approval contents are unrecoverable (§14 B8).
+       * Never appended after a persisted approval except for that forced path.
+       */
+      type: "revision.abandoned";
+      eventId: string;
+      runId: string;
+      revision: number;
+      /** "user choice" | "approval contents unrecoverable" */
+      reason: string;
+      at: string;
+    }
+  | {
+      /**
+       * The successor run was created and pointed at (§6 row T8, §7 step 6).
+       * Idempotently (re-)appended via the verified-append primitive; the
+       * pointer alone proves intent, not a running successor (§9 B7a).
+       */
+      type: "revision.launched";
+      eventId: string;
+      runId: string;
+      revision: number;
+      successorRunId: string;
+      at: string;
     };

@@ -8,7 +8,8 @@ import type { ReviewIssue } from "../review.ts";
 import type { CommandResult } from "../ports.ts";
 import type { ResultToolSpec } from "../agent.ts";
 
-const stackLine = (s: ProjectStack): string =>
+/** stackLine consumes only the persisted summary fields, so it accepts any stack-shaped object. */
+const stackLine = (s: { primary: string; frameworks: string[] }): string =>
   `${s.primary}${s.frameworks.length ? ` (${s.frameworks.join(", ")})` : ""}`;
 
 export const PLANNER_PROMPT = (a: {
@@ -150,11 +151,99 @@ ${a.prd}
 ${a.tasks}
 </current_tasks>`;
 
+/**
+ * Post-stop plan revision planner (spec.md §15, `/flow revise`). Same
+ * read-only discipline and TITLE/PRD/TASKS output contract as the in-gate
+ * planners — the structural gate stays `validatePlannerOutput`. Inputs: the
+ * approved plan (hash-verified against baseContract by the caller), the
+ * verbatim correction, and the partial-work evidence (file list plus the
+ * patch capped at 48,000 characters by the caller, `[truncated]`-marked).
+ * Instructed to apply ONLY the correction, keep the TITLE stable, enumerate
+ * Keep/Change/Remove against the partial work, and preserve everything the
+ * correction does not mention.
+ */
+export const POST_STOP_REVISION_PROMPT = (a: {
+  description: string;
+  /** Persisted stack summary from workflow.started (stackLine consumes only these). */
+  stack: { primary: string; frameworks: string[] };
+  title: string;
+  currentPrd: string;
+  currentTasks: string;
+  correction: string;
+  partialFiles: string[];
+  partialPatchCapped: string;
+}): string => `You are the PLAN REVISION PLANNER for a feature in a ${stackLine(a.stack)} project.
+
+Original feature request:
+${a.description}
+
+The run was STOPPED mid-flight (cancelled, interrupted, failed or escalated).
+The human is correcting the requirement through an explicit revision. Treat
+this correction as the single authoritative change:
+${a.correction}
+
+Apply ONLY the changes the correction asks for. Preserve the rest of the plan
+exactly: everything the correction does not mention stays untouched, and the
+feature TITLE is stable — repeat it exactly as provided below, even if the
+correction could suggest a rename:
+${a.title}
+
+The repository already contains PARTIAL WORK from the superseded plan (the
+diff since the original baseline). Use it as evidence: enumerate what the
+revised plan KEEPS, CHANGES and REMOVES relative to that partial work, so the
+successor run knows what to retain, adjust or undo. Files already touched:
+${a.partialFiles.length ? a.partialFiles.map((f) => `- ${f}`).join("\n") : "- (none yet)"}
+
+Partial diff since the original baseline (may be truncated):
+${a.partialPatchCapped || "(empty — nothing written yet)"}
+
+Do not repeat repository discovery, do not ask any questions, and do not call
+ask_user or ask_user_batch. You are read-only: do not modify any file. Return
+the COMPLETE canonical document, with exactly these top-level sections and
+nothing else — no conversational preamble. The headings \`## TITLE\`, \`## PRD\`
+and \`## TASKS\` are literal section labels — repeat them exactly, with the
+title on the line under \`## TITLE\` and nothing before that heading. This
+runtime output contract takes precedence over any document template from your
+loaded skills. Keep file-scope acceptance criteria about the IMPLEMENTATION
+only: the orchestrator's own planning documents under .ai/features/<slug>/ are
+required workflow artifacts and no criterion may forbid them or ask for their
+removal. Re-check the final message against this contract before finishing.
+The artifacts are written in English — including the TITLE.
+
+## TITLE
+${a.title}
+
+## PRD
+Return the full revised PRD, not a diff or summary. Include an explicit
+Keep / Change / Remove enumeration covering the partial work listed above:
+what the revised plan retains as-is, what it adjusts (and how), and what it
+removes from scope.
+
+## TASKS
+Return the full revised TASKS section, not a diff. Keep stable task IDs where
+possible, update only tasks affected by the correction, and ensure every task
+has a concrete description and Files list. Mark tasks that only adjust or undo
+partial work as such.
+
+<current_prd>
+${a.currentPrd}
+</current_prd>
+
+<current_tasks>
+${a.currentTasks}
+</current_tasks>`;
+
 export const DEVELOPER_PROMPT = (a: {
   prd: string;
   tasks: string;
   stack: ProjectStack;
   fixes: ReviewIssue[];
+  /**
+   * Post-stop revision context (spec.md §15), present on every pass of a
+   * successor run. Absent in ordinary runs — and when absent, the prompt is
+   * byte-identical to today's.
+   */
+  revision?: { predecessorRunId: string; revision: number; correction: string };
 }): string => {
   const noShell = `Rules:
 - You have NO shell access: you cannot run any command (no tests, no git,
@@ -169,10 +258,22 @@ export const DEVELOPER_PROMPT = (a: {
 - Never touch .git, never create commits, never modify the PRD/tasks files
   or .gitignore.`;
 
+  // Empty when absent: ordinary prompts stay byte-identical to pre-revision output.
+  const revisionSection = a.revision
+    ? `
+## PLAN REVISION CONTEXT
+This run implements a REVISED contract (revision ${a.revision.revision} of run ${a.revision.predecessorRunId}). The user corrected the requirement after the previous run stopped:
+${a.revision.correction}
+The tree contains partial work from the superseded contract: apply the revised
+plan to the existing tree; remove only what the revised plan marks out of
+scope; do not revert unrelated partial work; the PRD/tasks remain untouchable.
+`
+    : "";
+
   if (a.fixes.length > 0) {
     return `You are the DEVELOPER on a ${stackLine(a.stack)} project. A previous round of your
 work was checked and these BLOCKING items came back. Fix them and nothing else.
-
+${revisionSection}
 ${a.fixes
   .map((f) => `### ${f.id} [${f.category}] ${f.file ?? ""}${f.line ? `:${f.line}` : ""}\n${f.problem}${f.recommendation ? `\n\nSuggested: ${f.recommendation}` : ""}`)
   .join("\n\n")}
@@ -187,7 +288,7 @@ ${a.prd}`;
 
   return `You are the DEVELOPER on a ${stackLine(a.stack)} project. Implement the approved
 plan below, task by task.
-
+${revisionSection}
 ${noShell}
 - Inspect existing patterns before inventing abstractions; match the codebase.
 - Keep changes focused on the tasks. No opportunistic refactors.
@@ -211,6 +312,13 @@ export const REVIEWER_PROMPT = (a: {
   files: string[];
   verification: CommandResult[];
   ignoreRulesChanged?: boolean;
+  /**
+   * Post-stop revision context (spec.md §15): judge the COMPLETE
+   * original-baseline diff against the REVISED contract; partial work retained
+   * by the revised plan is not unrequested scope. Absent in ordinary runs —
+   * and when absent, the prompt is byte-identical to today's.
+   */
+  revision?: { predecessorRunId: string; revision: number; correction: string };
 }): string => `You are an INDEPENDENT REVIEWER on a ${stackLine(a.stack)} project. You did not
 write this code and you have no access to the developer's reasoning. Judge only
 what is in the diff.
@@ -255,7 +363,15 @@ local caches) or conceals work — if you cannot rule out concealment, say so
 and request changes or human review.
 `
     : ""
-}
+}${a.revision ? `
+## PLAN REVISION
+This run implements a REVISED contract (revision ${a.revision.revision} of run ${a.revision.predecessorRunId}). The user corrected the requirement after the previous run stopped:
+${a.revision.correction}
+You are judging the COMPLETE diff against the ORIGINAL baseline — not just the
+revision's own edits. Pre-revision partial work retained by the revised plan
+is not unrequested scope; judge the whole tree state against the revised
+PRD/TASKS below.
+`: ""}
 You are read-only. When done you MUST call submit_review exactly once. Reserve
 "blocking" for things that are actually wrong, not for preferences.
 

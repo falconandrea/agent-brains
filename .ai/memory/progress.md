@@ -1,14 +1,49 @@
 # Progress
 
-**Last Updated:** 2026-11-13
+**Last Updated:** 2026-11-15
 **Current Phase:** Global workflow validation complete; M4 rollout and
-existing technical follow-ups remain open.
-**Active Task:** RV3 catalog routing guards resolved (2026-11-13,
-preventive scope; review P2 corrected the same day): the routing table is
-now pinned by structural and routing tests, and `resolving-merge-conflicts`
-and `solution-capture` are classified `operational` after their
-instructions proved incompatible with pipeline roles. Next: observe the
-RV2 reviewer-side behavior on the next real `/feature` run; M4 remains open.
+existing technical follow-ups remain open. Post-stop plan revision: first
+tranche (T1–T5) implemented, reviewed and review fixes applied in this
+repository (2026-11-14); T6–T11 remain.
+**Active Task:** Post-stop plan revision T1–T5 delivered (2026-11-14,
+`/flow revise` design in
+[spec](../features/post-stop-plan-revision/spec.md)): event schema with
+content-derived `eventId`, verified idempotent `appendCritical`, revision
+planner/developer/reviewer prompts, eligibility/lifecycle/successor-id module
+plus the Pi-free revision session core, and ordinary-resume revision
+refusals wired into the real resume path. Five review findings fixed the
+same day: resume gate enforced in `handleResume` before replay/lock;
+`appendCritical` reconciliation scans ALL same-id duplicates (a later
+conflicting copy refuses); lifecycle coherence enforced (contiguous chain
+numbering; an approval must bind the pending candidate's round and hashes);
+planner rounds after the first carry refreshed partial-work evidence
+(`partialPatchSha` stays bound to the open capture); `capPartialPatch` holds
+the cap with no hunk boundaries or an oversized header. Lifecycle coherence
+completed (2026-11-15): every known revision event must name the ACTIVE run
+(`workflow.started.runId` is the reference) and the ACTIVE revision, and
+candidate/rejected rounds must progress exactly — the budget-permitted next
+round, no gaps, no repeats, never beyond `MAX_PLAN_REVISIONS` — with
+separate regressions per event type (candidate, rejected, approved,
+abandoned, launched) for incoherent runId/revision. eventId binding
+enforced (2026-11-15): every KNOWN revision event must satisfy
+`eventId === deriveEventId(event)` — checked in the lifecycle parser
+(arbitrary or well-formed-but-mismatched ids are corrupt evidence) and at
+`appendCritical` entry before any file access; regenerated-timestamp
+retries stay valid (timestamps are excluded from the canonical projection)
+and unknown future types are still skipped before the check. Observed:
+571/571 tests, typecheck and `git diff --check` pass. Limits: no
+promotion/launch wiring
+yet (T6/T7), no `/flow revise` command (T8), the session stops at the
+persisted approval by design, revision-session planner usage is currently
+not persisted at all (neither in the log nor in the sidecar cache — chain
+accounting loses it), the planner TITLE is recovered from the feature slug
+(approved artifacts carry only section bodies), and the resume-path
+enforcement is verified structurally (source-position assertions on
+`handleResume`), not by executing the command handler, which is Pi-coupled
+and belongs to T8's extension test scope. Next: T6 (approval binding,
+promotion, repair) in the next tranche; T1–T5 review is complete and its
+local commit is user-authorized (2026-11-15). RV2 observation
+remains queued.
 
 ## Current state
 
@@ -106,6 +141,92 @@ RV2 reviewer-side behavior on the next real `/feature` run; M4 remains open.
   [Archive inventory and verification](../../docs/evals/global-workflows/T7-evidence-archive-index-2026-11-10.md).
 
 ## Next actions
+
+- Implement the post-stop plan revision path (design context: the user-run
+  Carefinder pilot exposed that ordinary resume does not ingest requirement
+  corrections).
+  [Observation, attribution and proposed direction](../../docs/plans/pi-plugin-adoption-roadmap.md#mid-development-plan-revision-gap-2026-11-13).
+  A [design brief and agent prompts](../../docs/plans/post-stop-plan-revision-brief.md)
+  are prepared (2026-11-14); the design is produced in
+  [spec](../features/post-stop-plan-revision/spec.md) and
+  [tasks](../features/post-stop-plan-revision/tasks.md) (2026-11-14,
+  design-only session): linked successor run recommended, `/flow revise`
+  command, event/artifact schemas, crash-recovery matrix and acceptance
+  criteria specified, no blocking unresolved decision recorded. Revised
+  after user review (2026-11-14): verified persistence for revision events
+  (`appendCritical`, no promotion without a persisted approval),
+  pre/post-promotion abandonment separation with per-status honesty for
+  interrupted/cancelled/needs_human predecessors, B7 crash repair split into
+  three reachable windows (incl. after `revision.launched`), revision
+  context reconstructed from the successor log at every resume, and task
+  dependencies reordered (prompts before the session core). Second review
+  round (2026-11-14): `appendCritical` idempotent via stable content-derived
+  `eventId` with reconcile-before-retry, `previous-*` archive written once
+  and verified (repair never overwrites it with promoted artifacts), and
+  partial successor-seed recovery by prefix verification (B4a/B5a added to
+  the crash matrix; AC-12/AC-13 added). Follow-up alignment (2026-11-14):
+  reconciliation equality defined as the eventId canonical projection
+  (same logical event with fresh timestamp reconciles to one persisted
+  copy), and the step-1→5 skip verifies the archive in verify-only mode
+  (damaged refuses, absent reports) per AC-12.
+  **T1–T5 are now implemented and verified (2026-11-14, first tranche):**
+  T1 `revision.*` events with content-derived `eventId` plus
+  `RunLog.appendCritical` (torn-line healing, reconcile-before-append under
+  canonical equality, strict post-append verification, one clean retry,
+  fail-closed on unreadable logs and same-id-different-projection; ordinary
+  `append` unchanged); T2 `POST_STOP_REVISION_PROMPT` plus optional
+  `revision` sections in developer/reviewer prompts (byte-identical when
+  absent); T3 `src/workflows/revise.ts` eligibility (§5 rows),
+  `revisionLifecycle` (dedup under canonical equality, out-of-order
+  fail-closed), `launchIncomplete`, successor id rule; T4
+  `runRevisionSessionCore` (lock → evidence → open → planner rounds with
+  event-recounted budget → approve/reject/regenerate/abandon, everything
+  through `appendCritical`); T5 resume refusals (`resumeRevisionRefusal`
+  plus five new `Refusal` variants incl. corrupt-evidence, checked before
+  lock acquisition). Observed: 550/550 tests
+  (`tests/revise.test.ts` 39, `tests/run-log.test.ts` +12, prompt and
+  resume-regression additions), `npm run typecheck` and
+  `git diff --check` clean; the timestamp-retry, persistence-failure,
+  budget-recount and per-status abandonment cases are covered by tests.
+  Limits: promotion/launch and the replay `carriedUsage`/`revision` changes
+  are T6/T7 (not started); the `/flow revise` command and resume-revision
+  dialog are T8; the session stops at the persisted approval by design.
+  Implementation decisions recorded: eligible predecessors require a
+  replayed `spec.approved` (no baseContract, no revision — fail-closed);
+  the planner TITLE is recovered from the feature slug (approved artifacts
+  carry only section bodies); the §10 regenerate path records the
+  superseded candidate as `revision.candidate.rejected` so the lifecycle
+  state machine stays total; unknown future `revision.*` types are skipped
+  before common-field validation (§16 rule 1). Review follow-up (2026-11-14,
+  same tranche): the five findings above are fixed with observing
+  regressions — structural wiring test for the resume gate, duplicate-scan
+  and equal-copy-then-conflict cases in `tests/run-log.test.ts`, lifecycle
+  coherence tests (approval binding, contiguous numbering, full duplicate
+  scan), fresh-evidence prompt test, and the two `capPartialPatch` edge
+  cases. Lifecycle coherence completion (2026-11-15, still T1–T5): every
+  known revision event must name the ACTIVE run and revision (reference:
+  `workflow.started.runId` when present, else the first known revision
+  event), and candidate/rejected rounds progress exactly — the
+  budget-permitted next round, gaps/repeats refuse, rounds beyond
+  `MAX_PLAN_REVISIONS` refuse — with separate regressions per event type
+  (candidate, rejected, approved, abandoned, launched: incoherent runId and
+  incoherent revision each refuse with the offending values in the reason).
+  Corrections to the record: revision-session planner usage is NOT persisted
+  today (neither log nor cache); the resume-path enforcement is verified by
+  a STRUCTURAL test (source positions inside `handleResume`), not by
+  executing the command handler — extension behavior tests are T8 scope.
+  eventId binding (2026-11-15, still T1–T5, bounded pre-T6 fix): the
+  `eventId === deriveEventId(event)` verification lives in both required
+  places — `parseRevisionEvent` (after common-field checks, before
+  type-specific validation; unknown future types skip it) and
+  `appendCritical` entry (before any file access) — with regressions for
+  arbitrary ids, formally valid but mismatched sha256 ids, the
+  regenerated-timestamp retry staying valid, and the binding check applied
+  to every known event type.
+  T1–T5 review complete; local commit authorized (2026-11-15).
+  No push; consumer repositories untouched.
+  **Next: T6 approval binding, promotion and repair, followed by review
+  before T7–T11.**
 
 1. Observe RV2's reviewer-side artifact-scope behavior on the next suitable
    real `/feature` run and record it against the

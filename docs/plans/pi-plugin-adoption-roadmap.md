@@ -1133,6 +1133,61 @@ useful; code-writing workers until artifact handoff preserves writer ownership,
 repository locks, verification and review. Portal and Jev are not required for
 this trial.
 
+## Mid-development plan revision gap (2026-11-13)
+
+**Status:** design reviewed; T1–T5 implemented and reviewed (2026-11-15).
+Promotion, successor execution and command integration remain T6–T11.
+
+During the user-run `manual-brevo-campaigns` feature in
+`~/dev/careguru/carefinder-backend`, the user stopped development after
+clarifying that the email footer should reuse the existing autologin to
+notification preferences. The approved plan instead specified a dedicated
+unsubscribe capability and confirmation page. That mismatch came from an
+assistant-proposed planning choice, not an independently established developer
+deviation. The user also reported an additional confirmation email; that code
+behavior has not been independently inspected here.
+
+The supplied workflow trace shows planner and one plan revision completed,
+`spec.approved`, developer execution, then cancellation at development. It does
+not show verification, reviewer execution or feature completion. Planner used
+`openai-codex/gpt-6.1-sol`; developer used `zai/glm-5.3-flash`.
+
+Current `/flow resume <runId>` resumes the first incomplete execution phase
+with the approved plan and persisted baseline. It does not reopen the planning
+gate or automatically inject ordinary chat corrections. Editing approved plan
+files directly is not a supported substitute for revising the approval contract.
+See [workflow and resume behavior](../pi-brain/README.md) and
+`src/workflows/feature.ts`, `src/workflows/resume.ts`,
+`extensions/pi-brain.ts` for the current implementation; the resume description
+is in the workflow section preceding model configuration.
+
+**Proposed direction:** a distinct, explicit revision action after stopping a
+run, preserving partial code and the original baseline. Give the planner the
+approved plan, user correction and partial-work evidence; present the revised
+plan for approval; then pass explicit keep/change/remove instructions to the
+developer. Verification and reviewer must use the newly approved contract while
+retaining the original baseline and revision history. Ordinary resume remains
+for interruptions without requirement changes. Command syntax, allowed phases,
+state transitions and frozen-input handling still need design; no new command
+exists yet.
+
+**Next step:** implement T6 approval binding, promotion and repair, then review
+before successor execution. Preserve the consumer checkout; no consumer edits or cleanup
+are authorized by this note.
+The [design brief and staged agent prompts](post-stop-plan-revision-brief.md)
+define the required decisions and acceptance scenarios (2026-11-14).
+The design has been produced (2026-11-14) in
+[`.ai/features/post-stop-plan-revision/spec.md`](../../.ai/features/post-stop-plan-revision/spec.md)
+with its [task list](../../.ai/features/post-stop-plan-revision/tasks.md):
+a linked successor run (`<runId>-r<N>`) is recommended over same-run epochs,
+`/flow revise <runId>` is the command shape, and approval/crash/abandonment
+semantics are specified with a crash-recovery matrix. Revised after user
+review (2026-11-14): verified event persistence (`appendCritical`),
+per-status abandonment behavior, three-window B7 crash repair, and
+log-reconstructed revision context on successor resumes. T1–T5 implementation
+and its local commit were explicitly authorized by the user; later tasks
+remain separate development tranches.
+
 ## Parked ideas
 
 - **`pi-config` session analytics:** revisit when cross-session cost or prompt

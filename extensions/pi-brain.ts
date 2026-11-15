@@ -30,6 +30,7 @@ import { blocksFeatureStart, requestFlowStop, type FlowRunStatus } from "../src/
 import { PiAgentRunner } from "../src/pi/pi-agent-runner.ts";
 import { runFeatureWorkflow } from "../src/workflows/feature.ts";
 import { replayRunLog, validateResumePreconditions, hasPatchChanged, askResumeWithChangedDiff, type Refusal } from "../src/workflows/resume.ts";
+import { resumeRevisionRefusal } from "../src/workflows/revise.ts";
 import { usageFromEvents, copyUsageTotals } from "../src/usage.ts";
 import type { WorkflowEvent } from "../src/ports.ts";
 import { RunLog, readRunLog, listRunIds } from "../src/run-log.ts";
@@ -314,6 +315,16 @@ export default function piBrain(pi: ExtensionAPI): void {
     const events = readRunLog(cwd, runId);
     if (events.length === 0) {
       ctx.ui.notify(`pi-brain: unknown run ${runId}`, "warning");
+      return;
+    }
+
+    // The revision lifecycle gate (spec.md §16 rule 3): an open, approved or
+    // incompletely-launched revision blocks ordinary resume BEFORE any other
+    // check, replay or lock acquisition. Fail-closed, with the repair
+    // guidance in the message.
+    const revisionRefusal = resumeRevisionRefusal(events, cwd);
+    if (revisionRefusal) {
+      ctx.ui.notify(`pi-brain: cannot resume ${runId} — ${revisionRefusal.message}`, "warning");
       return;
     }
 

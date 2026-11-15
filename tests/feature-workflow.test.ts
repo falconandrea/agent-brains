@@ -33,6 +33,8 @@ import {
 import {
   PLANNER_PROMPT,
   PLAN_REVISION_PROMPT,
+  POST_STOP_REVISION_PROMPT,
+  DEVELOPER_PROMPT,
   REVIEWER_PROMPT,
 } from "../src/workflows/feature-prompts.ts";
 import type { ProjectStack } from "../src/stack.ts";
@@ -1659,6 +1661,129 @@ test("the reviewer prompt treats orchestrator planning artifacts as workflow-own
   assert.match(prompt, /prd-\*\.md, tasks-\*\.md and their marker comment/);
   assert.match(prompt, /Do not count them against file-scope\s+acceptance criteria and never request their removal/);
   assert.match(prompt, /judge the implementation\s+against the approved criteria/);
+});
+
+// --- Post-stop revision prompts (tasks T2, spec.md §15) ---
+
+test("the post-stop revision planner prompt passes the correction verbatim with the partial-work evidence", () => {
+  const prompt = POST_STOP_REVISION_PROMPT({
+    description: "do the thing",
+    stack: PROMPT_STACK,
+    title: "Add Invitations",
+    currentPrd: "current prd body",
+    currentTasks: "## TASKS\n- T1 do it",
+    correction: "make the invitations optional and rate-limited",
+    partialFiles: ["src/auth.ts", "src/invite.ts"],
+    partialPatchCapped: "diff --git a/src/invite.ts\n@@ -1 +1 @@\n+invite",
+  });
+  assert.match(prompt, /make the invitations optional and rate-limited/, "the correction is passed verbatim");
+  assert.match(prompt, /Apply ONLY the changes the correction asks for/);
+  assert.match(prompt, /KEEP|Keep/);
+  assert.match(prompt, /CHANGE/i);
+  assert.match(prompt, /REMOVE|Removes/);
+  assert.match(prompt, /- src\/auth\.ts/, "the changed-file list is evidence");
+  assert.match(prompt, /diff --git a\/src\/invite\.ts/, "the capped patch is evidence");
+  assert.match(prompt, /<current_prd>\ncurrent prd body/);
+  assert.match(prompt, /## TITLE\nAdd Invitations/, "the stable title stays inline under the literal heading");
+  assert.match(prompt, /literal section labels/, "the planner output contract is preserved");
+  assert.match(prompt, /do not call\s+ask_user or ask_user_batch/);
+  assert.match(prompt, /Re-check the final message against this contract/);
+  // The same TITLE/PRD/TASKS contract the orchestrator validates stays intact:
+  const sample = "## TITLE\nAdd Invitations\n\n## PRD\nRevised body.\n\n## TASKS\n- T1 — do it. Files: `src/a.ts`.\n";
+  assert.equal(validatePlannerOutput(sample).valid, true);
+});
+
+test("the post-stop revision planner prompt marks truncated partial evidence", () => {
+  const prompt = POST_STOP_REVISION_PROMPT({
+    description: "do the thing",
+    stack: PROMPT_STACK,
+    title: "Add Invitations",
+    currentPrd: "prd",
+    currentTasks: "tasks",
+    correction: "correction text",
+    partialFiles: [],
+    partialPatchCapped: "[truncated] — oldest hunks omitted to fit the evidence budget\n+tail",
+  });
+  assert.match(prompt, /\[truncated\]/);
+  assert.match(prompt, /\(none yet\)/, "an empty partial-file list is explicit");
+});
+
+test("the developer prompt gains the revision context section and stays byte-identical without it", () => {
+  const base = {
+    prd: "approved prd",
+    tasks: "approved tasks",
+    stack: PROMPT_STACK,
+  };
+  const revision = { predecessorRunId: "run-1", revision: 2, correction: "make it optional" };
+
+  const normalWithout = DEVELOPER_PROMPT({ ...base, fixes: [] });
+  const normalWith = DEVELOPER_PROMPT({ ...base, fixes: [], revision });
+  assert.equal(
+    normalWithout,
+    `You are the DEVELOPER on a nodejs project. Implement the approved
+plan below, task by task.
+
+Rules:
+- You have NO shell access: you cannot run any command (no tests, no git,
+  nothing). Edit files with your editor tools only. The orchestrator runs
+  verification deterministically right after your pass and feeds every
+  failure back to you as a fix item — that is how you get test feedback.
+- Author proportionate tests for the approved observable contracts, reusing
+  adequate existing coverage. Report tests as unexecuted until the orchestrator
+  supplies results; never claim an observed red/green cycle from inspection.
+  If the user requires observed test-first execution, surface this tool
+  limitation for a shell-capable pass rather than claiming to have done it.
+- Never touch .git, never create commits, never modify the PRD/tasks files
+  or .gitignore.
+- Inspect existing patterns before inventing abstractions; match the codebase.
+- Keep changes focused on the tasks. No opportunistic refactors.
+- Do not ask permission for routine implementation choices — just do them. Use
+  ask_user only when a decision materially changes product behaviour, scope or
+  compatibility.
+- Report any deviation from the plan in your final message.
+
+## APPROVED PRD
+approved prd
+
+## APPROVED TASKS
+approved tasks`,
+    "byte-identical to the pre-revision prompt when revision is absent",
+  );
+  assert.match(normalWith, /## PLAN REVISION CONTEXT/);
+  assert.match(normalWith, /revision 2 of run run-1/);
+  assert.match(normalWith, /make it optional/, "the correction text is passed verbatim");
+  assert.match(normalWith, /do not revert unrelated partial work/);
+  assert.match(normalWith, /the PRD\/tasks remain untouchable/);
+
+  const fixWithout = DEVELOPER_PROMPT({ ...base, fixes: [{ id: "R1", severity: "blocking", category: "bug", problem: "boom" }] });
+  assert.doesNotMatch(fixWithout, /PLAN REVISION CONTEXT/, "fix passes stay byte-identical without revision");
+  const fixWith = DEVELOPER_PROMPT({ ...base, fixes: [{ id: "R1", severity: "blocking", category: "bug", problem: "boom" }], revision });
+  assert.match(fixWith, /Fix them and nothing else\.\n\n## PLAN REVISION CONTEXT/);
+  assert.match(fixWith, /### R1 \[bug\] \nboom/, "the fix items survive beside the revision context");
+});
+
+test("the reviewer prompt judges the complete original-baseline diff against the revised contract", () => {
+  const base = {
+    prd: "approved prd",
+    tasks: "approved tasks",
+    stack: PROMPT_STACK,
+    diff: "diff --git a/hello.txt",
+    files: ["hello.txt"],
+    verification: [],
+  };
+  const revision = { predecessorRunId: "run-1", revision: 1, correction: "add rate limiting" };
+
+  const without = REVIEWER_PROMPT(base);
+  assert.doesNotMatch(without, /PLAN REVISION/, "ordinary reviews stay byte-identical");
+  assert.match(without, /\nYou are read-only\. When done you MUST call submit_review exactly once\./);
+
+  const with_ = REVIEWER_PROMPT({ ...base, revision });
+  assert.match(with_, /## PLAN REVISION/);
+  assert.match(with_, /REVISED contract \(revision 1 of run run-1\)/);
+  assert.match(with_, /add rate limiting/, "the correction is passed verbatim");
+  assert.match(with_, /COMPLETE diff against the ORIGINAL baseline/);
+  assert.match(with_, /Pre-revision partial work retained by the revised plan\s+is not unrequested scope/);
+  assert.match(with_, /You are read-only\. When done you MUST call submit_review exactly once\./);
 });
 
 test("a title emitted as its own heading is still missing_title (historical C4 shape)", () => {

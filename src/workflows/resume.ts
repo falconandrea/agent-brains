@@ -51,7 +51,47 @@ export type Refusal =
       usage: UsageByRole;
     }
   | { type: "missing_artifacts" }
-  | { type: "unresolvable_baseline" };
+  | { type: "unresolvable_baseline" }
+  | {
+      /**
+       * A post-stop plan revision is open or candidate-pending on this run
+       * (spec.md §16 rule 3): execution is impossible by construction until
+       * the user continues or abandons it. Checked BEFORE lock acquisition.
+       */
+      type: "revision_in_progress";
+      runId: string;
+      message: string;
+    }
+  | {
+      /** The revision was approved: only the launch repair may proceed. */
+      type: "revision_approved_pending_launch";
+      runId: string;
+      message: string;
+    }
+  | {
+      /** The pointer event exists but no running successor does (§9 reachability): repair first. */
+      type: "revision_launch_incomplete";
+      runId: string;
+      successorRunId: string;
+      message: string;
+    }
+  | {
+      /** The revision launched and the successor is really running: P is terminal for revise. */
+      type: "revised_by_successor";
+      runId: string;
+      successorRunId: string;
+      message: string;
+    }
+  | {
+      /**
+       * Revision evidence is corrupt (§16 rule 5): missing fields or a sha
+       * matching no recoverable content refuse the affected paths, P's resume
+       * included. Fail-closed, never resolved by picking one.
+       */
+      type: "revision_evidence_corrupt";
+      runId: string;
+      message: string;
+    };
 
 /**
  * Replay result: either a reconstructed ResumeState or a Refusal.
@@ -75,8 +115,11 @@ const isDeveloperPhase = (phase: string): boolean =>
  * - present but invalid (wrong shape, or scriptsDigest not binding to its
  *   scripts) → "corrupt": the resume is refused with a clear reason instead
  *   of downgrading protection.
+ *
+ * Exported for the post-stop revision eligibility check (spec.md §5), which
+ * applies the identical absent/corrupt discipline to the predecessor's freeze.
  */
-function replayVerifyFreeze(
+export function replayVerifyFreeze(
   started: Extract<WorkflowEvent, { type: "workflow.started" }>,
 ): { kind: "absent" } | { kind: "ok"; freeze: VerifyFreeze } | { kind: "corrupt" } {
   const candidate: unknown = started.verify;

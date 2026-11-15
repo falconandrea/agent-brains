@@ -13,6 +13,7 @@ import { createHash } from "node:crypto";
 import { replayRunLog, isResumable, validateResumePreconditions, hasPatchChanged, askResumeWithChangedDiff, type Refusal } from "../src/workflows/resume.ts";
 import { digestScripts } from "../src/verify.ts";
 import { foldCallUsage } from "../src/usage.ts";
+import { withEventId } from "../src/run-log.ts";
 import type { WorkflowEvent, GitService, GitBaseline, HumanInput } from "../src/ports.ts";
 
 // Simple fakes for testing
@@ -919,4 +920,58 @@ test("validateResumePreconditions requires the tasks file too", async () => {
 
   assert.equal(result?.type, "missing_artifacts");
   rmSync(root, { recursive: true, force: true });
+});
+
+test("replayRunLog ignores injected revision.* events and unknown new fields (§16 rule 1)", () => {
+  // An ordinary resumable log interrupted mid-develop:
+  const base: WorkflowEvent[] = [
+    {
+      type: "workflow.started",
+      runId: "run-legacy",
+      workflow: "feature",
+      description: "legacy feature",
+      baseline: "abc123",
+    },
+    { type: "phase.started", runId: "run-legacy", phase: "discover" },
+    { type: "phase.started", runId: "run-legacy", phase: "spec" },
+    { type: "spec.approved", runId: "run-legacy", prdSha: "a".repeat(64), tasksSha: "b".repeat(64) },
+    { type: "phase.started", runId: "run-legacy", phase: "develop" },
+    { type: "agent.completed", runId: "run-legacy", role: "developer", usage: { input: 10, output: 5 } },
+  ];
+  const revisionEvents: WorkflowEvent[] = [
+    // Adversarially injected revision lifecycle events, in chronological slots:
+    withEventId({
+      type: "revision.started" as const,
+      runId: "run-legacy",
+      revision: 1,
+      correction: "change the requirement",
+      correctionSha: createHash("sha256").update("change the requirement").digest("hex"),
+      baseContract: { prdSha: "a".repeat(64), tasksSha: "b".repeat(64) },
+      at: "2026-01-01T00:00:00.000Z",
+    }) as unknown as WorkflowEvent,
+    withEventId({
+      type: "revision.candidate" as const,
+      runId: "run-legacy",
+      revision: 1,
+      round: 1,
+      prdSha: "c".repeat(64),
+      tasksSha: "d".repeat(64),
+      at: "2026-01-01T00:01:00.000Z",
+    }) as unknown as WorkflowEvent,
+  ];
+
+  const plain = replayRunLog(base);
+  const injected = replayRunLog([
+    base[0]!,
+    revisionEvents[0]!,
+    base[1]!,
+    base[2]!,
+    revisionEvents[1]!,
+    ...base.slice(3),
+  ]);
+
+  assert.equal(injected.ok, plain.ok, "the replay verdict is unchanged by revision.* presence");
+  assert.deepEqual(injected.ok && injected.state, plain.ok && plain.state);
+  assert.ok(plain.ok);
+  assert.equal(plain.state.phase, "develop");
 });

@@ -4,11 +4,21 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, rmSync, utimesSync } from "node:fs";
+import { appendFileSync, mkdtempSync, readFileSync, writeFileSync, mkdirSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
+import { createHash } from "node:crypto";
 
-import { RunLog, readRunLog, listRunIds, runLogPath, runsDir } from "../src/run-log.ts";
+import {
+  RunLog,
+  readRunLog,
+  listRunIds,
+  runLogPath,
+  runsDir,
+  withEventId,
+  deriveEventId,
+  CriticalAppendError,
+} from "../src/run-log.ts";
 import type { WorkflowEvent } from "../src/ports.ts";
 
 const fixture = (): string => mkdtempSync(join(tmpdir(), "pi-brain-runlog-"));
@@ -261,4 +271,275 @@ test("old-format events without new fields still parse correctly", () => {
   assert.equal(phase.patchSha, undefined); // optional, not present
   const review = read[2] as { type: "review.completed"; issues?: unknown[] };
   assert.equal((review.issues?.[0] as { file?: string }).file, undefined); // optional, not present
+});
+
+// --- appendCritical: verified, idempotent persistence (spec.md §8, tasks T1) ---
+
+const sha256 = (content: string): string => createHash("sha256").update(content).digest("hex");
+
+/** A signed revision.started event; retries re-derive the SAME eventId from evidence. */
+const revisionStarted = (runId: string, correction: string, at: string) =>
+  withEventId({
+    type: "revision.started" as const,
+    runId,
+    revision: 1,
+    correction,
+    correctionSha: sha256(correction),
+    baseContract: { prdSha: "a".repeat(64), tasksSha: "b".repeat(64) },
+    at,
+  });
+
+const rawLines = (root: string, runId: string): string[] =>
+  readFileSync(runLogPath(root, runId), "utf8")
+    .split("\n")
+    .filter((line) => line.trim() !== "");
+
+test("eventId is content-derived and stable across retries: timestamps are excluded", () => {
+  const first = revisionStarted("run-id-stable", "fix the thing", "2026-01-01T00:00:00.000Z");
+  // The same logical step retried later with a FRESH timestamp:
+  const retry = revisionStarted("run-id-stable", "fix the thing", "2026-06-05T10:00:00.000Z");
+  assert.equal(retry.eventId, first.eventId, "same evidence → same id");
+  assert.equal(deriveEventId(retry), first.eventId);
+  const other = revisionStarted("run-id-stable", "a different correction", first.at);
+  assert.notEqual(other.eventId, first.eventId, "different content → different id");
+});
+
+test("appendCritical persists verifiably and reads back exactly", () => {
+  const root = fixture();
+  const log = RunLog.open(root, "run-critical");
+  const event = revisionStarted("run-critical", "fix the thing", "2026-01-01T00:00:00.000Z");
+  log.appendCritical(event);
+  const read = readRunLog(root, "run-critical");
+  assert.equal(read.length, 1);
+  assert.deepEqual(read[0], event);
+  assert.match(rawLines(root, "run-critical")[0]!, /"revision\.started"/);
+});
+
+test("THE TIMESTAMP CASE: a retried logical event with a regenerated `at` reconciles to the persisted copy", () => {
+  const root = fixture();
+  const log = RunLog.open(root, "run-retry");
+  const first = revisionStarted("run-retry", "fix the thing", "2026-01-01T00:00:00.000Z");
+  log.appendCritical(first);
+  const retry = revisionStarted("run-retry", "fix the thing", "2026-06-05T10:00:00.000Z");
+  assert.equal(retry.eventId, first.eventId);
+  assert.notEqual(retry.at, first.at);
+  log.appendCritical(retry); // canonical projection equal → idempotent no-op
+
+  const lines = rawLines(root, "run-retry");
+  assert.equal(lines.length, 1, "exactly one persisted line — the retry never duplicated");
+  const persisted = readRunLog(root, "run-retry")[0] as { at: string };
+  assert.equal(persisted.at, first.at, "the persisted copy wins");
+});
+
+test("the same eventId with a DIFFERENT canonical projection refuses, fail-closed", () => {
+  const root = fixture();
+  const log = RunLog.open(root, "run-conflict");
+  const first = revisionStarted("run-conflict", "fix the thing", "2026-01-01T00:00:00.000Z");
+  log.appendCritical(first);
+  // Same id, tampered canonical content: corruption or collision, never a retry.
+  const forged = {
+    ...first,
+    correction: "tampered correction",
+    correctionSha: sha256("tampered correction"),
+    at: "2026-02-02T00:00:00.000Z",
+  } as unknown as WorkflowEvent;
+  assert.throws(() => log.appendCritical(forged as never), CriticalAppendError);
+  assert.equal(rawLines(root, "run-conflict").length, 1);
+});
+
+test("reconciliation scans ALL same-id duplicates: a later conflicting copy refuses an otherwise-identical retry", () => {
+  const root = fixture();
+  const path = runLogPath(root, "run-scanall");
+  const log = RunLog.open(root, "run-scanall");
+  const good = revisionStarted("run-scanall", "fix the thing", "2026-01-01T00:00:00.000Z");
+  log.appendCritical(good);
+  // A forged same-id copy lands AFTER the good one — first-match
+  // reconciliation would stop at the good copy and silently succeed.
+  appendFileSync(
+    path,
+    `${JSON.stringify({ ...good, correction: "tampered", correctionSha: sha256("tampered") })}\n`,
+    "utf8",
+  );
+  const retry = revisionStarted("run-scanall", "fix the thing", "2026-02-02T00:00:00.000Z");
+  assert.equal(retry.eventId, good.eventId);
+  assert.throws(() => log.appendCritical(retry), CriticalAppendError, "the scan must reach the conflicting duplicate");
+  assert.equal(readRunLog(root, "run-scanall").length, 2, "nothing was appended");
+});
+
+test("reconciliation keeps scanning past equal copies and still finds a later conflict", () => {
+  const root = fixture();
+  const path = runLogPath(root, "run-scanall2");
+  mkdirSync(dirname(path), { recursive: true });
+  const good = revisionStarted("run-scanall2", "fix the thing", "2026-01-01T00:00:00.000Z");
+  const equalRetry = revisionStarted("run-scanall2", "fix the thing", "2026-03-03T00:00:00.000Z"); // same canonical, fresh at
+  const forged = { ...good, correction: "tampered", correctionSha: sha256("tampered") };
+  writeFileSync(
+    path,
+    `${JSON.stringify(good)}\n${JSON.stringify(equalRetry)}\n${JSON.stringify(forged)}\n`,
+    "utf8",
+  );
+  const log = new RunLog(path);
+  assert.throws(
+    () => log.appendCritical(revisionStarted("run-scanall2", "fix the thing", "2026-04-04T00:00:00.000Z")),
+    CriticalAppendError,
+    "an equal copy does not end the scan — the later conflict still refuses",
+  );
+});
+
+test("a write that landed but failed verification reconciles to exactly ONE copy", () => {
+  const root = fixture();
+  const log = RunLog.open(root, "run-landed");
+  const event = revisionStarted("run-landed", "fix the thing", "2026-01-01T00:00:00.000Z");
+  // A concurrent writer appends a foreign line after ours: the last complete
+  // line is no longer our event, so strict verification fails — but the
+  // reconcile pass finds our event canonically intact.
+  log.appendCritical(event, {
+    injectFaultAfterAppend: () => {
+      appendFileSync(
+        runLogPath(root, "run-landed"),
+        `${JSON.stringify({ type: "phase.started", runId: "run-landed", phase: "foreign" })}\n`,
+        "utf8",
+      );
+    },
+  });
+  const events = readRunLog(root, "run-landed");
+  assert.equal(events.length, 2, "our event + the concurrent foreign line");
+  assert.equal(events.filter((e) => (e as { eventId?: string }).eventId === event.eventId).length, 1, "exactly one copy");
+  assert.equal(events[0]!.type, "revision.started");
+});
+
+test("a provably absent write retries exactly once and still lands exactly one copy", () => {
+  const root = fixture();
+  const path = runLogPath(root, "run-absent");
+  const log = RunLog.open(root, "run-absent");
+  const event = revisionStarted("run-absent", "fix the thing", "2026-01-01T00:00:00.000Z");
+  let faults = 0;
+  log.appendCritical(event, {
+    injectFaultAfterAppend: () => {
+      faults += 1;
+      if (faults === 1) writeFileSync(path, "", "utf8"); // the write was lost despite no throw
+      // The fault deliberately stops after the first append: the retry verifies clean.
+    },
+  });
+  assert.equal(faults, 2, "one clean retry after provable absence");
+  assert.equal(readRunLog(root, "run-absent").length, 1);
+});
+
+test("verification failing after the retry throws and leaves nothing behind", () => {
+  const root = fixture();
+  const path = runLogPath(root, "run-lost");
+  const log = RunLog.open(root, "run-lost");
+  const event = revisionStarted("run-lost", "fix the thing", "2026-01-01T00:00:00.000Z");
+  assert.throws(
+    () =>
+      log.appendCritical(event, {
+        injectFaultAfterAppend: () => writeFileSync(path, "", "utf8"), // lose it EVERY time
+      }),
+    CriticalAppendError,
+  );
+  assert.deepEqual(readRunLog(root, "run-lost"), []);
+});
+
+test("a log that becomes unreadable after the append refuses without retrying", () => {
+  const root = fixture();
+  const path = runLogPath(root, "run-unreadable2");
+  const log = RunLog.open(root, "run-unreadable2");
+  const event = revisionStarted("run-unreadable2", "fix the thing", "2026-01-01T00:00:00.000Z");
+  assert.throws(
+    () =>
+      log.appendCritical(event, {
+        injectFaultAfterAppend: () => {
+          rmSync(path);
+          mkdirSync(path); // the file is replaced by a directory: reconciliation cannot read
+        },
+      }),
+    CriticalAppendError,
+  );
+});
+
+test("a log path that cannot be read at all refuses before any append", () => {
+  const root = fixture();
+  mkdirSync(runLogPath(root, "run-eisdir"), { recursive: true }); // log path IS a directory
+  const log = new RunLog(runLogPath(root, "run-eisdir"));
+  assert.throws(
+    () => log.appendCritical(revisionStarted("run-eisdir", "fix the thing", "2026-01-01T00:00:00.000Z")),
+    CriticalAppendError,
+  );
+});
+
+test("appendCritical heals a torn final line before appending", () => {
+  const root = fixture();
+  const path = runLogPath(root, "run-torn-critical");
+  mkdirSync(dirname(path), { recursive: true });
+  const first = JSON.stringify({ type: "workflow.started", runId: "run-torn-critical", workflow: "feature" });
+  writeFileSync(path, `${first}\n{"type":"phase.star`, "utf8");
+
+  const log = new RunLog(path);
+  log.appendCritical(revisionStarted("run-torn-critical", "fix the thing", "2026-01-01T00:00:00.000Z"));
+
+  const events = readRunLog(root, "run-torn-critical");
+  assert.equal(events.length, 2, "the torn fragment stays skipped, the critical event parses");
+  assert.equal(events[0]!.type, "workflow.started");
+  assert.equal(events[1]!.type, "revision.started");
+});
+
+test("a broken sink refuses appendCritical instead of pretending to persist", () => {
+  const root = fixture();
+  mkdirSync(join(root, ".pi", "pi-brain"), { recursive: true });
+  writeFileSync(join(root, ".pi", "pi-brain", "runs"), "not a directory", "utf8");
+  const log = RunLog.open(root, "run-broken-critical");
+  assert.throws(
+    () => log.appendCritical(revisionStarted("run-broken-critical", "fix the thing", "2026-01-01T00:00:00.000Z")),
+    CriticalAppendError,
+  );
+});
+
+test("appendCritical refuses an ARBITRARY eventId at the entry, before touching the file", () => {
+  const root = fixture();
+  const log = RunLog.open(root, "run-arbitrary-id");
+  const event = {
+    ...revisionStarted("run-arbitrary-id", "fix the thing", "2026-01-01T00:00:00.000Z"),
+    eventId: "not-a-hash",
+  };
+  assert.throws(
+    () => log.appendCritical(event as Parameters<RunLog["appendCritical"]>[0]),
+    (err: unknown) => err instanceof CriticalAppendError && /does not bind its canonical content/.test(err.message),
+  );
+  assert.equal(readRunLog(root, "run-arbitrary-id").length, 0, "nothing was written");
+});
+
+test("appendCritical refuses a formally valid SHA256 eventId that does not match the content", () => {
+  const root = fixture();
+  const log = RunLog.open(root, "run-mismatched-id");
+  const event = {
+    ...revisionStarted("run-mismatched-id", "fix the thing", "2026-01-01T00:00:00.000Z"),
+    eventId: "b".repeat(64), // 64 hex chars, but not the content-derived id
+  };
+  assert.throws(
+    () => log.appendCritical(event as Parameters<RunLog["appendCritical"]>[0]),
+    (err: unknown) => err instanceof CriticalAppendError && /does not bind its canonical content/.test(err.message),
+  );
+  assert.equal(readRunLog(root, "run-mismatched-id").length, 0, "nothing was written");
+});
+
+test("the id-binding entry check keeps the regenerated-timestamp retry valid", () => {
+  const root = fixture();
+  const log = RunLog.open(root, "run-retry-binding");
+  const first = revisionStarted("run-retry-binding", "fix the thing", "2026-01-01T00:00:00.000Z");
+  log.appendCritical(first);
+  // Same canonical content, regenerated timestamp: the derived id is unchanged,
+  // the entry check passes, and reconciliation still collapses to one copy.
+  const retry = revisionStarted("run-retry-binding", "fix the thing", "2026-09-09T00:00:00.000Z");
+  log.appendCritical(retry);
+  assert.equal(rawLines(root, "run-retry-binding").length, 1);
+});
+
+test("ordinary append keeps its best-effort contract next to appendCritical", () => {
+  const root = fixture();
+  const log = RunLog.open(root, "run-ordinary");
+  log.append({ type: "workflow.started", runId: "run-ordinary", workflow: "feature" });
+  assert.deepEqual(readRunLog(root, "run-ordinary").map((e) => e.type), ["workflow.started"]);
+  // The critical path coexists on the same log:
+  log.appendCritical(revisionStarted("run-ordinary", "fix the thing", "2026-01-01T00:00:00.000Z"));
+  assert.deepEqual(readRunLog(root, "run-ordinary").map((e) => e.type), ["workflow.started", "revision.started"]);
 });

@@ -131,7 +131,11 @@ export interface ResumeState {
 /** Built-in tools the developer is allowed: everything except bash. */
 export const DEVELOPER_TOOLS = ["read", "grep", "find", "ls", "edit", "write"] as const;
 
-const MAX_PLAN_REVISIONS = 2;
+/**
+ * In-gate revision budget (spec.md §11 reuses it as the per-revision planner
+ * round budget for post-stop revisions too).
+ */
+export const MAX_PLAN_REVISIONS = 2;
 
 /** sha256 of a file's content; empty string when unreadable. */
 const fileSha = (path: string): string => {
@@ -889,9 +893,11 @@ export function featureSlug(cwd: string, description: string): string {
 /**
  * A rerun of the same request must land in its earlier directory even when
  * the planner words the English TITLE differently this time. Every artifact
- * starts with the description marker, so scan for ours.
+ * starts with the description marker, so scan for ours. Exported for the
+ * post-stop revision session (spec.md §7): the predecessor's slug locates the
+ * artifacts a revision reads, archives and promotes.
  */
-function findExistingFeatureSlug(cwd: string, description: string): string | null {
+export function findExistingFeatureSlug(cwd: string, description: string): string | null {
   const root = join(cwd, ".ai", "features");
   if (!existsSync(root)) return null;
   const marker = descriptionMarker(description);
