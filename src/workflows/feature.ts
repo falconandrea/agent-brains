@@ -126,6 +126,16 @@ export interface ResumeState {
    * notice says so.
    */
   verify?: VerifyFreeze;
+  /**
+   * Post-stop revision context (spec.md §15), reconstructed FROM THE LOG at
+   * every entry into a successor run: `replayRunLog` sets it whenever
+   * `workflow.started.revision` is present, and the successor's first launch
+   * sets it when building the initial ResumeState (§7 step 7). Ordinary logs
+   * never carry the field, so ordinary resumes see it absent and prompts stay
+   * byte-identical to today. `runFeatureWorkflow` threads it into the
+   * developer and reviewer prompts.
+   */
+  revision?: { predecessorRunId: string; revision: number; correction: string };
 }
 
 /** Built-in tools the developer is allowed: everything except bash. */
@@ -474,6 +484,10 @@ export async function runFeatureWorkflow(
   let previousBlockingIds = resume?.previousBlockingIds ?? new Set<string>();
   let previousPatch = ""; // Reset on resume: we can't recover the historical patch
   let lastReview: ReviewResult | undefined = resume?.lastReview;
+  // Post-stop revision context (§15): present on EVERY pass of a successor
+  // run (replayed from the log), absent in ordinary runs — where the two
+  // prompts below stay byte-identical to pre-revision output.
+  const revision = resume?.revision;
 
   // Resume re-entry: `entry` names the phase the run re-enters at. It gates
   // ONLY the first loop pass — developer/verify are skipped when the log
@@ -576,6 +590,7 @@ export async function runFeatureWorkflow(
           tasks: read(tasksPath),
           stack,
           fixes,
+          ...(revision !== undefined ? { revision } : {}),
         }),
         model: developerCfg,
         skills: devSkills.skills,
@@ -750,6 +765,7 @@ export async function runFeatureWorkflow(
         files: diff.files,
         verification: results,
         ignoreRulesChanged,
+        ...(revision !== undefined ? { revision } : {}),
       }),
       model: reviewerCfg,
       skills: revSkills.skills,

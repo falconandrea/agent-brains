@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { DEFAULT_MAX_REVIEW_ROUNDS } from "../config.ts";
 import type { WorkflowEvent, GitBaseline, GitService, HumanInput } from "../ports.ts";
 import { digestScripts, isPlainRecord, type VerifyFreeze } from "../verify.ts";
-import { foldCallUsage, hasUsageData } from "../usage.ts";
+import { copyUsageTotals, foldCallUsage, hasUsageData } from "../usage.ts";
 import type { ResumeState, UsageByRole } from "./feature.ts";
 import { descriptionMarker, hasValidTaskList } from "./feature.ts";
 import type { ReviewIssue, ReviewResult } from "../review.ts";
@@ -291,7 +291,14 @@ export function replayRunLog(events: WorkflowEvent[], options: ReplayOptions = {
   // verification.completed event, but must not consume another retry when the
   // concatenated log is replayed later (including after a second crash).
   let freeVerifyObservation = false;
-  const usage: UsageByRole = {};
+  // Replay change 1 of 2 (§8, tasks T7): a successor log seeds its usage from
+  // `workflow.started.carriedUsage` (the predecessor's chain-cumulative
+  // totals). The field is absent in every other log, so ordinary replays seed
+  // nothing and behave exactly as before. Defensive copies: folding the
+  // successor-local calls below must never alias the replayed event.
+  const usage: UsageByRole = Object.fromEntries(
+    Object.entries(started.carriedUsage ?? {}).map(([role, totals]) => [role, copyUsageTotals(totals)]),
+  );
 
   events.forEach((event, i) => {
     switch (event.type) {
@@ -457,6 +464,13 @@ export function replayRunLog(events: WorkflowEvent[], options: ReplayOptions = {
       interruptedPatchSha,
       ...(spec !== undefined ? { spec } : {}),
       ...(verify !== undefined ? { verify } : {}),
+      // Replay change 2 of 2 (§8, §15, tasks T7): the revision context lives
+      // in the log and is reconstructed at EVERY entry into the successor —
+      // never held only in the launching process's memory. A defensive copy
+      // keeps the state independent of the caller's events array. Ordinary
+      // logs lack the field, so `revision` stays undefined and prompts stay
+      // byte-identical to today.
+      ...(started.revision !== undefined ? { revision: { ...started.revision } } : {}),
     },
   };
 }

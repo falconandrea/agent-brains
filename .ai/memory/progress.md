@@ -1,113 +1,126 @@
 # Progress
 
-**Last Updated:** 2026-11-15
+**Last Updated:** 2026-11-17
 **Current Phase:** Global workflow validation complete; M4 rollout and
-existing technical follow-ups remain open. Post-stop plan revision: first
-tranche (T1–T5) implemented, reviewed and review fixes applied in this
-repository (2026-11-14); T6 implemented and final review approved
-(2026-11-15), local commit authorized; T7–T11 remain.
-**Active Task:** Post-stop plan revision T6 approved (2026-11-15):
-approval binding, promotion and crash repair as Pi-free
-logic following spec §§7–9/§14 (AC-9/12/13), all in
-`src/workflows/revise.ts` — `persistedApproval` step 0 (re-reads P's log
-FILE; absent, unreadable or incoherent approvals promote nothing),
-candidate verification with the already-promoted fallback (B8 only when
-neither source verifies), the write-once `previous-*` archive decision
-tree incl. the verify-only step-1→5 skip path (a damaged archive refuses
-byte-identically on BOTH paths; absent-with-promoted artifacts reports the
-loss and proceeds, never archiving promoted contents as the original;
-partial archives gain only the missing copy), marker-rule promotion with
-post-write hash verification of BOTH artifacts, the deterministic
-successor seed with B5a prefix verification (any field-by-field divergence
-and the impossible `spec.approved`-first order refuse without rewriting;
-legacy absence of freeze/digest is inherited), the idempotent
-`revision.launched` pointer, and B7a–B7c repair coordination through an
-injected `SuccessorLauncher` port whose request carries
-`resumedPhase: "develop"` only when the successor stub lacks
-`workflow.resumed` (at most one marker ever; no second concurrent writer
-for the future launcher). B8 executes nothing; the forced-abandon exit
-(explicit choice, reason "approval contents unrecoverable") reports
-untouched or indeterminate artifact state with both sha sets, never rolls
-back, and keeps the sidecar archive for manual restoration. The session
-core's approval (T4/T5) is reused — promotion re-reads that persisted
-event and never builds a second approval path. Observed: 612/612 tests
-(41 boundary tests B2b–B8 in `tests/revise.test.ts` incl. the 10
-review-fix regressions; the pre-existing B0–B2 coverage stays green),
-`npm run typecheck`, `git diff --check`. Second review round (2026-11-15,
-three reproduced defects closed, T7 still on hold): B4 slug recovery no
-longer depends on an intact PRD marker (`locateRepairSlug`: tasks-marker
-fallback, then slug-shaped directory names, ambiguity refuses — a PRD
-truncated mid-marker recovers); B5a/AC-13 internal corruption is
-classified on the raw successor log (`successorSeedCorruption`: only
-torn appends of canonical seed lines and the post-seed execution tail are
-tolerated, any other malformed line refuses byte-identically with its
-line number — garbage between the seed events can no longer pass as an
-approved seed); B4a distinguishes an absent archive (ENOENT: loss report
-or write, as before) from an existing-but-unreadable one (fail-closed
-refusal on BOTH paths, never bypassed as absent). Third review round
-(2026-11-15, two more reproduced defects closed, T7 still on hold): the
-name-shaped directory fallback is removed — a directory name is not
-feature identity, so `locateRepairSlug` accepts only marker-verifiable
-evidence (PRD marker, then tasks marker; ambiguity and no-match refuse
-without ANY write, and a foreign same-shaped feature's directory stays
-byte-identical) while every reachable promotion crash still recovers via
-the surviving intact artifact; `successorSeedCorruption` is order-aware —
-torn prefixes are tolerated only inside their own append window
-(started-prefix before the complete started, spec-prefix between the
-two), so a torn spec.approved before workflow.started refuses as an
-impossible seed order, byte-identically; a SHORT prefix below the
-canonical lines' common head (`{"type":"`) is shared by both lines and
-is classified by the window open at its position, so reachable torn
-tails and healed shapes with shared prefixes no longer false-refuse
-while really impossible orders keep refusing (2026-11-15, fourth
-classifier fix); and `locateRepairSlug` requires a UNIQUE
-marker-verifiable directory — PRD-marker matches are counted like
-tasks-marker ones, so two same-marker PRDs refuse as ambiguous instead
-of promoting into the first match (fifth fix). Observed: 617/617 tests,
-typecheck, `git diff --check`. Limits: real `launchRun`, the constructed
-`ResumeState`, the rebuilt baseline and the two `replayRunLog` changes
-(`carriedUsage` seeding, `revision` reconstruction) are T7 — the launch
-was verified against a fake mirroring `launchRun`'s synchronous
-`resumedPhase` behavior only; no real launch was executed or claimed.
-The `/flow revise` command and resume-revision dialogs are T8.
-Prior state: post-stop plan revision T1–T5 delivered (2026-11-14,
-`/flow revise` design in
-[spec](../features/post-stop-plan-revision/spec.md)): event schema with
-content-derived `eventId`, verified idempotent `appendCritical`, revision
-planner/developer/reviewer prompts, eligibility/lifecycle/successor-id module
-plus the Pi-free revision session core, and ordinary-resume revision
-refusals wired into the real resume path. Five review findings fixed the
-same day: resume gate enforced in `handleResume` before replay/lock;
-`appendCritical` reconciliation scans ALL same-id duplicates (a later
-conflicting copy refuses); lifecycle coherence enforced (contiguous chain
-numbering; an approval must bind the pending candidate's round and hashes);
-planner rounds after the first carry refreshed partial-work evidence
-(`partialPatchSha` stays bound to the open capture); `capPartialPatch` holds
-the cap with no hunk boundaries or an oversized header. Lifecycle coherence
-completed (2026-11-15): every known revision event must name the ACTIVE run
-(`workflow.started.runId` is the reference) and the ACTIVE revision, and
-candidate/rejected rounds must progress exactly — the budget-permitted next
-round, no gaps, no repeats, never beyond `MAX_PLAN_REVISIONS` — with
-separate regressions per event type (candidate, rejected, approved,
-abandoned, launched) for incoherent runId/revision. eventId binding
-enforced (2026-11-15): every KNOWN revision event must satisfy
-`eventId === deriveEventId(event)` — checked in the lifecycle parser
-(arbitrary or well-formed-but-mismatched ids are corrupt evidence) and at
-`appendCritical` entry before any file access; regenerated-timestamp
-retries stay valid (timestamps are excluded from the canonical projection)
-and unknown future types are still skipped before the check. Observed:
-571/571 tests, typecheck and `git diff --check` pass. Limits: no
-promotion/launch wiring
-yet (T6/T7), no `/flow revise` command (T8), the session stops at the
-persisted approval by design, revision-session planner usage is currently
-not persisted at all (neither in the log nor in the sidecar cache — chain
-accounting loses it), the planner TITLE is recovered from the feature slug
-(approved artifacts carry only section bodies), and the resume-path
-enforcement is verified structurally (source-position assertions on
-`handleResume`), not by executing the command handler, which is Pi-coupled
-and belongs to T8's extension test scope. T1–T5 review is complete and its
-local commit is user-authorized (2026-11-15). RV2 observation
-remains queued.
+existing technical follow-ups remain open. Post-stop plan revision:
+T1–T6 implemented and reviewed (T6 final review approved 2026-11-15);
+T7 implemented and final review approved 2026-11-17; T8–T11 remain.
+**Active Task:** T7 final review approved (2026-11-17); next is T8
+(command, revision dialogs and extension/session wiring). Two reproduced
+P1s are closed; both independent reviewer reproductions pass with zero
+developer calls. Local commit authorized by the user; no push authorized.
+T7 delivery: successor construction, real
+launch integration and the replay changes (spec §7 step 7, §8, §10, §13,
+§15). `src/workflows/revise.ts` gains `initialSuccessorResumeState` — the
+§7 step 7 `ResumeState` built from the successor's OWN seeded stub (fresh
+developer/review/verify counters, empty fixes and blocking-id set,
+defensively copied carried usage, the rebuilt ORIGINAL baseline with the
+exact `handleResume` construction so `runFeatureWorkflow` enters resume
+mode and `git.baseline` is skipped entirely, the freeze replayed verbatim,
+the contract hashes as tamper guard, the revision context verbatim; legacy
+absence of freeze/digest preserved, never synthesized; corrupt freeze /
+missing baseline / missing revision linkage refuse fail-closed) — and
+`launchSuccessorRun`, which re-reads the stub from disk (complete seeded
+`workflow.started` with revision linkage, `spec.approved`, exactly one
+seed event), runs the §10 approval-to-launch changed-diff confirmation
+against `revision.started.partialPatchSha` (the `askResumeWithChangedDiff`
+pattern, abort default; a refusal throws before the lock handoff and leaves
+the pointer or `approved-pending-launch` plus an incomplete launch
+recoverable via /flow revise), then detaches through the REAL `launchRun` +
+`runFeatureWorkflow` with injected workflow dependencies (config, agents,
+human, verifier, git, UI effects) — not another fake launch callback. The
+repository lock changes hands exactly once: the launcher marks the handoff
+(`SuccessorLaunchContext.markHandedOff`) and `launchRun` releases the lock
+when the successor settles; until marked, the repair keeps releasing in its
+`finally`, so every refusal and T6 fake keeps today's behavior. The
+`resumedPhase` option follows the B7c omission rule (present only when the
+stub lacks `workflow.resumed`; at most one marker ever). The ONLY two
+`replayRunLog` changes (§8) landed in `src/workflows/resume.ts`: usage
+seeds from `workflow.started.carriedUsage` and folds successor-local
+events once (two replays of identical events yield identical state), and
+`ResumeState.revision` reconstructs from `workflow.started.revision` at
+EVERY resume (defensive copy). `runFeatureWorkflow` threads the context
+into the developer/reviewer prompts only when present, so ordinary prompts
+stay byte-identical. `extensions/pi-brain.ts` is unchanged (T8 scope).
+T6 recovery guarantees preserved: all pre-existing B0–B8 repair tests stay
+green. Review fix (2026-11-17, first review round, one reproduced P1
+closed): the launch path now runs a §13 preflight BEFORE developer
+execution — `changedScriptKeys` against the inherited freeze and a live
+`repoStateDigest` compared with the ORIGINAL persisted digest, inside the
+held lock and before the handoff and `launchRun`, with the existing §13
+recovery messages, legacy absence inherited, unreadable reads refusing
+fail-closed — because the successor's in-loop checks alone fire too late
+(digest after one developer pass, scripts before verify), letting a
+violated input consume a developer call first (the reproduced defect:
+digest changed pre-launch → one developer pass → needs_human). A preflight
+refusal throws before `markHandedOff`: zero developer calls, no marker or
+phase event appended, pointer-plus-incomplete-launch recoverable via
+/flow revise. Three regressions added (changed digest; changed frozen
+package.json script with the offending key in the message; unreadable
+repository state — each zero developer calls, each completing/recoverable
+after restore); the reviewer's temporary reproduction passes against the
+fixed source (developerCalls: 0). Second review round (same day, one more
+reproduced P1 closed, TOCTOU): the §13 preflight ran before the async §10
+dialog and a confirmed launch went straight to the handoff, so a digest or
+script violated WHILE the dialog was open still consumed a developer pass
+(reproduced: preflight passed → digest moved during the dialog → confirm →
+one developer call → needs_human). The preflight is now a closure run
+TWICE — before the dialog (fail fast) and again after the confirmation,
+immediately before the handoff — with the same fail-closed refusals; the
+repeated refusal throws before `markHandedOff` (zero developer calls, no
+marker or phase event, pointer-plus-incomplete-launch recoverable).
+Regression added (`DialogMutationHuman` moves the digest exactly when the
+§10 dialog opens; the confirmed launch refuses with zero developer calls
+and only the seed on disk; after restoring, the next repair re-asks,
+confirms and completes). Both reviewer reproductions pass against the
+fixed source (round one: developerCalls 0; round two: confirmations 1,
+developerCalls 0); the copies' one remaining failure stays the pre-existing
+T5 structural test's repo-relative path. Residual: a user-side edit in the
+tiny window between the repeated preflight and the workflow's own start
+cannot be closed from the launcher — the successor's in-loop §13 guards
+remain the backstop, exactly as for ordinary resume. Observed after both
+fixes: 635/635 tests (`tests/revise.test.ts` 114 — 9 new T7
+tests: real-launch integration with a `git.baseline`-THROWING fake
+proving no duplicate `workflow.started`, exactly one `workflow.resumed`,
+develop entry, correction in both prompts with no stale fix items,
+chain-cumulative usage on the outcome, the lock held mid-run and released
+exactly once at settle; B7c repeated repair before `phase.started` with the
+marker never duplicated and `resumedPhase` omitted from the second request
+on; B7b seeded-stub launch carrying `resumedPhase`; §10 decline leaving the
+approved state recoverable and accept launching on the current tree; §13
+preflight (changed digest, changed frozen script, unreadable state — each
+refusing with zero developer calls and a recoverable approved state); an
+unresolvable baseline refusing before launch; the launcher's integrity
+refusal on a non-seeded log — plus 3 new replay tests and 2 prompt-threading
+tests in `tests/resume.test.ts` 49 and `tests/feature-workflow.test.ts` 90;
+`tests/run-launcher.test.ts` 25 unchanged), `npm run typecheck`,
+`npm run smoke:pi` (scripted loopback, head unchanged), `git diff --check`.
+Limits: fixture/scripted verification only — no real-provider successor run
+and no consumer-repo run is part of T7; the real launcher is exercised
+through the repair port with injected extensions, not from a live command;
+the §10 launch-time check runs only when `revision.started.partialPatchSha`
+exists (the same absent-evidence rule as ordinary resume). Next:
+T8 implementation and review. Final T7 orchestrator review found no
+confirmed remaining defect; independently re-ran 635/635 tests, typecheck,
+scripted smoke and both reviewer reproductions (zero developer calls).
+Prior state: T6 approved (2026-11-15, all review fixes verified, local
+commit authorized) — approval binding, promotion and crash repair in
+`src/workflows/revise.ts` (spec §§7–9/§14; AC-9/12/13; boundary tests
+B2b–B8; 617/617 at its final review), five review-fix rounds recorded in
+the [task record](../features/post-stop-plan-revision/tasks.md): B4 slug
+recovery via marker-verifiable unique identity, B5a order-aware seed
+corruption classification, B4a absent-vs-unreadable archive distinction,
+the `appendCritical` eventId binding, and the duplicate-scan/coherence
+fixes. T1–T5 delivered 2026-11-14 (`/flow revise` foundations: event
+schema with content-derived `eventId`, verified idempotent
+`appendCritical`, revision planner/developer/reviewer prompts,
+eligibility/lifecycle/successor-id module plus the session core, and
+ordinary-resume revision refusals checked before lock acquisition).
+Known carried limits: revision-session planner usage is still not persisted
+(neither log nor sidecar cache — chain accounting loses it); the planner
+TITLE is recovered from the feature slug; the resume-path enforcement gate
+is verified structurally (T8 owns extension behavior tests). RV2
+observation remains queued.
 
 ## Current state
 
@@ -309,10 +322,43 @@ remains queued.
   Final review observed: 617/617 full-suite tests, 101/101 revision tests,
   typecheck and diff check pass; all seven defect reproductions and the
   exhaustive seed-prefix check pass. No remaining confirmed finding.
-  Next session: prepare the developer prompt for ONLY T7 (successor
-  construction, real launch integration and replay changes), followed by
-  orchestrator review before T8. T7 is NOT started; no real successor
-  launch was executed. No push authorized; consumer repositories untouched.
+  The T7-only developer prompt
+  ([post-stop-plan-revision-t7-prompt.md](../../docs/plans/post-stop-plan-revision-t7-prompt.md))
+  was prepared (2026-11-17) and T7 was implemented the same day — see the
+  Active Task above for the delivery record and limits; no real successor
+  launch was executed (fixture/scripted verification only). No push
+  authorized; consumer repositories untouched.
+
+Follow-ups confirmed by the recent-commit analysis review (2026-11-16;
+read-only inspection at `468f014`, no suite or live workflow rerun):
+
+- [x] Reconciled stale status claims (2026-11-17): the
+  [revision spec](../features/post-stop-plan-revision/spec.md) records T6
+  as implemented/reviewed; the [Pi README](../../docs/pi-brain/README.md)
+  records the [real-provider/fullscreen pilot](../../docs/evals/pi-compatibility/REAL-TUI-2026-11-13.md)
+  with its `needs_human` outcome and validation limits. Prepared the
+  [T7-only developer prompt](../../docs/plans/post-stop-plan-revision-t7-prompt.md)
+  for T7 implementation, now delivered and approved as recorded above.
+  The initial documentation-only checks covered local link targets and
+  `git diff --check`; later runtime verification is recorded in the Active Task.
+- [x] Continue the existing
+  [revision tasks](../features/post-stop-plan-revision/tasks.md#t7--successor-construction-launch-and-replay-changes):
+  T7 delivered 2026-11-17, two review rounds' fixes applied the same day
+  (635/635 tests, typecheck, smoke:pi, diff check;
+  see the Active Task). Final orchestrator review approved T7; next is T8–T9;
+  retain T10 documentation/rendering and T11 evidence closure. T9 is
+  fake-driven end-to-end coverage, not a live-provider acceptance run.
+- [ ] Once launch and command wiring exist, record a bounded live
+  stop → revise → approve → successor execution → resume observation,
+  with actual outcome and limits separate from fixture results. Use a
+  suitable run to observe the already-pending RV2 reviewer behavior and
+  current planner/reviewer model settings; do not infer improved quality
+  or lower cost without measurements.
+- Treat `revise.ts` size as a maintenance signal, not an automatic refactoring
+  task. Revisit decomposition only against concrete coupling, duplication or
+  change difficulty; no additional recovery framework or workstream selected.
+- The analysis quoted the intermediate 614-test result; the final recorded
+  T6 evidence is 617/617 (see the existing T6 record above), not a fresh run.
 
 1. Observe RV2's reviewer-side artifact-scope behavior on the next suitable
    real `/feature` run and record it against the

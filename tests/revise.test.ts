@@ -18,7 +18,9 @@ import {
   canonicalSuccessorSeed,
   capPartialPatch,
   chainRootOf,
+  initialSuccessorResumeState,
   launchIncomplete,
+  launchSuccessorRun,
   nextPlannerRound,
   nextRevisionNumber,
   persistedApproval,
@@ -35,17 +37,23 @@ import {
   type RepairLaunchDeps,
   type RepairLaunchOutcome,
   type RevisionSessionDeps,
+  type SuccessorLaunchContext,
+  type SuccessorLaunchDeps,
   type SuccessorLaunchRequest,
+  type SuccessorLauncher,
 } from "../src/workflows/revise.ts";
 import { descriptionMarker, splitPlannerOutput, validatePlannerOutput } from "../src/workflows/feature.ts";
 import { replayRunLog } from "../src/workflows/resume.ts";
 import { CriticalAppendError, RunLog, readRunLog, runsDir, stableJson, withEventId } from "../src/run-log.ts";
 import { acquireRunLock } from "../src/run-lock.ts";
+import { DEFAULT_CONFIG } from "../src/config.ts";
+import { digestScripts, type VerifyFreeze } from "../src/verify.ts";
 import type {
   GitBaseline,
   GitService,
   HumanInput,
   SelectQuestion,
+  VerifyRunner,
   WorkflowEvent,
 } from "../src/ports.ts";
 import { UserDismissedError } from "../src/ports.ts";
@@ -1665,7 +1673,7 @@ function repairDeps(
   root: string,
   runId: string,
   human: HumanInput,
-  launch: (request: SuccessorLaunchRequest) => Promise<void> | void,
+  launch: SuccessorLauncher,
 ): RepairLaunchDeps {
   return { cwd: root, runId, human, events: new RunLog(runLogPathOf(root, runId)), launch };
 }
@@ -2716,5 +2724,746 @@ test("repair: B4a — an unreadable archive refuses on the step-1→5 skip path 
   const outcome = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
   assert.match(expectRepairRefusal(outcome), /exists but cannot be read/);
   assert.equal(existsSync(runLogPathOf(root, successorRunId(runId))), false);
+  rmSync(root, { recursive: true, force: true });
+});
+
+// ---------------------------------------------------------------------------
+// T7 — successor construction and the real launch (spec.md §7 step 7, §10, §13)
+// ---------------------------------------------------------------------------
+
+const REVISION_CORRECTION = "make auth optional";
+/** The patch the launch-time git reports (stable across the launch checks). */
+const LAUNCH_PATCH = "diff --git a/src/a.ts\n@@ -1 +1 @@\n+work";
+
+/** Valid freeze over an empty manifest: changedScriptKeys finds nothing to compare. */
+const EMPTY_FREEZE: VerifyFreeze = {
+  commands: [],
+  scripts: {},
+  scriptsDigest: digestScripts({}),
+  perimeter: "root",
+};
+
+const carriedTotals = (input: number, output: number) => ({
+  input,
+  output,
+  models: [],
+  calls: 1,
+  coverage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: 0, elapsedMs: 0 },
+});
+
+/**
+ * The successor's git: `baseline` THROWS, because the successor must never
+ * re-snapshot — the original baseline is rebuilt from the seeded stub.
+ */
+class NoRebaselineGit implements GitService {
+  digest = "stable-digest";
+  patch = LAUNCH_PATCH;
+  baselineCalls = 0;
+  failDiff = false;
+  readStateFails = false;
+  async baseline(): Promise<GitBaseline> {
+    this.baselineCalls += 1;
+    throw new Error("git.baseline MUST NOT be called on a successor — the original baseline is persisted");
+  }
+  async repoStateDigest(): Promise<string> {
+    if (this.readStateFails) throw new Error("git for-each-ref failed (128): fatal: not a git repository");
+    return this.digest;
+  }
+  async diffSince(): Promise<{ patch: string; files: string[]; dirtySubmodules: string[] }> {
+    if (this.failDiff) throw new Error("baseline commit vanished");
+    return { patch: this.patch, files: ["src/a.ts"], dirtySubmodules: [] };
+  }
+}
+
+/**
+ * Fake successor agents: prompts are recorded; the developer pass can be
+ * held mid-run (the lock-handoff observation) or made to fail after its
+ * phase.started. The reviewer approves with nothing blocking, so a healthy
+ * successor runs to completion.
+ */
+class SuccessorAgents implements AgentRunner {
+  readonly requests: AgentRunRequest[] = [];
+  #releaseDeveloper?: () => void;
+  #resolveDeveloperStarted?: () => void;
+  #failDeveloper = false;
+  /** Gate the developer pass: call BEFORE the launch so the pass waits. */
+  holdDeveloper(): Promise<void> {
+    return new Promise((resolve) => {
+      this.#releaseDeveloper = resolve;
+    });
+  }
+  get developerStarted(): Promise<void> {
+    return new Promise((resolve) => {
+      this.#resolveDeveloperStarted = resolve;
+    });
+  }
+  releaseDeveloper(): void {
+    this.#releaseDeveloper?.();
+  }
+  failDeveloper(): void {
+    this.#failDeveloper = true;
+  }
+  async run(request: AgentRunRequest): Promise<AgentRunResult> {
+    this.requests.push(request);
+    if (request.role === "developer") {
+      this.#resolveDeveloperStarted?.();
+      if (this.#failDeveloper) throw new Error("provider died mid-pass");
+      await this.#releaseDeveloper;
+      return { role: "developer", text: "work done", aborted: false, usage: { input: 50, output: 25 } };
+    }
+    return {
+      role: "reviewer",
+      text: "",
+      aborted: false,
+      structured: { verdict: "approved", summary: "ok", issues: [] },
+      usage: { input: 30, output: 15 },
+    };
+  }
+}
+
+const PROFILES_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "profiles");
+
+/**
+ * A ScriptedHuman that runs a hook every time a dialog opens — the hook is
+ * where a test mutates the tree (or the git state) to model work moving
+ * WHILE the user is looking at the dialog.
+ */
+class DialogMutationHuman extends ScriptedHuman {
+  #onSelect: () => void;
+  constructor(onSelect: () => void) {
+    super();
+    this.#onSelect = onSelect;
+  }
+  async select(q: SelectQuestion): Promise<string> {
+    this.#onSelect();
+    return super.select(q);
+  }
+}
+
+function successorDeps(
+  root: string,
+  opts: { git?: GitService; human?: HumanInput; agents?: SuccessorAgents; stackOverride?: boolean } = {},
+): { deps: SuccessorLaunchDeps; agents: SuccessorAgents; git: NoRebaselineGit; detached: Array<Promise<void>> } {
+  const agents = opts.agents ?? new SuccessorAgents();
+  const git = opts.git instanceof NoRebaselineGit ? opts.git : new NoRebaselineGit();
+  const human = opts.human ?? new ScriptedHuman();
+  const detached: Array<Promise<void>> = [];
+  const deps: SuccessorLaunchDeps = {
+    cwd: root,
+    config: { ...DEFAULT_CONFIG, ...(opts.stackOverride === false ? {} : { stack: "nodejs" }) },
+    profilesDir: PROFILES_DIR,
+    availableSkills: new Set<string>(),
+    agents,
+    human,
+    verifier: { run: async () => [] } satisfies VerifyRunner,
+    git,
+    history: () => {},
+    setStatus: () => {},
+    notify: () => {},
+    bell: () => {},
+    onDetached: (run) => detached.push(run),
+  };
+  return { deps, agents, git, detached };
+}
+
+/** Records the launch requests the repair issues, then runs the REAL launcher. */
+function realLaunch(
+  deps: SuccessorLaunchDeps,
+  requests: SuccessorLaunchRequest[],
+): (request: SuccessorLaunchRequest, context: SuccessorLaunchContext) => Promise<void> {
+  return async (request, context) => {
+    requests.push(request);
+    await launchSuccessorRun(deps, request, context);
+  };
+}
+
+/**
+ * A cancelled predecessor with FULL guards (ignore-rules digest, repository
+ * state digest, verify freeze), carried usage on two roles, and revision 1
+ * approved against CANDIDATE/CONTRACT with candidate sidecar files present.
+ * `partialPatchSha` optionally binds the launch-time git's patch (§10).
+ */
+function approvedSuccessorChain(
+  root: string,
+  runId: string,
+  opts: { partialPatchSha?: string; freeze?: VerifyFreeze } = {},
+): void {
+  const spec = writeArtifacts(root);
+  writePredecessorLog(root, runId, [
+    {
+      type: "workflow.started",
+      runId,
+      workflow: "feature",
+      description: DESCRIPTION,
+      baseline: "snap-base",
+      stack: { primary: "nodejs", frameworks: ["express"] },
+      ignoreRulesDigest: "rules-1",
+      repoStateDigest: "stable-digest",
+      verify: opts.freeze ?? EMPTY_FREEZE,
+    },
+    { type: "phase.started", runId, phase: "discover" },
+    { type: "phase.started", runId, phase: "spec" },
+    { type: "agent.completed", runId, role: "planner", usage: { input: 100, output: 50 } },
+    { type: "spec.approved", runId, ...spec },
+    { type: "phase.started", runId, phase: "develop" },
+    { type: "agent.completed", runId, role: "developer", usage: { input: 200, output: 100 } },
+    { type: "workflow.outcome", runId, status: "cancelled" },
+  ]);
+  appendRevisionEvent(
+    root,
+    runId,
+    withEventId({
+      type: "revision.started" as const,
+      runId,
+      revision: 1,
+      correction: REVISION_CORRECTION,
+      correctionSha: sha(REVISION_CORRECTION),
+      baseContract: BASE_CONTRACT,
+      ...(opts.partialPatchSha !== undefined ? { partialPatchSha: opts.partialPatchSha } : {}),
+      at: "2026-01-01T00:00:00.000Z",
+    }),
+  );
+  appendRevisionEvent(root, runId, t6RevisionCandidate(runId));
+  appendRevisionEvent(root, runId, t6RevisionApproval(runId));
+  const sidecarDir = revisionSidecarDir(root, runId);
+  mkdirSync(sidecarDir, { recursive: true });
+  writeFileSync(join(sidecarDir, "candidate-prd.md"), CANDIDATE_PRD, "utf8");
+  writeFileSync(join(sidecarDir, "candidate-tasks.md"), CANDIDATE_TASKS, "utf8");
+}
+
+const eventsOf = (root: string, runId: string): WorkflowEvent[] => readRunLog(root, runId);
+const countType = (events: WorkflowEvent[], type: string): number =>
+  events.filter((event) => event.type === type).length;
+const outcomeOf = (events: WorkflowEvent[]): Extract<WorkflowEvent, { type: "workflow.outcome" }> | undefined =>
+  events.find(
+    (event): event is Extract<WorkflowEvent, { type: "workflow.outcome" }> => event.type === "workflow.outcome",
+  );
+
+test("T7 initial state: fresh counters, inherited originals, copied carried usage", () => {
+  const root = fixture();
+  const runId = "run-t7-state";
+  const spec = writeArtifacts(root);
+  const started = {
+    type: "workflow.started",
+    runId: `${runId}-r1`,
+    workflow: "feature",
+    description: DESCRIPTION,
+    baseline: "snap-base",
+    stack: { primary: "nodejs", frameworks: ["express"] },
+    ignoreRulesDigest: "rules-1",
+    repoStateDigest: "stable-digest",
+    verify: EMPTY_FREEZE,
+    carriedUsage: { planner: carriedTotals(100, 50) },
+    revision: { predecessorRunId: runId, revision: 1, correction: REVISION_CORRECTION },
+  } as Extract<WorkflowEvent, { type: "workflow.started" }>;
+  const specEvent = { type: "spec.approved", runId: `${runId}-r1`, ...spec } as Extract<
+    WorkflowEvent,
+    { type: "spec.approved" }
+  >;
+
+  const built = initialSuccessorResumeState(root, started, specEvent);
+  assert.ok(built.ok, "a complete stub builds");
+  if (!built.ok) return;
+  const state = built.state;
+  assert.equal(state.phase, "develop", "resume entry is always develop (§7 step 7, §11)");
+  assert.equal(state.reviewRound, 0);
+  assert.equal(state.verifyRetries, 0);
+  assert.equal(state.developerRuns, 0);
+  assert.deepEqual(state.fixes, []);
+  assert.equal(state.previousBlockingIds.size, 0);
+  assert.equal(state.lastReview, undefined, "stale review verdicts are never carried");
+  assert.equal(state.interruptedPatchSha, undefined, "no interrupted patch hash is carried");
+  assert.equal(state.usage.planner?.input, 100, "carried usage seeds the state");
+  // Defensive copy: folding into the state must never alias the seed.
+  state.usage.planner!.input = 999;
+  assert.equal(started.carriedUsage?.planner?.input, 100);
+  // The rebuilt ORIGINAL baseline — the handleResume construction.
+  assert.deepEqual(state.baseline, {
+    repoRoot: root,
+    branch: "resumed",
+    headSha: "unknown",
+    baseCommit: "snap-base",
+    ignoreRulesDigest: "rules-1",
+    repoStateDigest: "stable-digest",
+  });
+  assert.deepEqual(state.verify, EMPTY_FREEZE, "the freeze is preserved verbatim");
+  assert.deepEqual(state.spec, spec, "the approved contract hashes are the tamper guard");
+  assert.deepEqual(state.revision, { predecessorRunId: runId, revision: 1, correction: REVISION_CORRECTION });
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("T7 initial state: legacy absence of freeze/digest is preserved, never synthesized", () => {
+  const root = fixture();
+  writeArtifacts(root);
+  const started = {
+    type: "workflow.started",
+    runId: "run-legacy-s-r1",
+    workflow: "feature",
+    description: DESCRIPTION,
+    baseline: "snap-base",
+    revision: { predecessorRunId: "run-legacy-s", revision: 1, correction: REVISION_CORRECTION },
+  } as Extract<WorkflowEvent, { type: "workflow.started" }>;
+  const specEvent = {
+    type: "spec.approved",
+    runId: "run-legacy-s-r1",
+    prdSha: "a".repeat(64),
+    tasksSha: "b".repeat(64),
+  } as Extract<WorkflowEvent, { type: "spec.approved" }>;
+  const built = initialSuccessorResumeState(root, started, specEvent);
+  assert.ok(built.ok);
+  if (!built.ok) return;
+  assert.equal(built.state.verify, undefined, "absent freeze stays absent");
+  assert.equal(built.state.baseline?.repoStateDigest, undefined);
+  assert.equal(built.state.baseline?.ignoreRulesDigest, undefined);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("T7 initial state: corrupt freeze, missing baseline and missing revision linkage refuse", () => {
+  const root = fixture();
+  writeArtifacts(root);
+  const specEvent = {
+    type: "spec.approved",
+    runId: "run-x-r1",
+    prdSha: "a".repeat(64),
+    tasksSha: "b".repeat(64),
+  } as Extract<WorkflowEvent, { type: "spec.approved" }>;
+  const corruptFreeze = initialSuccessorResumeState(
+    root,
+    {
+      type: "workflow.started",
+      runId: "run-x-r1",
+      workflow: "feature",
+      description: DESCRIPTION,
+      baseline: "snap",
+      verify: { commands: [], scripts: {}, scriptsDigest: "bad" },
+      revision: { predecessorRunId: "run-x", revision: 1, correction: REVISION_CORRECTION },
+    } as unknown as Extract<WorkflowEvent, { type: "workflow.started" }>,
+    specEvent,
+  );
+  assert.ok(!corruptFreeze.ok, "§13: a corrupt freeze refuses outright");
+  if (!corruptFreeze.ok) assert.match(corruptFreeze.reason, /corrupt/);
+
+  const noBaseline = initialSuccessorResumeState(
+    root,
+    {
+      type: "workflow.started",
+      runId: "run-x-r1",
+      workflow: "feature",
+      description: DESCRIPTION,
+      revision: { predecessorRunId: "run-x", revision: 1, correction: REVISION_CORRECTION },
+    } as unknown as Extract<WorkflowEvent, { type: "workflow.started" }>,
+    specEvent,
+  );
+  assert.ok(!noBaseline.ok, "no baseline → no original diff base → refuse");
+  if (!noBaseline.ok) assert.match(noBaseline.reason, /baseline/);
+
+  const noRevision = initialSuccessorResumeState(
+    root,
+    {
+      type: "workflow.started",
+      runId: "run-x-r1",
+      workflow: "feature",
+      description: DESCRIPTION,
+      baseline: "snap",
+    } as unknown as Extract<WorkflowEvent, { type: "workflow.started" }>,
+    specEvent,
+  );
+  assert.ok(!noRevision.ok, "an ordinary-looking log is never launched as a successor");
+  if (!noRevision.ok) assert.match(noRevision.reason, /revision linkage/);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("T7 launch: the real launcher runs the successor from develop on the ORIGINAL baseline", async () => {
+  const root = fixture();
+  const runId = "run-t7-main";
+  approvedSuccessorChain(root, runId, { partialPatchSha: sha(LAUNCH_PATCH) });
+  const successorId = successorRunId(runId);
+  const requests: SuccessorLaunchRequest[] = [];
+
+  const { deps, agents, git, detached } = successorDeps(root);
+  // Gate the developer pass and arm the started promise BEFORE the launch:
+  // the detached run must find the gate closed when it reaches the pass.
+  const hold = agents.holdDeveloper();
+  const developerStarted = agents.developerStarted;
+  const repair = await repairRevisionLaunch(
+    repairDeps(root, runId, new ScriptedHuman(), realLaunch(deps, requests)),
+  );
+  assert.equal(repair.kind, "launched");
+  if (repair.kind !== "launched") return;
+  assert.equal(repair.archiveLosses.length, 0);
+  assert.equal(repair.resumedPhase, "develop", "B7b: the stub had no marker, the request carried resumedPhase");
+  assert.equal(requests[0]?.successorRunId, successorId);
+  assert.equal(detached.length, 1, "the run detached; the repair returned while it runs");
+
+  // Hold the successor at its developer pass and observe the lock handoff.
+  await developerStarted;
+  const midRun = acquireRunLock(root, { runId: successorId, workflow: "feature" });
+  assert.equal(midRun.ok, false, "the successor owns the repository lock while it runs");
+  if (!midRun.ok) assert.equal(midRun.reason, "held");
+  agents.releaseDeveloper();
+  await hold;
+  await detached[0];
+
+  const events = eventsOf(root, successorId);
+  assert.equal(events[0]?.type, "workflow.started");
+  assert.equal(countType(events, "workflow.started"), 1, "no duplicate workflow.started — the seed, never a second one");
+  assert.equal(countType(events, "workflow.resumed"), 1, "at most one workflow.resumed");
+  const firstPhase = events.find(
+    (event): event is Extract<WorkflowEvent, { type: "phase.started" }> => event.type === "phase.started",
+  );
+  assert.equal(firstPhase?.phase, "develop", "the successor enters at develop");
+  const outcome = outcomeOf(events);
+  assert.equal(outcome?.status, "completed", "the successor ran to completion");
+
+  assert.equal(git.baselineCalls, 0, "git.baseline is never called: the original baseline was rebuilt");
+
+  // The seed inherited the ORIGINAL inputs and the chain accounting.
+  const seed = events[0] as Extract<WorkflowEvent, { type: "workflow.started" }>;
+  assert.equal(seed.baseline, "snap-base", "the ORIGINAL baseline commit");
+  assert.equal(seed.repoStateDigest, "stable-digest");
+  assert.deepEqual(seed.verify, EMPTY_FREEZE, "the frozen verify inputs are preserved");
+  assert.deepEqual(seed.revision, { predecessorRunId: runId, revision: 1, correction: REVISION_CORRECTION });
+  assert.equal(seed.carriedUsage?.planner?.input, 100, "predecessor usage is carried");
+  assert.equal(seed.carriedUsage?.developer?.input, 200);
+
+  // Developer/reviewer delivery (§15): correction verbatim, fresh counters.
+  const devRequest = agents.requests.find((request) => request.role === "developer");
+  assert.ok(devRequest?.prompt.includes("PLAN REVISION CONTEXT"));
+  assert.ok(devRequest?.prompt.includes(REVISION_CORRECTION), "the correction is passed verbatim");
+  assert.ok(devRequest?.prompt.includes(`revision 1 of run ${runId}`));
+  assert.ok(!devRequest?.prompt.includes("BLOCKING"), "fresh state: no stale fix items");
+  const reviewRequest = agents.requests.find((request) => request.role === "reviewer");
+  assert.ok(reviewRequest?.prompt.includes("PLAN REVISION"));
+  assert.ok(reviewRequest?.prompt.includes(REVISION_CORRECTION));
+
+  // Chain-cumulative usage on the outcome (§11): carried + successor segment.
+  assert.equal(outcome?.usage?.planner?.input, 100);
+  assert.equal(outcome?.usage?.developer?.input, 250, "carried 200 + successor pass 50");
+  assert.equal(outcome?.usage?.reviewer?.input, 30);
+
+  // The handoff released the lock exactly once, at settle.
+  const after = acquireRunLock(root, { runId: successorId, workflow: "feature" });
+  assert.equal(after.ok, true, "the launcher released the repository lock when the successor settled");
+  if (after.ok) after.release();
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("T7 launch: B7c — the resumed marker is never duplicated across repeated repairs before phase.started", async () => {
+  const root = fixture();
+  const runId = "run-t7-b7c";
+  approvedSuccessorChain(root, runId, { partialPatchSha: sha(LAUNCH_PATCH) });
+  const successorId = successorRunId(runId);
+  const requests: SuccessorLaunchRequest[] = [];
+
+  // Repair #1: no stack override → resolveStack asks → the human dismisses →
+  // the workflow dies BEFORE its first phase.started, with the marker already
+  // on disk (launchRun emits it synchronously, before the workflow body).
+  const first = successorDeps(root, { stackOverride: false });
+  const outcome1 = await repairRevisionLaunch(
+    repairDeps(root, runId, new ScriptedHuman(), realLaunch(first.deps, requests)),
+  );
+  assert.equal(outcome1.kind, "launched");
+  assert.equal(requests[0]?.resumedPhase, "develop");
+  let events = eventsOf(root, successorId);
+  assert.equal(countType(events, "workflow.resumed"), 1);
+  assert.ok(!events.some((event) => event.type === "phase.started"), "the repair window is still open");
+  assert.ok(events.some((event) => event.type === "workflow.failed"), "the dismissed launch settles as workflow.failed");
+  assert.equal(countType(events, "workflow.started"), 1);
+
+  // Repair #2, still before phase.started: the marker exists → resumedPhase
+  // is OMITTED; no second marker, no second seed.
+  const second = successorDeps(root, { stackOverride: false });
+  const outcome2 = await repairRevisionLaunch(
+    repairDeps(root, runId, new ScriptedHuman(), realLaunch(second.deps, requests)),
+  );
+  assert.equal(outcome2.kind, "launched");
+  assert.equal(requests[1]?.resumedPhase, undefined, "B7c omission: the stub already carries the marker");
+  events = eventsOf(root, successorId);
+  assert.equal(countType(events, "workflow.resumed"), 1, "at most one workflow.resumed, ever");
+  assert.equal(countType(events, "workflow.started"), 1, "no duplicated seed across repeated repairs");
+
+  // Repair #3 completes the launch (stack override set → the loop runs).
+  const third = successorDeps(root);
+  const outcome3 = await repairRevisionLaunch(
+    repairDeps(root, runId, new ScriptedHuman(), realLaunch(third.deps, requests)),
+  );
+  assert.equal(outcome3.kind, "launched");
+  assert.equal(requests[2]?.resumedPhase, undefined);
+  assert.equal(third.detached.length, 1);
+  await third.detached[0];
+  events = eventsOf(root, successorId);
+  assert.equal(countType(events, "workflow.resumed"), 1);
+  assert.equal(countType(events, "workflow.started"), 1);
+  assert.ok(events.some((event) => event.type === "phase.started"), "the launch is now complete");
+  assert.equal(outcomeOf(events)?.status, "completed");
+
+  // The successor really runs: the revision is terminal for the predecessor.
+  const again = await repairRevisionLaunch(repairDeps(root, runId, new ScriptedHuman(), async () => {}));
+  assert.equal(again.kind, "refused");
+  if (again.kind === "refused") assert.match(again.reason, /already recorded its first phase/);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("T7 launch: B7b — a seeded stub without the marker launches with resumedPhase through the real launcher", async () => {
+  const root = fixture();
+  const runId = "run-t7-b7b";
+  // Stage the pointer WITHOUT a launch (B6/B7a boundary): the seed exists, the
+  // marker does not. approvedState with a throwing fake launch leaves exactly
+  // this state (seed + pointer, no workflow.resumed).
+  approvedState(root, runId, { pointer: true, successor: "full" });
+  const successorId = successorRunId(runId);
+  const requests: SuccessorLaunchRequest[] = [];
+  const { deps, detached } = successorDeps(root);
+  const outcome = await repairRevisionLaunch(
+    repairDeps(root, runId, new ScriptedHuman(), realLaunch(deps, requests)),
+  );
+  assert.equal(outcome.kind, "launched");
+  assert.equal(requests[0]?.resumedPhase, "develop", "no marker on the stub → the request carries resumedPhase");
+  await detached[0];
+  const events = eventsOf(root, successorId);
+  assert.equal(countType(events, "workflow.resumed"), 1);
+  assert.equal(countType(events, "workflow.started"), 1);
+  assert.equal(outcomeOf(events)?.status, "completed");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("T7 launch: §10 — a changed partial diff asks; declining leaves the approved state recoverable", async () => {
+  const root = fixture();
+  const runId = "run-t7-diff";
+  approvedSuccessorChain(root, runId, { partialPatchSha: sha(LAUNCH_PATCH) });
+  const successorId = successorRunId(runId);
+  const requests: SuccessorLaunchRequest[] = [];
+
+  // The tree moved after the approval: the launch-time git reports a new patch.
+  const git = new NoRebaselineGit();
+  git.patch = `${LAUNCH_PATCH}\n@@ -2 +2 @@\n+later change`;
+  const declineHuman = new ScriptedHuman();
+  declineHuman.selects = ["abort"];
+  const declined = successorDeps(root, { git, human: declineHuman });
+  const outcome = await repairRevisionLaunch(
+    repairDeps(root, runId, new ScriptedHuman(), realLaunch(declined.deps, requests)),
+  );
+  assert.equal(outcome.kind, "failed");
+  if (outcome.kind !== "failed") return;
+  assert.match(outcome.error, /launch aborted/);
+  assert.equal(declineHuman.selectQuestions.length, 1, "exactly the §10 dialog");
+  assert.ok(declineHuman.selectQuestions[0]?.options.some((option) => option.value === "abort"));
+
+  const events = eventsOf(root, successorId);
+  assert.ok(!events.some((event) => event.type === "workflow.resumed"), "declining launches nothing");
+  assert.equal(countType(events, "workflow.started"), 1, "only the seed");
+  const lifecycle = revisionLifecycle(eventsOf(root, runId));
+  assert.equal(lifecycle.state, "launched", "the pointer precedes the launch");
+  assert.equal(launchIncomplete(root, successorId), true, "the approved state stays repairable");
+
+  // Second repair: the user confirms → the successor launches with the current tree.
+  const acceptHuman = new ScriptedHuman();
+  acceptHuman.selects = ["launch"];
+  const accepted = successorDeps(root, { git, human: acceptHuman });
+  const outcome2 = await repairRevisionLaunch(
+    repairDeps(root, runId, new ScriptedHuman(), realLaunch(accepted.deps, requests)),
+  );
+  assert.equal(outcome2.kind, "launched");
+  assert.equal(requests[0]?.resumedPhase, "develop", "no marker existed: the request carries resumedPhase");
+  assert.equal(accepted.detached.length, 1);
+  await accepted.detached[0];
+  const after = eventsOf(root, successorId);
+  assert.equal(countType(after, "workflow.resumed"), 1);
+  assert.equal(outcomeOf(after)?.status, "completed", "the successor ran on the current tree");
+  assert.equal((accepted.git as NoRebaselineGit).baselineCalls, 0);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("T7 launch: §13 preflight — a changed repository digest refuses before ANY developer pass", async () => {
+  const root = fixture();
+  const runId = "run-t7-preflight-digest";
+  approvedSuccessorChain(root, runId, { partialPatchSha: sha(LAUNCH_PATCH) });
+  const successorId = successorRunId(runId);
+  const requests: SuccessorLaunchRequest[] = [];
+  const agents = new SuccessorAgents();
+  const git = new NoRebaselineGit();
+  git.digest = "moved-digest"; // the git state moved between approval and launch
+
+  const { deps, detached } = successorDeps(root, { git, agents });
+  const outcome = await repairRevisionLaunch(
+    repairDeps(root, runId, new ScriptedHuman(), realLaunch(deps, requests)),
+  );
+  assert.equal(outcome.kind, "failed");
+  if (outcome.kind !== "failed") return;
+  assert.match(outcome.error, /repository state changed/);
+  assert.equal(agents.requests.length, 0, "zero developer calls: the guard fires before execution");
+  const events = eventsOf(root, successorId);
+  assert.ok(!events.some((event) => event.type === "phase.started"), "no phase event: the successor never ran");
+  assert.ok(!events.some((event) => event.type === "workflow.resumed"), "no marker: launchRun never started");
+  assert.equal(countType(events, "workflow.started"), 1, "only the seed");
+  // The approved state stays recoverable: pointer + incomplete launch.
+  assert.equal(launchIncomplete(root, successorId), true);
+  assert.equal(revisionLifecycle(eventsOf(root, runId)).state, "launched");
+
+  // Restored input: the next repair completes the launch.
+  git.digest = "stable-digest";
+  const retry = successorDeps(root, { git });
+  const outcome2 = await repairRevisionLaunch(
+    repairDeps(root, runId, new ScriptedHuman(), realLaunch(retry.deps, requests)),
+  );
+  assert.equal(outcome2.kind, "launched");
+  assert.equal(retry.detached.length, 1);
+  await retry.detached[0];
+  assert.equal(outcomeOf(eventsOf(root, successorId))?.status, "completed");
+  assert.equal((retry.git as NoRebaselineGit).baselineCalls, 0);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("T7 launch: §13 preflight — changed frozen scripts refuse before ANY developer pass", async () => {
+  const root = fixture();
+  const runId = "run-t7-preflight-scripts";
+  const frozen: VerifyFreeze = {
+    commands: [],
+    scripts: { "package.json": { test: "echo frozen" } },
+    scriptsDigest: digestScripts({ "package.json": { test: "echo frozen" } }),
+    perimeter: "root",
+  };
+  mkdirSync(root, { recursive: true });
+  writeFileSync(join(root, "package.json"), JSON.stringify({ scripts: { test: "echo frozen" } }), "utf8");
+  approvedSuccessorChain(root, runId, { partialPatchSha: sha(LAUNCH_PATCH), freeze: frozen });
+  const successorId = successorRunId(runId);
+  const requests: SuccessorLaunchRequest[] = [];
+  const agents = new SuccessorAgents();
+
+  // The manifest script the freeze digested is rewritten after the approval.
+  writeFileSync(join(root, "package.json"), JSON.stringify({ scripts: { test: "echo changed" } }), "utf8");
+  const { deps } = successorDeps(root, { agents });
+  const outcome = await repairRevisionLaunch(
+    repairDeps(root, runId, new ScriptedHuman(), realLaunch(deps, requests)),
+  );
+  assert.equal(outcome.kind, "failed");
+  if (outcome.kind !== "failed") return;
+  assert.match(outcome.error, /verify scripts changed/);
+  assert.match(outcome.error, /package\.json scripts\.test/);
+  assert.equal(agents.requests.length, 0, "zero developer calls: no execution on rewritten scripts");
+  const events = eventsOf(root, successorId);
+  assert.ok(!events.some((event) => event.type === "phase.started"));
+  assert.ok(!events.some((event) => event.type === "workflow.resumed"));
+  assert.equal(launchIncomplete(root, successorId), true, "the approved state stays recoverable");
+
+  // Restored scripts: the next repair completes the launch.
+  writeFileSync(join(root, "package.json"), JSON.stringify({ scripts: { test: "echo frozen" } }), "utf8");
+  const retry = successorDeps(root);
+  const outcome2 = await repairRevisionLaunch(
+    repairDeps(root, runId, new ScriptedHuman(), realLaunch(retry.deps, requests)),
+  );
+  assert.equal(outcome2.kind, "launched");
+  assert.equal(retry.detached.length, 1);
+  await retry.detached[0];
+  assert.equal(outcomeOf(eventsOf(root, successorId))?.status, "completed");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("T7 launch: §13 preflight — an unreadable repository state refuses (fail-closed, zero developer calls)", async () => {
+  const root = fixture();
+  const runId = "run-t7-preflight-unreadable";
+  approvedSuccessorChain(root, runId, { partialPatchSha: sha(LAUNCH_PATCH) });
+  const successorId = successorRunId(runId);
+  const requests: SuccessorLaunchRequest[] = [];
+  const agents = new SuccessorAgents();
+  const git = new NoRebaselineGit();
+  git.readStateFails = true; // the digest cannot be re-read: changed, never unchanged
+
+  const { deps } = successorDeps(root, { git, agents });
+  const outcome = await repairRevisionLaunch(
+    repairDeps(root, runId, new ScriptedHuman(), realLaunch(deps, requests)),
+  );
+  assert.equal(outcome.kind, "failed");
+  if (outcome.kind !== "failed") return;
+  assert.match(outcome.error, /repository state changed/);
+  assert.equal(agents.requests.length, 0, "zero developer calls: an unreadable read is a refusal");
+  const events = eventsOf(root, successorId);
+  assert.ok(!events.some((event) => event.type === "phase.started"));
+  assert.ok(!events.some((event) => event.type === "workflow.resumed"));
+  assert.equal(launchIncomplete(root, successorId), true);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("T7 launch: §13 preflight repeats after the §10 confirmation — a digest moved inside the dialog window refuses with zero developer calls", async () => {
+  const root = fixture();
+  const runId = "run-t7-dialog-toctou";
+  // The recorded evidence predates the current patch: the §10 dialog opens.
+  approvedSuccessorChain(root, runId, { partialPatchSha: sha("diff --git a/src/a.ts\n@@ -1 +1 @@\n+older work") });
+  const successorId = successorRunId(runId);
+  const requests: SuccessorLaunchRequest[] = [];
+  const agents = new SuccessorAgents();
+  const git = new NoRebaselineGit(); // patch ≠ recorded evidence, digest still "stable-digest"
+  const human = new DialogMutationHuman(() => {
+    git.digest = "moved-while-dialog"; // the git state moves WHILE the dialog is open
+  });
+  human.selects = ["launch"]; // the user confirms the launch
+
+  const { deps } = successorDeps(root, { git, agents, human });
+  const outcome = await repairRevisionLaunch(
+    repairDeps(root, runId, new ScriptedHuman(), realLaunch(deps, requests)),
+  );
+  assert.equal(outcome.kind, "failed");
+  if (outcome.kind !== "failed") return;
+  assert.match(outcome.error, /repository state changed/);
+  assert.equal(human.selectQuestions.length, 1, "the §10 dialog ran and was confirmed");
+  assert.equal(agents.requests.length, 0, "zero developer calls after the confirmed dialog");
+  const events = eventsOf(root, successorId);
+  assert.ok(!events.some((event) => event.type === "phase.started"));
+  assert.ok(!events.some((event) => event.type === "workflow.resumed"), "no marker: the repeated preflight refused");
+  assert.equal(countType(events, "workflow.started"), 1, "only the seed");
+  assert.equal(launchIncomplete(root, successorId), true, "the approved state stays recoverable");
+
+  // Restored input: the next repair re-asks (patch still changed), the user
+  // confirms again, and the launch completes.
+  git.digest = "stable-digest";
+  const retryHuman = new ScriptedHuman();
+  retryHuman.selects = ["launch"];
+  const retry = successorDeps(root, { git, human: retryHuman });
+  const outcome2 = await repairRevisionLaunch(
+    repairDeps(root, runId, new ScriptedHuman(), realLaunch(retry.deps, requests)),
+  );
+  assert.equal(outcome2.kind, "launched");
+  assert.equal(retry.detached.length, 1);
+  await retry.detached[0];
+  assert.equal(retryHuman.selectQuestions.length, 1, "the changed patch still asks");
+  assert.equal(outcomeOf(eventsOf(root, successorId))?.status, "completed");
+  assert.equal((retry.git as NoRebaselineGit).baselineCalls, 0);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("T7 launch: an unresolvable baseline at the §10 check refuses without launching", async () => {
+  const root = fixture();
+  const runId = "run-t7-unresolvable";
+  approvedSuccessorChain(root, runId, { partialPatchSha: sha(LAUNCH_PATCH) });
+  const requests: SuccessorLaunchRequest[] = [];
+  const git = new NoRebaselineGit();
+  git.failDiff = true;
+  const declined = successorDeps(root, { git });
+  const outcome = await repairRevisionLaunch(
+    repairDeps(root, runId, new ScriptedHuman(), realLaunch(declined.deps, requests)),
+  );
+  assert.equal(outcome.kind, "failed");
+  if (outcome.kind !== "failed") return;
+  assert.match(outcome.error, /no longer resolvable/);
+  assert.ok(!eventsOf(root, successorRunId(runId)).some((event) => event.type === "workflow.resumed"),
+    "the launch never happened: no marker on disk");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("T7 launch: the launcher refuses a log that is not a complete seeded successor", async () => {
+  const root = fixture();
+  const runId = "run-t7-integrity";
+  approvedSuccessorChain(root, runId);
+  const successorId = successorRunId(runId);
+  // Break the seed: remove the successor log entirely (B7a) — the launcher
+  // must refuse rather than launch an unseeded run. (The repair would re-seed
+  // first; this exercises the launcher's own integrity gate directly.)
+  rmSync(runLogPathOf(root, successorId), { force: true });
+  const { deps } = successorDeps(root);
+  const context: SuccessorLaunchContext = { lock: { release: () => {} }, markHandedOff: () => {} };
+  await assert.rejects(
+    () => launchSuccessorRun(deps, { successorRunId: successorId, resumedPhase: "develop" }, context),
+    /complete seeded workflow.started/,
+  );
   rmSync(root, { recursive: true, force: true });
 });

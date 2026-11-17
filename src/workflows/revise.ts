@@ -5,6 +5,10 @@
  * approval binding verification, archive-then-overwrite promotion, the
  * deterministic successor seed with prefix-verified recovery, the idempotent
  * pointer, and the B2b–B8 launch repair behind an injected launch port.
+ * T7 wires the port to the REAL launcher: the §7 step 7 initial ResumeState
+ * built from the successor's own seeded stub, the §10 approval-to-launch
+ * change confirmation, and the detached `launchRun` + `runFeatureWorkflow`
+ * execution with the B7c `resumedPhase` omission rule.
  *
  * Same discipline as `replayRunLog` (workflows/resume.ts): pure, Pi-free,
  * state always reconstructed from persisted evidence (events + files), never
@@ -24,9 +28,10 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 
-import type { GitBaseline, GitService, HumanInput, WorkflowEvent } from "../ports.ts";
+import type { GitBaseline, GitService, HumanInput, VerifyRunner, WorkflowEvent } from "../ports.ts";
 import { UserDismissedError } from "../ports.ts";
 import type { AgentRunResult, AgentRunner, ModelSelection } from "../agent.ts";
+import type { PiBrainConfig } from "../config.ts";
 import {
   RunLog,
   CriticalAppendError,
@@ -40,17 +45,20 @@ import {
 import type { AcquireResult } from "../run-lock.ts";
 import { acquireRunLock, describeLock } from "../run-lock.ts";
 import { changedScriptKeys, type VerifyFreeze } from "../verify.ts";
-import { foldCallUsage, hasUsageData, type UsageByRole } from "../usage.ts";
+import { copyUsageTotals, foldCallUsage, hasUsageData, type UsageByRole } from "../usage.ts";
 import type { ReviewResult } from "../review.ts";
-import { replayRunLog, replayVerifyFreeze, type Refusal } from "./resume.ts";
+import { hasPatchChanged, replayRunLog, replayVerifyFreeze, type Refusal } from "./resume.ts";
 import {
   MAX_PLAN_REVISIONS,
   descriptionMarker,
   findExistingFeatureSlug,
   persistRejectedPlannerOutput,
+  runFeatureWorkflow,
   validatePlannerOutput,
+  type ResumeState,
 } from "./feature.ts";
 import { POST_STOP_REVISION_PROMPT } from "./feature-prompts.ts";
+import { launchRun, type LauncherRunState } from "../run-launcher.ts";
 
 // ---------------------------------------------------------------------------
 // Event aliases
@@ -1997,12 +2005,29 @@ export interface SuccessorLaunchRequest {
 }
 
 /**
- * The injected launch port. T6 verifies the repair's launch decisions
- * (`resumedPhase` present vs omitted) against a fake; T7 wires the real
- * `launchRun` with the constructed `ResumeState` behind it. The repair never
- * builds the baseline/ResumeState itself and never launches a real run.
+ * The repository lock the repair holds, handed to the launcher. A launcher
+ * that takes the lock over (the real `launchRun` releases it when the
+ * successor settles) calls `markHandedOff()` BEFORE returning; the repair
+ * then skips its own release so the lock changes hands exactly once. A
+ * launcher that only observes (every T6 fake) ignores the context, and the
+ * repair keeps releasing in its `finally`.
  */
-export type SuccessorLauncher = (request: SuccessorLaunchRequest) => Promise<void> | void;
+export interface SuccessorLaunchContext {
+  lock: { release(): void };
+  markHandedOff(): void;
+}
+
+/**
+ * The injected launch port (§7 step 7). T6 verifies the repair's launch
+ * decisions (`resumedPhase` present vs omitted) against fakes; T7 wires the
+ * real `launchRun` + `runFeatureWorkflow` behind it through
+ * `launchSuccessorRun`. The repair never builds the baseline/ResumeState
+ * itself; the launcher re-derives everything from a disk re-read.
+ */
+export type SuccessorLauncher = (
+  request: SuccessorLaunchRequest,
+  context: SuccessorLaunchContext,
+) => Promise<void> | void;
 
 export interface RepairLaunchDeps {
   /** Repository root (the predecessor's repo). */
@@ -2053,10 +2078,21 @@ export async function repairRevisionLaunch(deps: RepairLaunchDeps): Promise<Repa
     if (gate !== undefined) return { kind: "refused", reason: gate };
     const lock = acquireRunLock(cwd, { runId, workflow: "revision" });
     if (!lock.ok) return { kind: "refused", reason: describeLockRefusal(lock) };
+    // T7: a launcher that accepts the lock handoff (the real launchRun) owns
+    // the release — the successor holds the repository lock for its whole
+    // run, exactly like /feature and /flow resume. Until the handoff is
+    // marked, the repair keeps releasing exactly once in `finally`, so every
+    // refusal, failure and T6 fake keeps today's behavior.
+    let lockHandedOff = false;
     try {
-      return await repairUnderLock(deps);
+      return await repairUnderLock(deps, {
+        lock,
+        markHandedOff: () => {
+          lockHandedOff = true;
+        },
+      });
     } finally {
-      lock.release();
+      if (!lockHandedOff) lock.release();
     }
   } catch (err) {
     if (err instanceof UserDismissedError) {
@@ -2094,7 +2130,7 @@ function launchRepairGate(events: WorkflowEvent[], cwd: string): string | undefi
   }
 }
 
-async function repairUnderLock(deps: RepairLaunchDeps): Promise<RepairLaunchOutcome> {
+async function repairUnderLock(deps: RepairLaunchDeps, context: SuccessorLaunchContext): Promise<RepairLaunchOutcome> {
   const { cwd, runId } = deps;
 
   // --- Fresh state under the lock: authority is always a disk re-read. ---
@@ -2282,7 +2318,7 @@ async function repairUnderLock(deps: RepairLaunchDeps): Promise<RepairLaunchOutc
     successorRunId: successorId,
     ...(resumedPresent ? {} : { resumedPhase: "develop" as const }),
   };
-  await deps.launch(request);
+  await deps.launch(request, context);
   return {
     kind: "launched",
     successorRunId: successorId,
@@ -2365,4 +2401,336 @@ async function forcedAbandonmentOrRefusal(
     artifactState: untouched ? "untouched" : "indeterminate",
     report,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Successor construction and the real launch (tasks T7, spec.md §7 step 7,
+// §10, §13, §15)
+// ---------------------------------------------------------------------------
+
+/**
+ * The §7 step 7 initial `ResumeState`, constructed from the successor's own
+ * seeded stub (the persisted evidence, never the launching process's memory):
+ * develop phase; fresh developer/review/verify counters; empty fixes and
+ * blocking-id set; the carried usage COPIED (folding successor-local calls
+ * must never alias the snapshot); the rebuilt ORIGINAL baseline — the same
+ * construction `handleResume` uses — so `runFeatureWorkflow` enters resume
+ * mode with `resume.baseline` set and skips `git.baseline` entirely; the
+ * predecessor's verify freeze replayed verbatim; the approved contract hashes
+ * as the tamper guard; the revision context verbatim. Deliberately ABSENT:
+ * `interruptedPatchSha`, `lastReview`, `fixes` — stale verdicts and results
+ * cannot complete the new contract (§7 step 7).
+ *
+ * Legacy absence is preserved, never synthesized: a predecessor without a
+ * freeze or repository-state digest yields a state without them, so the
+ * successor's behavior converges with a legacy resume (§13).
+ */
+export function initialSuccessorResumeState(
+  cwd: string,
+  started: Extract<WorkflowEvent, { type: "workflow.started" }>,
+  spec: Extract<WorkflowEvent, { type: "spec.approved" }>,
+): { ok: true; state: ResumeState } | { ok: false; reason: string } {
+  if (started.description === undefined || started.baseline === undefined) {
+    return {
+      ok: false,
+      reason: "the seeded workflow.started lacks description/baseline — artifacts lookup and the original-baseline diff are impossible",
+    };
+  }
+  if (started.revision === undefined) {
+    return {
+      ok: false,
+      reason: "the seeded workflow.started carries no revision linkage — refusing to launch an ordinary-looking log as a successor",
+    };
+  }
+  // §13: a corrupt freeze refuses outright (fail-closed, the resume
+  // discipline); ABSENCE is legacy compatibility and is inherited.
+  const freeze = replayVerifyFreeze(started);
+  if (freeze.kind === "corrupt") {
+    return {
+      ok: false,
+      reason: "the persisted verify freeze is corrupt — refusing to launch (restore the scripts or start a new run)",
+    };
+  }
+  return {
+    ok: true,
+    state: {
+      phase: "develop",
+      reviewRound: 0,
+      verifyRetries: 0,
+      developerRuns: 0,
+      fixes: [],
+      previousBlockingIds: new Set<string>(),
+      usage: Object.fromEntries(
+        Object.entries(started.carriedUsage ?? {}).map(([role, totals]) => [role, copyUsageTotals(totals)]),
+      ),
+      baseline: {
+        repoRoot: cwd,
+        branch: "resumed",
+        headSha: "unknown",
+        baseCommit: started.baseline,
+        ...(started.ignoreRulesDigest !== undefined
+          ? { ignoreRulesDigest: started.ignoreRulesDigest }
+          : {}),
+        ...(started.repoStateDigest !== undefined
+          ? { repoStateDigest: started.repoStateDigest }
+          : {}),
+      },
+      ...(freeze.kind === "ok" ? { verify: freeze.freeze } : {}),
+      spec: { prdSha: spec.prdSha, tasksSha: spec.tasksSha },
+      revision: { ...started.revision },
+    },
+  };
+}
+
+/**
+ * Injected workflow-layer dependencies for the real successor launch. No Pi:
+ * the extension (T8) wires the real implementations (`PiAgentRunner`,
+ * `ShellVerifyRunner`, `RealGitService`, `PiHumanInput`, UI callbacks);
+ * tests inject fakes, mirroring the launcher's own dependency discipline.
+ */
+export interface SuccessorLaunchDeps {
+  /** Repository root (the successor runs in the predecessor's repo). */
+  cwd: string;
+  config: PiBrainConfig;
+  profilesDir: string;
+  availableSkills: ReadonlySet<string>;
+  agents: AgentRunner;
+  human: HumanInput;
+  verifier: VerifyRunner;
+  git: GitService;
+  /** Session abort signal (mirrors /feature's AbortController). */
+  signal?: AbortSignal;
+  /** Pi-side history append (best-effort by the launcher's contract). */
+  history(event: WorkflowEvent): void;
+  /** Status line setter; the launcher clears it when the run ends. */
+  setStatus(text: string | undefined): void;
+  /** UI notification of the final outcome / fatal error. */
+  notify(message: string, level: "info" | "warning" | "error"): void;
+  /** Terminal bell; the wiring gates it on `config.notifications.bell`. */
+  bell(): void;
+  /** Observe the detached run promise (tests await it; production drops it). */
+  onDetached?: (run: Promise<void>) => void;
+}
+
+/**
+ * §7 step 7: launch the successor through the REAL `launchRun` with the
+ * REAL `runFeatureWorkflow`, with every workflow dependency injected.
+ *
+ * Sequencing, mirroring the launcher's disciplines:
+ * 1. The seeded stub is re-read from DISK and verified (complete
+ *    `workflow.started` with revision linkage, `spec.approved`, exactly one
+ *    seed event) — the launch authority, like every repair step.
+ * 2. The initial `ResumeState` is constructed per §7 step 7
+ *    (`initialSuccessorResumeState`; corrupt freeze refuses, §13).
+ * 3. §13 preflight BEFORE developer execution: the frozen script sections
+ *    (`changedScriptKeys`) and the repository-state digest are revalidated
+ *    against the ORIGINAL persisted inputs — unreadable reads refuse — so a
+ *    violated input stops the launch with zero developer calls instead of
+ *    surfacing only inside the successor's loop.
+ * 4. §10 approval-to-launch change detection: the partial patch is
+ *    recomputed against the ORIGINAL baseline and compared with
+ *    `revision.started.partialPatchSha` (absent evidence → no check, the
+ *    same rule as ordinary resume's `hasPatchChanged`). A changed tree asks,
+ *    mirroring `askResumeWithChangedDiff`, with abort as the default — the
+ *    approval binds candidate CONTENT, not partial-work state. Refusing
+ *    leaves the approved state recoverable: the pointer (or
+ *    `approved-pending-launch`) plus an incomplete launch are always
+ *    reachable again via `/flow revise`.
+ * 5. §13 preflight REPEATED: the §10 dialog is unbounded user time, so the
+ *    same frozen-input revalidation runs again after the confirmation and
+ *    immediately before the handoff — a digest or script violated while the
+ *    dialog was open stops the launch with zero developer calls, exactly
+ *    like one violated before it.
+ * 6. The lock handoff is marked and the run DETACHES (`void launchRun`):
+ *    the launcher releases the repository lock exactly once, when the
+ *    successor settles; the repair returns immediately. The `resumedPhase`
+ *    option follows the B7c omission rule — the marker is emitted
+ *    synchronously before the workflow body, at most once on disk.
+ *
+ * Any refusal throws before the handoff, so the repair keeps its lock and
+ * surfaces the reason.
+ */
+export async function launchSuccessorRun(
+  deps: SuccessorLaunchDeps,
+  request: SuccessorLaunchRequest,
+  context: SuccessorLaunchContext,
+): Promise<void> {
+  const { cwd } = deps;
+  const successorId = request.successorRunId;
+
+  // --- 1. The seeded stub, re-read from disk. ---
+  const events = readRunLog(cwd, successorId);
+  const started = events[0];
+  if (
+    started?.type !== "workflow.started" ||
+    started.workflow !== "feature" ||
+    started.description === undefined ||
+    started.baseline === undefined
+  ) {
+    throw new Error(
+      `the successor log ${successorId} does not hold a complete seeded workflow.started — refusing to launch`,
+    );
+  }
+  if (events.some((event, index) => index > 0 && event.type === "workflow.started")) {
+    throw new Error(
+      `the successor log ${successorId} holds more than one workflow.started — refusing to launch over a duplicated seed`,
+    );
+  }
+  const specEvent = events.find(
+    (event): event is Extract<WorkflowEvent, { type: "spec.approved" }> => event.type === "spec.approved",
+  );
+  if (specEvent === undefined) {
+    throw new Error(
+      `the successor log ${successorId} has no spec.approved — the seed is incomplete (B5a), refusing to launch`,
+    );
+  }
+  const revisionLink = started.revision;
+  if (revisionLink === undefined) {
+    throw new Error(
+      `the successor log ${successorId} carries no revision linkage — refusing to launch it as a successor`,
+    );
+  }
+
+  // --- 2. The §7 step 7 initial state. ---
+  const state = initialSuccessorResumeState(cwd, started, specEvent);
+  if (!state.ok) throw new Error(`cannot launch ${successorId}: ${state.reason}`);
+  const baseline = state.state.baseline;
+  if (baseline === undefined) {
+    // Unreachable by construction (initialSuccessorResumeState refuses a
+    // stub without baseline), but the successor diff hangs on it: refuse
+    // rather than assume.
+    throw new Error(`cannot launch ${successorId}: the constructed ResumeState has no rebuilt baseline`);
+  }
+
+  // --- 3. §13 preflight: the frozen inputs must hold BEFORE developer
+  // execution. The successor's own in-loop checks would fire too late — the
+  // repository-state digest only after a developer pass, the script freeze
+  // only before verify — so a violated input would consume a developer call
+  // before anything stopped. Same discipline as the revise-entry
+  // revalidation: a present input is re-checked with its existing recovery
+  // message, legacy absence is inherited (no check), and an UNREADABLE read
+  // is treated as changed (fail-closed). Runs inside the held lock, before
+  // the handoff and launchRun, so a refusal leaves the approved state
+  // recoverable with zero developer calls. The check is a closure because it
+  // runs TWICE: once before the §10 dialog (fail fast) and once after the
+  // user's confirmation, immediately before the handoff — the dialog window
+  // is unbounded user time, and a frozen input violated inside it must stop
+  // the launch exactly the same way.
+  const preflightFrozenInputs = async (): Promise<void> => {
+    if (state.state.verify) {
+      const changedScripts = changedScriptKeys(cwd, state.state.verify);
+      if (changedScripts.length > 0) {
+        throw new Error(
+          `verify scripts changed since the run started (${changedScripts.join(", ")}) — ` +
+            "restore the scripts or start a new run",
+        );
+      }
+    }
+    if (baseline.repoStateDigest !== undefined) {
+      let currentDigest: string | undefined;
+      try {
+        currentDigest = await deps.git.repoStateDigest(cwd);
+      } catch {
+        currentDigest = undefined; // unreadable is changed, never unchanged (fail-closed)
+      }
+      if (currentDigest !== baseline.repoStateDigest) {
+        throw new Error(
+          "the git repository state changed since the run started — restore it or start a new run",
+        );
+      }
+    }
+  };
+  await preflightFrozenInputs();
+
+  // --- 4. §10 approval-to-launch change detection. ---
+  const predecessorEvents = readRunLog(cwd, revisionLink.predecessorRunId);
+  const revisionStarted = predecessorEvents.find(
+    (event): event is RevisionStartedEvent =>
+      event.type === "revision.started" && event.revision === revisionLink.revision,
+  );
+  if (revisionStarted?.partialPatchSha !== undefined) {
+    let patch: string;
+    try {
+      patch = (await deps.git.diffSince(baseline)).patch;
+    } catch (err) {
+      throw new Error(
+        `the original baseline is no longer resolvable for the launch check (${(err as Error).message}) — refusing to launch`,
+      );
+    }
+    if (hasPatchChanged(patch, revisionStarted.partialPatchSha)) {
+      const choice = await deps.human.select({
+        message:
+          "The working diff has changed since the revision opened. Launch the successor with the current tree?",
+        options: [
+          {
+            label: "Launch with current diff",
+            value: "launch",
+            description:
+              "The approval binds the candidate content; the successor applies it to the tree as it stands.",
+          },
+          {
+            label: "Abort",
+            value: "abort",
+            description:
+              "Leave the approved revision recoverable; complete the launch later with /flow revise.",
+          },
+        ],
+        defaultValue: "abort",
+      });
+      if (choice !== "launch") {
+        throw new Error(
+          "launch aborted — the partial work changed since the revision opened and the launch was not confirmed; " +
+            "the approved revision stays recoverable via /flow revise",
+        );
+      }
+    }
+  }
+
+  // --- 5. §13 preflight, repeated: the §10 dialog above is unbounded user
+  // time, and a frozen input violated (or a digest moved) while it was open
+  // must stop the launch exactly like one violated before it — after the
+  // confirmation and BEFORE the handoff, with zero developer calls.
+  await preflightFrozenInputs();
+
+  // --- 6. Detached launch through the real launcher; the lock changes hands. ---
+  context.markHandedOff();
+  const runLog = RunLog.open(cwd, successorId);
+  const run: LauncherRunState = {
+    runId: successorId,
+    workflow: "feature",
+    phase: "develop",
+    status: "running",
+    events: [],
+  };
+  const runPromise = launchRun(
+    {
+      run,
+      runLog,
+      history: (event) => deps.history(event),
+      setStatus: (text) => deps.setStatus(text),
+      notify: (message, level) => deps.notify(message, level),
+      bell: () => deps.bell(),
+      lock: context.lock,
+    },
+    (sink) =>
+      runFeatureWorkflow(
+        {
+          cwd,
+          profilesDir: deps.profilesDir,
+          availableSkills: deps.availableSkills,
+          config: deps.config,
+          agents: deps.agents,
+          human: deps.human,
+          verifier: deps.verifier,
+          git: deps.git,
+          events: sink,
+          ...(deps.signal !== undefined ? { signal: deps.signal } : {}),
+        },
+        started.description as string,
+        successorId,
+        state.state,
+      ),
+    request.resumedPhase !== undefined ? { resumedPhase: request.resumedPhase } : {},
+  );
+  if (deps.onDetached !== undefined) deps.onDetached(runPromise);
 }

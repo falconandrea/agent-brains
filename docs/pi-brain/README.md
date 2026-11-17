@@ -19,7 +19,7 @@ path.
 | | |
 |---|---|
 | Pi-free logic (profiles, stack, context routing, verification, tri-state gate, review loop, run lock, workflow) | implemented, 212 tests green |
-| Pi SDK layer (`src/pi/`, `extensions/pi-brain.ts`) | typechecked and scripted-runtime-verified against pi-coding-agent **1.5.2** (migration 2026-11-12): SDK smoke plus isolated CLI 1.5.2 RPC fixture runs; real-provider and fullscreen-TUI execution unverified on 1.5.2. The historical live evidence below was on **0.84.2** |
+| Pi SDK layer (`src/pi/`, `extensions/pi-brain.ts`) | typechecked and scripted-runtime-verified against pi-coding-agent **1.5.2** (migration 2026-11-12): SDK smoke plus isolated CLI 1.5.2 RPC fixture runs. One [real-provider/fullscreen-TUI pilot](../evals/pi-compatibility/REAL-TUI-2026-11-13.md) on 2026-11-13 exercised all pipeline phases and ended `needs_human`; successful real-provider completion remains unobserved. The historical live evidence below was on **0.84.2** |
 | Spike proving the Pi APIs | **passed 2026-08-17 on 0.84.2** — all checks, see [SPIKE.md](./SPIKE.md) |
 | Real `/feature` runs | several completed end-to-end (2026-08-21 → 2026-08-23): gates, ask_user mid-run, review rounds, classified warnings, run-state log persisted and read back via `/flow log` |
 
@@ -386,8 +386,14 @@ The 1.5.2 migration additionally exercised the registered package inside the
 isolated Pi CLI/TUI 1.5.2 (RPC mode) through disposable fixtures: `/feature`
 approval through the RPC extension-UI gate, `/flow stop` cancellation, and a
 SIGKILL interruption resumed with `/flow resume` to `completed` — all with
-scripted loopback responses, not real providers. Real-provider runs, personal
-authentication and fullscreen-TUI interaction remain unverified for 1.5.2.
+scripted loopback responses, not real providers. A subsequent
+[real-provider/fullscreen-TUI pilot](../evals/pi-compatibility/REAL-TUI-2026-11-13.md)
+on 2026-11-13 exercised planner, native approval gate, developer, passing
+verification and reviewer on 1.5.2 using personal authentication. It ended
+`needs_human` after the reviewer treated required planning artifacts as
+violating the generated file-scope criterion. Successful real-provider
+completion, live cancel/resume, revision/fix loops and broader model/task
+behavior remain unverified by that pilot; no reliability rate is established.
 The existing offline regression suite and historical live evidence cover
 separate scopes. [Migration evidence and limits](../evals/pi-compatibility/PI-1.5.2-2026-11-12.md).
 

@@ -12,7 +12,7 @@ import { createHash } from "node:crypto";
 
 import { replayRunLog, isResumable, validateResumePreconditions, hasPatchChanged, askResumeWithChangedDiff, type Refusal } from "../src/workflows/resume.ts";
 import { digestScripts } from "../src/verify.ts";
-import { foldCallUsage } from "../src/usage.ts";
+import { foldCallUsage, type UsageTotals } from "../src/usage.ts";
 import { withEventId } from "../src/run-log.ts";
 import type { WorkflowEvent, GitService, GitBaseline, HumanInput } from "../src/ports.ts";
 
@@ -974,4 +974,109 @@ test("replayRunLog ignores injected revision.* events and unknown new fields (§
   assert.deepEqual(injected.ok && injected.state, plain.ok && plain.state);
   assert.ok(plain.ok);
   assert.equal(plain.state.phase, "develop");
+});
+
+// ---------------------------------------------------------------------------
+// Post-stop revision replay changes (tasks T7, spec.md §8/§15/§16 rule 9)
+// ---------------------------------------------------------------------------
+
+const totals = (input: number, output: number): UsageTotals => ({
+  input,
+  output,
+  models: [],
+  calls: 1,
+  coverage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: 0, elapsedMs: 0 },
+});
+
+/** A seeded successor stub plus one full loop pass (develop → verify → review #1). */
+function successorLogEvents(): WorkflowEvent[] {
+  return [
+    {
+      type: "workflow.started",
+      runId: "run-chain-r1",
+      workflow: "feature",
+      description: "add user auth",
+      baseline: "snap-base",
+      stack: { primary: "nodejs", frameworks: [] },
+      carriedUsage: { planner: totals(100, 50), developer: totals(200, 100) },
+      revision: { predecessorRunId: "run-chain", revision: 1, correction: "make auth optional" },
+    },
+    { type: "spec.approved", runId: "run-chain-r1", prdSha: "p".repeat(64), tasksSha: "t".repeat(64) },
+    { type: "workflow.resumed", runId: "run-chain-r1", phase: "develop" },
+    { type: "phase.started", runId: "run-chain-r1", phase: "develop" },
+    { type: "agent.completed", runId: "run-chain-r1", role: "developer", usage: { input: 10, output: 5 } },
+    { type: "phase.started", runId: "run-chain-r1", phase: "verify" },
+    { type: "verification.completed", runId: "run-chain-r1", passed: true },
+    { type: "phase.started", runId: "run-chain-r1", phase: "review #1", patchSha: "a".repeat(64) },
+    {
+      type: "review.completed",
+      runId: "run-chain-r1",
+      verdict: "changes_requested",
+      round: 1,
+      issues: [{ id: "R1", severity: "blocking", category: "bug", problem: "off by one" }],
+    },
+  ];
+}
+
+test("successor replay seeds usage from carriedUsage and reconstructs the revision context (§8)", () => {
+  const replay = replayRunLog(successorLogEvents());
+  assert.ok(replay.ok);
+  if (!replay.ok) return;
+  const state = replay.state;
+  assert.deepEqual(
+    state.revision,
+    { predecessorRunId: "run-chain", revision: 1, correction: "make auth optional" },
+    "the revision context is reconstructed from the log, not held in memory",
+  );
+  assert.equal(state.usage.planner?.input, 100, "carried planner usage seeds the reconstruction");
+  assert.equal(
+    state.usage.developer?.input,
+    210,
+    "carried 200 + successor-local 10: carried and local usage fold ONCE, never double-counted",
+  );
+  assert.equal(state.usage.developer?.output, 105);
+  // Fresh-contract counters come from the successor's own events only.
+  assert.equal(state.reviewRound, 1);
+  assert.equal(state.developerRuns, 1);
+  assert.equal(state.verifyRetries, 0);
+  assert.equal(state.fixes.length, 1);
+  assert.equal(state.spec?.prdSha, "p".repeat(64), "the successor contract is its own spec.approved");
+});
+
+test("two replays of identical successor events reconstruct identical state (§17)", () => {
+  const events = successorLogEvents();
+  const first = replayRunLog(events);
+  const second = replayRunLog(events);
+  assert.ok(first.ok && second.ok);
+  if (first.ok && second.ok) {
+    assert.deepEqual(second.state, first.state, "counters, usage and revision context are deterministic");
+    // The state must not alias the events: mutating it cannot corrupt a re-replay.
+    first.state.revision!.correction = "tampered";
+    const third = replayRunLog(events);
+    assert.ok(third.ok);
+    if (third.ok) assert.equal(third.state.revision?.correction, "make auth optional");
+  }
+});
+
+test("ordinary logs replay with revision undefined and no carried seeding (byte-identical behavior)", () => {
+  const events: WorkflowEvent[] = [
+    {
+      type: "workflow.started",
+      runId: "run-plain",
+      workflow: "feature",
+      description: "add user auth",
+      baseline: "snap-base",
+      stack: { primary: "nodejs", frameworks: [] },
+    },
+    { type: "spec.approved", runId: "run-plain", prdSha: "p".repeat(64), tasksSha: "t".repeat(64) },
+    { type: "workflow.resumed", runId: "run-plain", phase: "develop" },
+    { type: "phase.started", runId: "run-plain", phase: "develop" },
+    { type: "agent.completed", runId: "run-plain", role: "developer", usage: { input: 10, output: 5 } },
+  ];
+  const replay = replayRunLog(events);
+  assert.ok(replay.ok);
+  if (replay.ok) {
+    assert.equal(replay.state.revision, undefined, "ordinary logs carry no revision field");
+    assert.deepEqual(replay.state.usage.developer, totals(10, 5), "usage folds from local events only");
+  }
 });

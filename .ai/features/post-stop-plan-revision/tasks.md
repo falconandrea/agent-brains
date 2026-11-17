@@ -1,7 +1,10 @@
 # Tasks — post-stop plan revision (`/flow revise`)
 
 Status: T1–T6 implemented and reviewed (T6 final review approved
-2026-11-15; local commit authorized); T7–T11 remain. The user authorized the first
+2026-11-15; local commit authorized); T7 delivered 2026-11-17, two review
+rounds' P1 fixes (§13 preflight before developer execution; preflight
+repeated after the §10 confirmation) applied the same day; final
+orchestrator review approved T7 on 2026-11-17. T8–T11 remain. The user authorized the first
 tranche and its local commit. Each task has one concrete deliverable, its
 dependencies, and its verification; tasks are ordered so every step leaves
 the tree green (`npm test`, `npm run typecheck`) and ordinary resume
@@ -290,6 +293,130 @@ ordinary logs leave `revision` undefined and prompts unchanged.
 
 Verification: `npm test -- tests/revise.test.ts tests/resume.test.ts
 tests/run-launcher.test.ts`; `npm run typecheck`.
+
+Delivered (2026-11-17, awaiting orchestrator review): the real launch
+integration lives in `src/workflows/revise.ts`. `initialSuccessorResumeState`
+builds the §7 step 7 `ResumeState` from the successor's OWN seeded stub
+(the persisted evidence, never caller memory): develop phase; fresh
+developer/review/verify counters; empty fixes and blocking-id set; carried
+usage copied defensively; the rebuilt ORIGINAL baseline with the exact
+`handleResume` construction (so `runFeatureWorkflow` enters resume mode and
+`git.baseline` is skipped entirely); the freeze replayed verbatim; the
+contract hashes as the tamper guard; the revision context verbatim. Legacy
+absence of freeze/digest is preserved, never synthesized; a corrupt freeze,
+a missing baseline or a missing revision linkage refuse (§13 fail-closed).
+`launchSuccessorRun` re-reads the stub from disk (complete seeded
+`workflow.started` with revision linkage, `spec.approved`, exactly one seed
+event), runs the §10 approval-to-launch changed-diff confirmation against
+`revision.started.partialPatchSha` (the `askResumeWithChangedDiff` pattern,
+abort as default; refusal throws before the handoff, leaving the pointer or
+`approved-pending-launch` plus an incomplete launch recoverable via
+`/flow revise`), then detaches through the REAL `launchRun` +
+`runFeatureWorkflow` with injected workflow dependencies (config, agents,
+human, verifier, git, UI effects) — not another fake launch callback. The
+repository lock changes hands exactly once: the launcher marks the handoff
+(`SuccessorLaunchContext.markHandedOff`) and `launchRun` releases the lock
+when the successor settles; until then the repair keeps releasing in its
+`finally`, so every T6 fake and refusal path keeps today's behavior. The
+`resumedPhase` option follows the B7c omission rule (present only when the
+stub lacks the marker). The ONLY two `replayRunLog` changes landed in
+`src/workflows/resume.ts` (§8): usage seeds from
+`workflow.started.carriedUsage` and folds successor-local events once, and
+`ResumeState.revision` reconstructs from `workflow.started.revision` at
+EVERY resume (defensive copy). `runFeatureWorkflow` threads the context into
+the developer and reviewer prompts only when present, so ordinary prompts
+stay byte-identical. `extensions/pi-brain.ts` is unchanged (T8 scope).
+Tests: 9 new revision tests — initial state (fresh counters/inherited
+originals/copied carried usage; legacy absence preserved; corrupt freeze,
+missing baseline, missing linkage refuse); the real-launch integration with
+a `git.baseline`-THROWING fake (no duplicate `workflow.started`, exactly one
+`workflow.resumed`, develop entry, prompts carrying the correction with no
+stale fix items, chain-cumulative usage on the outcome, the lock held
+mid-run and released exactly once at settle); B7c repeated repair before
+`phase.started` (marker never duplicated, `resumedPhase` omitted from the
+second request on); B7b seeded-stub launch carrying `resumedPhase`; §10
+decline (no launch, recoverable approved state) and accept (launches on the
+current tree); an unresolvable baseline refusing before launch; the
+launcher's integrity refusal on a non-seeded log. 3 new replay tests
+(carried + successor-local usage folded once; two replays of identical
+events yield identical state incl. an anti-aliasing check; ordinary logs
+leave `revision` undefined and usage unseeded). 2 new workflow threading
+tests (ordinary resume byte-identity without a revision section; successor
+resume delivering the correction to both prompts). All existing T6 recovery
+tests stay green. Observed: 631/631 tests
+(`tests/revise.test.ts` 110, `tests/resume.test.ts` 49,
+`tests/feature-workflow.test.ts` 90, `tests/run-launcher.test.ts` 25),
+`npm run typecheck`, `npm run smoke:pi` (scripted loopback, head
+unchanged), `git diff --check`. Limits: fixture/scripted verification only —
+no real-provider successor run and no consumer-repo run is part of T7; the
+real launcher is exercised through the repair port with injected
+extensions, not from a live command (the `/flow revise` command, dialogs
+and extension dispatch are T8); the successor's outcome/usage coverage and
+the B7 windows are proven against fakes, and the §10 launch-time check runs
+only when `revision.started.partialPatchSha` exists (the same
+absent-evidence rule as ordinary resume).
+
+Review fix (2026-11-17, first review round — one reproduced P1 closed):
+the successor launch was missing the §13 frozen-input revalidation BEFORE
+developer execution. The reproduced case: an approved revision whose git
+repository digest changed before launch let the successor start, run one
+developer pass, and only then escalate needs_human from the in-loop
+`stopForRepoStateChange`; the script-freeze check fired equally late
+(before verify, i.e. after the developer pass). Fix: `launchSuccessorRun`
+gains a §13 preflight between the constructed ResumeState and the §10
+check — `changedScriptKeys` against the inherited freeze and a live
+`repoStateDigest` compared with the ORIGINAL persisted digest, both inside
+the held lock and BEFORE the lock handoff and `launchRun` — with the
+existing §13 recovery messages, legacy absence inherited as no-check, and
+an unreadable read treated as changed (fail-closed). A refusal throws
+before `markHandedOff`, so zero developer calls run, nothing is appended
+(no marker, no phase event), and the pointer-plus-incomplete-launch state
+stays recoverable via `/flow revise`. Three regressions added: changed
+digest refuses with zero developer calls and completes after restoring;
+changed frozen `package.json` script refuses with the offending key in the
+message and completes after restoring; an unreadable repository state
+refuses fail-closed with zero developer calls. The reviewer's temporary
+reproduction now passes against the fixed source (developerCalls: 0,
+refusal before execution); the copy's one remaining failure is the
+pre-existing T5 structural test's repo-relative path (an artifact of
+running the file outside the repository, recorded since the T6 rounds).
+Observed: 634/634 tests (`tests/revise.test.ts` 113),
+`npm run typecheck`, `npm run smoke:pi` (scripted loopback, head
+unchanged), `git diff --check`.
+
+Review fix (2026-11-17, second review round — one reproduced P1 closed,
+TOCTOU in the dialog window): the §13 preflight ran BEFORE the async §10
+dialog, and a confirmed launch then went straight to the handoff — so a
+git digest (or script) changed WHILE the dialog was open let the successor
+start, run one developer pass, and only then escalate needs_human
+(reproduced: preflight passed → digest moved during the dialog → confirm →
+one developer call). Fix: the preflight is a closure and runs TWICE — once
+before the §10 dialog (fail fast, unchanged) and once after the
+confirmation, immediately before the lock handoff and `launchRun` (the
+dialog window is unbounded user time, so the same frozen-input revalidation
+applies there). The repeated refusal throws before `markHandedOff`:
+zero developer calls, no marker or phase event appended, and the
+pointer-plus-incomplete-launch state stays recoverable via `/flow revise`.
+Regression added: a `DialogMutationHuman` moves the digest exactly when the
+§10 dialog opens, the launch is confirmed, and the repeated preflight
+refuses with zero developer calls and only the seed on disk; after
+restoring the digest the next repair re-asks (the patch is still changed),
+confirms, and completes. The reviewer's dialog-window reproduction now
+passes against the fixed source (`confirmations: 1, developerCalls: 0`),
+and the round-one reproduction still passes (the copy's one remaining
+failure stays the pre-existing T5 structural test's repo-relative path).
+Residual: a user-side edit in the tiny window between the repeated
+preflight and the workflow's own start cannot be closed from here — the
+successor's in-loop guards (§13 third column) remain the backstop, exactly
+as for ordinary resume. Observed: 635/635 tests
+(`tests/revise.test.ts` 114), `npm run typecheck`, `npm run smoke:pi`
+(scripted loopback, head unchanged), `git diff --check`.
+
+Final orchestrator review (2026-11-17): T7 approved with no confirmed
+remaining finding. Both independent reviewer reproductions pass with zero
+developer calls. Re-run evidence: 635/635 tests, typecheck, scripted
+`smoke:pi` (HEAD unchanged), and `git diff --check` pass. The residual
+external-edit window and fixture-only scope above remain explicit. Next: T8.
 
 ## T8 — Extension command `/flow revise` and revision session runner
 

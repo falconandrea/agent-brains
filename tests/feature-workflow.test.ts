@@ -2071,6 +2071,47 @@ test("resume mid-develop re-runs the developer, keeps the persisted baseline and
   assert.equal(resume.usage!.developer!.input, 5000);
 });
 
+test("ordinary resume leaves the developer and reviewer prompts without a revision section (§15 byte-identity)", async () => {
+  const { deps, cwd, agents } = harness((req) =>
+    req.role === "developer"
+      ? { ...devResult, usage: { input: 2000, output: 900 } }
+      : reviewOf({ verdict: "approved", summary: "ok", issues: [] }),
+  );
+  seedFeatureArtifacts(cwd, DESCRIPTION);
+  const baseline: GitBaseline = { repoRoot: cwd, branch: "resumed", headSha: "x", baseCommit: "persisted-base" };
+  const outcome = await runFeatureWorkflow(deps, DESCRIPTION, "run-ordinary-resume", resumeStateOf({ baseline }));
+  assert.equal(outcome.status, "completed");
+  const developerPrompt = agents.calls.find((c) => c.role === "developer")?.prompt ?? "";
+  const reviewerPrompt = agents.calls.find((c) => c.role === "reviewer")?.prompt ?? "";
+  assert.ok(!developerPrompt.includes("PLAN REVISION CONTEXT"), "no revision section without revision state");
+  assert.ok(!reviewerPrompt.includes("PLAN REVISION"), "the reviewer prompt stays byte-identical too");
+});
+
+test("a resumed successor run threads the revision context into both prompts (§15)", async () => {
+  const { deps, cwd, agents } = harness((req) =>
+    req.role === "developer"
+      ? { ...devResult, usage: { input: 2000, output: 900 } }
+      : reviewOf({ verdict: "approved", summary: "ok", issues: [] }),
+  );
+  seedFeatureArtifacts(cwd, DESCRIPTION);
+  const baseline: GitBaseline = { repoRoot: cwd, branch: "resumed", headSha: "x", baseCommit: "persisted-base" };
+  const revision = { predecessorRunId: "run-pred", revision: 2, correction: "make auth optional" };
+  const outcome = await runFeatureWorkflow(
+    deps,
+    DESCRIPTION,
+    "run-pred-r2",
+    resumeStateOf({ baseline, revision }),
+  );
+  assert.equal(outcome.status, "completed");
+  const developerPrompt = agents.calls.find((c) => c.role === "developer")?.prompt ?? "";
+  const reviewerPrompt = agents.calls.find((c) => c.role === "reviewer")?.prompt ?? "";
+  assert.ok(developerPrompt.includes("PLAN REVISION CONTEXT"), "the developer learns the revised contract");
+  assert.ok(developerPrompt.includes("make auth optional"), "the correction is passed verbatim");
+  assert.ok(developerPrompt.includes("revision 2 of run run-pred"));
+  assert.ok(reviewerPrompt.includes("PLAN REVISION"), "the reviewer judges the full original-baseline diff");
+  assert.ok(reviewerPrompt.includes("make auth optional"));
+});
+
 test("resume at review skips developer and verify, and reviews the ORIGINAL baseline diff", async () => {
   const { deps, cwd, agents, verifier, events } = harness((req) =>
     reviewOf({ verdict: "approved", summary: "ok", issues: [] }),
