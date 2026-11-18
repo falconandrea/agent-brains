@@ -45,6 +45,7 @@ import {
 import type { AcquireResult } from "../run-lock.ts";
 import { acquireRunLock, describeLock } from "../run-lock.ts";
 import { changedScriptKeys, type VerifyFreeze } from "../verify.ts";
+import { withBestEffortNotify } from "../ui-safe.ts";
 import { copyUsageTotals, foldCallUsage, hasUsageData, type UsageByRole } from "../usage.ts";
 import type { ReviewResult } from "../review.ts";
 import { hasPatchChanged, replayRunLog, replayVerifyFreeze, type Refusal } from "./resume.ts";
@@ -952,6 +953,15 @@ export interface RevisionSessionDeps {
   plannerModel?: ModelSelection;
   /** Skill names routed to the planner (extension-supplied). */
   plannerSkills?: string[];
+  /**
+   * T8 (§6 T11): "resume" continues an EXISTING open/candidate-pending
+   * revision through the resume-revision dialog instead of refusing it.
+   * Default "open": a lifecycle that already exists refuses — no second
+   * concurrent revision of the same predecessor. Both modes re-derive every
+   * decision from persisted evidence under the lock; state is never taken
+   * from session.json or caller memory.
+   */
+  mode?: "open" | "resume";
 }
 
 export type RevisionSessionOutcome =
@@ -1004,7 +1014,13 @@ function describeLockRefusal(lock: Exclude<AcquireResult, { ok: true }>): string
  * replay verdict is unchanged by its presence.
  */
 export async function runRevisionSessionCore(deps: RevisionSessionDeps): Promise<RevisionSessionOutcome> {
-  const { cwd, runId, human, git } = deps;
+  const { cwd, runId, git } = deps;
+  // U8 (F6): informational notifications are best-effort — the same wrap
+  // runFeatureWorkflow applies at its entry. A stale ctx throwing in
+  // `human.notify` must never abort the session before the planner runs.
+  // The response-requiring interactions (select/input/confirm/editor) stay
+  // unwrapped: their errors are control flow (UserDismissedError, aborts).
+  const human = withBestEffortNotify(deps.human);
   try {
     // --- 1. Fresh eligibility + lifecycle reads (never trust caller memory) ---
     const events = readRunLog(cwd, runId);
@@ -1021,7 +1037,14 @@ export async function runRevisionSessionCore(deps: RevisionSessionDeps): Promise
     if (lifecycle.state === "invalid") {
       return { kind: "refused", reason: `revision evidence is corrupt (${lifecycle.reason})` };
     }
-    if (lifecycle.state !== "none" && lifecycle.state !== "abandoned") {
+    // T8: resume mode routes an existing open/candidate-pending revision to
+    // the resume-revision dialog instead of refusing it (§6 T11). A second
+    // concurrent revision is still impossible: any other active lifecycle
+    // (approved/launched) refuses in both modes.
+    const resuming =
+      deps.mode === "resume" &&
+      (lifecycle.state === "open" || lifecycle.state === "candidate-pending");
+    if (!resuming && lifecycle.state !== "none" && lifecycle.state !== "abandoned") {
       return {
         kind: "refused",
         reason: `a revision lifecycle is already ${lifecycle.state} on this run — continue, repair or abandon it instead of opening a second revision`,
@@ -1066,14 +1089,46 @@ export async function runRevisionSessionCore(deps: RevisionSessionDeps): Promise
       if (lifecycle.state === "invalid") {
         return { kind: "refused", reason: `revision evidence is corrupt (${lifecycle.reason})` };
       }
-      if (lifecycle.state !== "none" && lifecycle.state !== "abandoned") {
+      const resumingUnderLock =
+        deps.mode === "resume" &&
+        (lifecycle.state === "open" || lifecycle.state === "candidate-pending");
+      if (!resumingUnderLock && lifecycle.state !== "none" && lifecycle.state !== "abandoned") {
         return {
           kind: "refused",
           reason: `a revision lifecycle became ${lifecycle.state} before the lock — continue, repair or abandon it instead`,
         };
       }
-      const revision = nextRevisionNumber(eventsUnderLock);
-      if (revision === 0) return { kind: "refused", reason: "revision evidence is corrupt" };
+      // The active revision: a fresh number for a new revision; the recorded
+      // one when resuming (the persisted revision.started stays the authority).
+      // `correction` starts empty and is assigned by the mode branch below
+      // (the recorded one when resuming; the captured one when opening — the
+      // capture loop never proceeds on empty notes).
+      let revision: number;
+      let correction = "";
+      let partialPatchSha: string | undefined;
+      let partialFiles: string[];
+      if (resumingUnderLock && (lifecycle.state === "open" || lifecycle.state === "candidate-pending")) {
+        revision = lifecycle.revision;
+        correction = lifecycle.correction;
+        const resumedStarted = revisionStartedOf(eventsUnderLock, revision);
+        if (resumedStarted === undefined) {
+          return {
+            kind: "refused",
+            reason: `revision.started for revision ${revision} is missing — the resume cannot verify the recorded evidence`,
+          };
+        }
+        // §10: the approval-time change check compares against the sha the
+        // OPEN captured — recorded evidence, never a fresh capture. The
+        // fresh diff below feeds the PLANNER prompt only.
+        partialPatchSha = resumedStarted.partialPatchSha;
+        partialFiles =
+          resumedStarted.partialFiles !== undefined ? [...resumedStarted.partialFiles] : [];
+      } else {
+        revision = nextRevisionNumber(eventsUnderLock);
+        if (revision === 0) return { kind: "refused", reason: "revision evidence is corrupt" };
+        partialPatchSha = undefined; // captured from the open-time diff below
+        partialFiles = [];
+      }
 
       // §13 revalidation at revise entry: frozen inputs must still hold.
       if (eligibilityUnderLock.verify) {
@@ -1123,63 +1178,20 @@ export async function runRevisionSessionCore(deps: RevisionSessionDeps): Promise
           reason: `the original baseline is no longer resolvable for diffing (${(err as Error).message})`,
         };
       }
-      const partialPatchSha = sha256Hex(diff.patch);
-      const partialFiles = [...diff.files];
+      // Fresh evidence for the planner prompt. A NEW revision records its sha
+      // here (§10); a RESUME keeps the sha the original open captured — the
+      // approval-time change check compares against recorded evidence.
+      partialFiles = [...diff.files];
+      if (!resumingUnderLock) partialPatchSha = sha256Hex(diff.patch);
 
-      // --- 5. Correction capture (T2): non-empty before anything is appended;
-      // empty notes consume no planner call, no round and no event. ---
-      let correction: string;
-      for (;;) {
-        let answer: string;
-        try {
-          answer = (
-            await human.input({
-              message: `Describe the correction the revised plan must apply (${runId}, revision ${revision}):`,
-              placeholder: "One free-form note; the planner preserves everything not mentioned.",
-            })
-          ).trim();
-        } catch (err) {
-          if (err instanceof UserDismissedError) return { kind: "not-opened" };
-          throw err;
-        }
-        if (answer !== "") {
-          correction = answer;
-          break;
-        }
-        human.notify("pi-brain: empty revision notes — no planner call made and no revision round consumed.");
-      }
-
-      // --- 6. Open the revision (T1): revision.started via appendCritical. ---
-      const startedEvent = withEventId({
-        type: "revision.started" as const,
-        runId,
-        revision,
-        correction,
-        correctionSha: sha256Hex(correction),
-        baseContract: eligibilityUnderLock.spec,
-        ...(partialPatchSha !== undefined ? { partialPatchSha } : {}),
-        ...(partialFiles.length > 0 ? { partialFiles } : {}),
-        at: new Date().toISOString(),
-      });
-      deps.events.appendCritical(startedEvent);
+      // --- Session scaffolding: pure definitions, no side effects. The
+      // resume dialog below reuses the abandon disclosures and closures. ---
       const sidecarDir = revisionSidecarDir(cwd, runId);
-      writeSessionCache(sidecarDir, {
-        correction,
-        round: 0,
-        partialPatchSha,
-        partialFiles,
-        updatedAt: new Date().toISOString(),
-      });
-      human.notify(`pi-brain: revision ${revision} of ${runId} opened — planner will apply only the correction.`);
-
-      // The candidate TITLE the planner must keep stable. The approved
-      // artifacts carry the description marker and the section bodies, not the
-      // gate's TITLE, so the slug words are the best persisted recovery; the
-      // artifact directory stays marker-driven either way (findExistingFeatureSlug).
       const plannerTitle = slug.split("-").join(" ");
       const stack = eligibilityUnderLock.stack ?? { primary: "unknown", frameworks: [] };
 
-      // The planner evidence starts from the open-time capture. Rounds AFTER
+      // The planner evidence starts from the entry capture (the open-time diff
+      // for a new revision, re-observed at entry for a resume). Rounds AFTER
       // the first planner call refresh it from a fresh diff: a later round
       // runs after user interaction, and the tree may have moved — the second
       // prompt must never carry stale partial-work evidence. `partialPatchSha`
@@ -1241,11 +1253,203 @@ export async function runRevisionSessionCore(deps: RevisionSessionDeps): Promise
           ? `After abandoning, this ${eligibilityUnderLock.status} run stays terminal: /flow resume will refuse it exactly as it did before the revision.`
           : "After abandoning, this interrupted/failed run becomes ordinarily resumable again under the old contract.";
 
+      // §14: the abandonment disclosure must actually REACH the user before
+      // the irreversible choice. Pi's select renders labels only (option
+      // descriptions never arrive), so every abandon choice is confirmed
+      // through a modal dialog that carries the disclosure in its message and
+      // detail — both positional and visible. A dismissed or declined confirm
+      // is never an abandonment; the revision stays exactly as it was.
+      const confirmAbandon = async (): Promise<boolean> => {
+        try {
+          return await human.confirm({
+            message: `Abandon revision ${revision} of ${runId}?`,
+            detail: abandonDescription,
+            defaultValue: false,
+          });
+        } catch (err) {
+          if (err instanceof UserDismissedError) return false;
+          throw err;
+        }
+      };
+
+      if (resumingUnderLock) {
+        // --- 5r. The §6 T11 resume-revision dialog: continue (optionally with
+        // an edited correction) or an EXPLICIT abandon that first states what
+        // it will actually restore for THIS predecessor's status (§14).
+        // Dismissal, empty notes and /flow stop are never implicit
+        // abandonment — the revision stays exactly as the events recorded it.
+        const resumedLifecycle = lifecycle as Extract<
+          RevisionLifecycleState,
+          { state: "open" | "candidate-pending" }
+        >;
+        let choice: string;
+        try {
+          choice = await human.select({
+            message:
+              resumedLifecycle.state === "candidate-pending"
+                ? `Revision ${revision} of ${runId} has a candidate awaiting a decision (round ${resumedLifecycle.round} of ${MAX_PLAN_REVISIONS}).`
+                : `Revision ${revision} of ${runId} is open. Recorded correction: "${
+                    correction.length > 120 ? `${correction.slice(0, 117)}…` : correction
+                  }"`,
+            options: [
+              {
+                label: "Continue revision",
+                value: "continue",
+                description:
+                  resumedLifecycle.state === "candidate-pending"
+                    ? "Review the pending candidate — approve it, reject it with new notes, or abandon."
+                    : "Run the planner with the recorded correction (you can edit it next).",
+              },
+              { label: "Abandon revision", value: "abandon", description: abandonDescription },
+            ],
+            defaultValue: "continue",
+          });
+        } catch (err) {
+          if (err instanceof UserDismissedError) {
+            const pending = pendingCandidate(eventsUnderLock, revision);
+            return pending ? candidatePending(revision, pending) : { kind: "open", revision };
+          }
+          throw err;
+        }
+        if (choice === "abandon") {
+          if (!(await confirmAbandon())) {
+            const pending = pendingCandidate(eventsUnderLock, revision);
+            return pending ? candidatePending(revision, pending) : { kind: "open", revision };
+          }
+          return abandonRevision("user choice");
+        }
+        // Continue. An OPEN revision may carry an edited correction; a pending
+        // candidate is reviewed through the decide dialog — its reject-with-
+        // notes is the correction edit, so no duplicate edit is offered here.
+        if (resumedLifecycle.state === "open") {
+          // The edit becomes authoritative ONLY through a persisted event
+          // before any planner generation: without it, a session that ends
+          // here would reopen with the OLD correction while the candidate was
+          // planned from the new one (the approval would bind what did not
+          // drive the plan). The mechanism is the state machine's own
+          // correction-replacement row — a `revision.candidate.rejected`
+          // carrying the replacement notes at the budget-permitted round,
+          // consuming no round (the same recovery semantics as invalid
+          // planner output). At the exhausted budget no new candidate can
+          // ever use the edit, so the edit is not offered at all.
+          const editRound = nextPlannerRound(eventsUnderLock, revision);
+          if (editRound > MAX_PLAN_REVISIONS) {
+            human.notify(
+              `pi-brain: the revision round budget is exhausted (${MAX_PLAN_REVISIONS}/${MAX_PLAN_REVISIONS}) — the recorded correction stays; approve the pending decision, or abandon.`,
+            );
+          } else {
+            let edited: string;
+            try {
+              edited = (
+                await human.input({
+                  message: "Replacement correction for the planner — leave empty to keep the recorded one:",
+                  placeholder: "One free-form note; the planner preserves everything not mentioned.",
+                })
+              ).trim();
+            } catch (err) {
+              if (err instanceof UserDismissedError) return { kind: "open", revision };
+              throw err;
+            }
+            if (edited !== "" && edited !== correction) {
+              // A re-edit must produce a NEW logical event: the eventId
+              // excludes timestamps, so an event re-derived with the same
+              // notes and round would reconcile as a retry and never land
+              // (A → B → A → B would leave the lifecycle at A while the
+              // planner runs with B). The occurrence index — counted from the
+              // persisted rejected events of this revision — plus the
+              // superseded correction's sha make every edit instance
+              // distinct, while a TRUE retry of the same append re-derives
+              // the same index from unchanged history and stays an
+              // idempotent no-op. An identical re-entry with nothing
+              // superseded is skipped above as a no-op.
+              const collected = collectRevisionEvents(eventsUnderLock);
+              const editIndex = collected.ok
+                ? collected.items.filter(
+                    (item) => item.kind === "candidate-rejected" && item.event.revision === revision,
+                  ).length + 1
+                : 1; // unreachable: the lifecycle gate refused corrupt evidence above
+              deps.events.appendCritical(
+                withEventId({
+                  type: "revision.candidate.rejected" as const,
+                  runId,
+                  revision,
+                  round: editRound,
+                  reason: `correction edited at resume (edit #${editIndex}) — replaces ${sha256Hex(correction).slice(0, 12)}…`,
+                  artifactPath: join(sidecarDir, "session.json"),
+                  notes: edited,
+                  at: new Date().toISOString(),
+                }),
+              );
+              correction = edited;
+            }
+          }
+        }
+        writeSessionCache(sidecarDir, {
+          correction,
+          round: resumedLifecycle.state === "candidate-pending" ? resumedLifecycle.round : 0,
+          partialPatchSha,
+          partialFiles,
+          updatedAt: new Date().toISOString(),
+        });
+        human.notify(`pi-brain: revision ${revision} of ${runId} resumed — state re-derived from the persisted events.`);
+      } else {
+        // --- 5. Correction capture (T2): non-empty before anything is
+        // appended; empty notes consume no planner call, no round, no event. ---
+        for (;;) {
+          let answer: string;
+          try {
+            answer = (
+              await human.input({
+                message: `Describe the correction the revised plan must apply (${runId}, revision ${revision}):`,
+                placeholder: "One free-form note; the planner preserves everything not mentioned.",
+              })
+            ).trim();
+          } catch (err) {
+            if (err instanceof UserDismissedError) return { kind: "not-opened" };
+            throw err;
+          }
+          if (answer !== "") {
+            correction = answer;
+            break;
+          }
+          human.notify("pi-brain: empty revision notes — no planner call made and no revision round consumed.");
+        }
+
+        // --- 6. Open the revision (T1): revision.started via appendCritical. ---
+        const startedEvent = withEventId({
+          type: "revision.started" as const,
+          runId,
+          revision,
+          correction,
+          correctionSha: sha256Hex(correction),
+          baseContract: eligibilityUnderLock.spec,
+          ...(partialPatchSha !== undefined ? { partialPatchSha } : {}),
+          ...(partialFiles.length > 0 ? { partialFiles } : {}),
+          at: new Date().toISOString(),
+        });
+        deps.events.appendCritical(startedEvent);
+        writeSessionCache(sidecarDir, {
+          correction,
+          round: 0,
+          partialPatchSha,
+          partialFiles,
+          updatedAt: new Date().toISOString(),
+        });
+        human.notify(`pi-brain: revision ${revision} of ${runId} opened — planner will apply only the correction.`);
+      }
+
       // --- 7. Planner rounds and the candidate decision loop (T3/T4/T5/T6/T7). ---
       let candidate: { round: number; prdSha: string; tasksSha: string } | undefined;
       try {
         let mode: "plan" | "decide" = "plan";
         for (;;) {
+          // Cancellation gate (§6 T10): a /flow stop that arrived while a
+          // dialog was open stops the session at the next iteration boundary,
+          // before any further generation, mutation or approval. The revision
+          // stays recoverable; a stop is never an abandonment.
+          if (deps.signal?.aborted) {
+            return candidate ? candidatePending(revision, candidate) : { kind: "open", revision };
+          }
           if (mode === "plan") {
             const eventsNow = readRunLog(cwd, runId);
             const pending = pendingCandidate(eventsNow, revision);
@@ -1266,7 +1470,10 @@ export async function runRevisionSessionCore(deps: RevisionSessionDeps): Promise
                 ],
                 defaultValue: "leave",
               });
-              if (choice === "abandon") return abandonRevision("user choice");
+              if (choice === "abandon") {
+                if (await confirmAbandon()) return abandonRevision("user choice");
+                return { kind: "open", revision };
+              }
               return { kind: "open", revision };
             }
 
@@ -1314,7 +1521,10 @@ export async function runRevisionSessionCore(deps: RevisionSessionDeps): Promise
                 ],
                 defaultValue: "retry",
               });
-              if (choice === "abandon") return abandonRevision("user choice");
+              if (choice === "abandon") {
+                if (await confirmAbandon()) return abandonRevision("user choice");
+                continue;
+              }
               continue;
             }
 
@@ -1352,7 +1562,12 @@ export async function runRevisionSessionCore(deps: RevisionSessionDeps): Promise
             continue;
           }
 
-          // mode === "decide": candidate-pending (§6 T5/T6/T7).
+          // mode === "decide": candidate-pending (§6 T5/T6/T7). The candidate
+          // CONTENT is the decision surface: the planner's PRD and tasks (and
+          // the keep/change/remove guidance inside them) are presented in the
+          // dialog message itself — Pi's select renders labels only, so the
+          // bodies must live in the message for the user to verify the plan
+          // before approving (§12).
           const current = candidate;
           if (!current) {
             mode = "plan";
@@ -1361,8 +1576,19 @@ export async function runRevisionSessionCore(deps: RevisionSessionDeps): Promise
           const eventsNow = readRunLog(cwd, runId);
           const roundsUsed = plannerRoundsUsed(eventsNow, revision);
           const atLimit = roundsUsed >= MAX_PLAN_REVISIONS;
+          const dialogPrd = readTextFile(candidatePrdPath(sidecarDir));
+          const dialogTasks = readTextFile(candidateTasksPath(sidecarDir));
+          const capDialog = (text: string | undefined, path: string, cap = 4000): string =>
+            text === undefined
+              ? "(unreadable — approval will refuse unverifiable contents)"
+              : text.length > cap
+                ? `${text.slice(0, cap)}\n[truncated — full text: ${path}]`
+                : text;
           const choice = await human.select({
-            message: `Revision ${revision} candidate ready (round ${current.round} of ${MAX_PLAN_REVISIONS}). Choose an action.`,
+            message:
+              `Revision ${revision} candidate ready (round ${current.round} of ${MAX_PLAN_REVISIONS}). Verify the plan, then choose.\n\n` +
+              `--- PRD (candidate-prd.md) ---\n${capDialog(dialogPrd, candidatePrdPath(sidecarDir))}\n\n` +
+              `--- TASKS (candidate-tasks.md) ---\n${capDialog(dialogTasks, candidateTasksPath(sidecarDir))}`,
             options: [
               { label: "Approve candidate", value: "approve", description: "Bind this candidate by hash as the authoritative approval." },
               ...(atLimit
@@ -1379,7 +1605,10 @@ export async function runRevisionSessionCore(deps: RevisionSessionDeps): Promise
             defaultValue: "abandon",
           });
 
-          if (choice === "abandon") return abandonRevision("user choice");
+          if (choice === "abandon") {
+            if (await confirmAbandon()) return abandonRevision("user choice");
+            continue;
+          }
 
           if (choice === "reject") {
             let notes: string;
@@ -1419,12 +1648,25 @@ export async function runRevisionSessionCore(deps: RevisionSessionDeps): Promise
 
           // choice === "approve": §10 change detection at the approval dialog.
           let freshPatch: string | undefined;
+          let diffError: Error | undefined;
           try {
             freshPatch = (await git.diffSince(baseline)).patch;
-          } catch {
-            freshPatch = undefined;
+          } catch (err) {
+            diffError = err as Error;
           }
-          if (freshPatch !== undefined && sha256Hex(freshPatch) !== partialPatchSha) {
+          // Two distinct cases: absent evidence (a legacy open without a
+          // recorded sha) → no check, the same rule as ordinary resume's
+          // hasPatchChanged; a FAILED READ with evidence on record is the
+          // opposite of absence — the §10/§13 fail-closed rule applies and
+          // the approval is refused, never silently skipped.
+          if (partialPatchSha !== undefined && diffError !== undefined) {
+            human.notify(
+              `pi-brain: the partial work could not be read to verify the approval (${diffError.message}) — ` +
+                "approving is refused; the candidate stays pending, retry /flow revise when the repository reads again.",
+            );
+            return candidatePending(revision, current);
+          }
+          if (freshPatch !== undefined && partialPatchSha !== undefined && sha256Hex(freshPatch) !== partialPatchSha) {
             const canRegenerate = !atLimit;
             const changeChoice = await human.select({
               message: "The partial work changed since the revision opened. The approval binds the candidate CONTENT, not the partial-work state.",
@@ -1460,6 +1702,12 @@ export async function runRevisionSessionCore(deps: RevisionSessionDeps): Promise
             if (changeChoice === "back") continue;
           }
 
+          // Cancellation gate (§6 T10): a /flow stop that arrived while the
+          // approve dialogs were open must be respected BEFORE the approval
+          // is persisted — the candidate stays pending and recoverable, and
+          // no repair or successor launch can follow from this session.
+          if (deps.signal?.aborted) return candidatePending(revision, current);
+
           // Fail-closed before binding: the sidecar contents must hash to the
           // persisted candidate event, or nothing may be approved (§16 rule 5).
           const prdBody = readTextFile(candidatePrdPath(sidecarDir));
@@ -1481,7 +1729,10 @@ export async function runRevisionSessionCore(deps: RevisionSessionDeps): Promise
               ],
               defaultValue: "leave",
             });
-            if (salvage === "abandon") return abandonRevision("user choice");
+            if (salvage === "abandon") {
+              if (await confirmAbandon()) return abandonRevision("user choice");
+              return candidatePending(revision, current);
+            }
             return candidatePending(revision, current);
           }
 
@@ -2510,6 +2761,15 @@ export interface SuccessorLaunchDeps {
   bell(): void;
   /** Observe the detached run promise (tests await it; production drops it). */
   onDetached?: (run: Promise<void>) => void;
+  /**
+   * T8: the caller's active-run record for the successor. When provided,
+   * launchRun drives THIS object's status/phase, so the extension's /flow
+   * status and /flow stop observe the successor through its own slot
+   * (workflow "feature" after the revision handoff). Absent — every fake and
+   * test that does not care — the launcher builds its own private run state.
+   * Its runId must name the successor, never a foreign run.
+   */
+  run?: LauncherRunState;
 }
 
 /**
@@ -2693,9 +2953,25 @@ export async function launchSuccessorRun(
   await preflightFrozenInputs();
 
   // --- 6. Detached launch through the real launcher; the lock changes hands. ---
+  // The §10 dialog is unbounded user time, and its signal does not observe
+  // aborts: a session cancelled while it was open must stop the launch
+  // BEFORE the handoff — the adapter chains the session's cancellation into
+  // the successor controller, so this gate fires with zero developer calls,
+  // and the pointer-plus-incomplete state stays recoverable via /flow revise.
+  if (deps.signal?.aborted) {
+    throw new Error("launch cancelled — the approved revision stays recoverable via /flow revise");
+  }
+  // The run-state check precedes the handoff mark: a refusal here must leave
+  // the lock owned by the repair (released in its finally), never handed off
+  // into a launch that will not happen.
+  if (deps.run !== undefined && deps.run.runId !== successorId) {
+    throw new Error(
+      `the successor launch state names ${deps.run.runId}, not ${successorId} — refusing to launch into a foreign run state`,
+    );
+  }
   context.markHandedOff();
   const runLog = RunLog.open(cwd, successorId);
-  const run: LauncherRunState = {
+  const run: LauncherRunState = deps.run ?? {
     runId: successorId,
     workflow: "feature",
     phase: "develop",

@@ -1,10 +1,7 @@
 # Tasks — post-stop plan revision (`/flow revise`)
 
-Status: T1–T6 implemented and reviewed (T6 final review approved
-2026-11-15; local commit authorized); T7 delivered 2026-11-17, two review
-rounds' P1 fixes (§13 preflight before developer execution; preflight
-repeated after the §10 confirmation) applied the same day; final
-orchestrator review approved T7 on 2026-11-17. T8–T11 remain. The user authorized the first
+Status: T1–T7 implemented and reviewed (T7 final review approved
+2026-11-17); T8 delivered 2026-11-17, awaiting review. T9–T11 remain. The user authorized the first
 tranche and its local commit. Each task has one concrete deliverable, its
 dependencies, and its verification; tasks are ordered so every step leaves
 the tree green (`npm test`, `npm run typecheck`) and ordinary resume
@@ -437,6 +434,231 @@ lifecycle, incomplete launch) and the detached lock-release-on-failure path.
 
 Verification: `npm test -- tests/run-start.test.ts tests/revise.test.ts`;
 `npm run typecheck`.
+
+Delivered (2026-11-17, awaiting review): the command orchestration lives in
+a new Pi-free module `src/revise-command.ts` — `runFlowRevise` performs the
+§6 ordered refusal stage (in-session active run via `blocksFeatureStart`,
+running AND cancelling, → persisted-log read → lifecycle routing →
+eligibility) and routes: corrupt evidence fails closed; open/candidate-
+pending → the detached session in `mode: "resume"`; approved-pending-launch
+and launched-with-incomplete-launch → the SAME `repairRevisionLaunch`;
+launched-with-`phase.started` → the successor pointer refusal (T12). The
+shared `already_decided` heal moved to `resume.ts` as `healAlreadyDecided`
+and is reused by BOTH `handleResume` and `runFlowRevise` — the command heals
+first, then re-evaluates the ACTUAL healed status from the persisted log.
+The session core (`runRevisionSessionCore`) gains `mode?: "open" | "resume"`:
+resume continues the persisted open/candidate-pending revision through the
+§6 T11 dialog (continue with optional edited correction, explicit abandon
+with the per-status §14 disclosure; dismissal and stop are never implicit
+abandonment), reusing the recorded revision number, recorded correction and
+RECORDED `partialPatchSha` for the §10 approval check (a legacy open without
+a recorded sha never false-flags a change — the absent-evidence rule; this
+was a real defect the resume tests caught, since the old comparison treated
+`undefined` as a changed patch), while the default mode keeps refusing an
+existing lifecycle (the T4 refusal test stays green). Budget recount,
+reject-with-notes round progression, invalid-output recovery and verbatim
+notes are unchanged — the resume path recounts everything from events under
+the lock, including a §13 frozen-input revalidation at entry. The detached
+runner occupies the extension's active slot with `workflow: "revision"`
+(status/stop answer during the planner), wires `/flow stop` to the session
+signal, protects every notification with `safeUi`, and settles without ever
+appending execution-terminal events to the predecessor; after a persisted
+approval it goes straight to `repairRevisionLaunch` (no ordinary abandonment,
+§14) and its settlement neither releases the successor's lock nor clears the
+successor's active slot. The successor handoff wires the REAL
+`launchSuccessorRun` through an adapter that builds the successor's
+active-run record from the repair's own request id, passes it as the new
+optional `SuccessorLaunchDeps.run` (so `launchRun` drives the extension's
+slot object; a foreign run id refuses BEFORE `markHandedOff`), and swaps the
+slot at the DETACHED launch (`onDetached`) so a refused preflight/dialog
+leaves no ghost slot. The extension dispatches `revise` before the
+no-active-run guard (works without an active run), prints usage without an
+id, and the `/flow` argument completions offer `revise` plus persisted
+run-id completions after `revise ` in Pi's whole-argument form. Tests: 12
+new core resume tests in `tests/revise.test.ts` (continue/reject/edit/
+abandon per status/dismissal/pending-candidate/recorded-sha/§13/budget/
+default-refusal) and 17 command tests in the new
+`tests/revise-command.test.ts`: ordered refusals (running, cancelling,
+unknown, ineligible, corrupt raw-line evidence, held lock), heal-first for
+both healed statuses, the happy path through the REAL launcher (slot
+transfers to the successor, P keeps exactly one outcome and only
+`revision.*` appends, successor completes from develop with the correction
+in the developer prompt, lock released at settlement), both repair entry
+states, the T12 redirect, stop-during-planner, provider abort, throwing UI
+effects, a failed handoff (lock stays with the repair, no successor
+started, pointer-plus-incomplete recoverable), and the structural dispatch
+wiring. Observed: 664/664 tests (`tests/revise.test.ts` 126,
+`tests/revise-command.test.ts` 17, `tests/run-start.test.ts` 5 unchanged,
+`tests/resume.test.ts` 49, `tests/run-launcher.test.ts` 25),
+`npm run typecheck`, `npm run smoke:pi` (scripted loopback, head
+unchanged), `git diff --check`. Limits: fixture/scripted verification only —
+no real-provider revision session or successor run and no consumer-repo run
+is part of T8; the extension's Pi dispatch is covered structurally plus by
+the injected orchestration, not by a live TUI session; fine-grained progress
+rendering of the revision session stays deferred (§18 assumption 2). The
+full AC-1…AC-13 end-to-end matrix stays T9.
+
+Review fixes (2026-11-18, first review round — five findings closed, T8
+still awaiting review; the reviewer's four reproductions in their
+/private/tmp copy run green against the fixed source):
+
+1. P1 — an edited correction was lost on reopen: it lived only in memory
+   and the non-authoritative session cache, so a session that ended after a
+   candidate was generated (edited correction → candidate → dismiss →
+   reopen → approve) bound the STALE recorded correction while the
+   candidate had been planned from the new one. Fix: the resume path now
+   persists the edit BEFORE any planner generation as a
+   `revision.candidate.rejected` carrying the replacement notes (reason
+   "correction edited at resume") at the budget-permitted round — the state
+   machine's own correction-replacement row, consuming no round; the
+   lifecycle recounts it, so the reopened approval binds the correction
+   that actually drove the plan. At an exhausted budget no candidate can
+   ever use the edit, so the edit input is not offered at all (a notice
+   says so).
+2. P1 — a `/flow stop` arriving while the candidate decision dialog was
+   open could still let the approval persist and the successor launch. Fix:
+   a cancellation gate at the top of every planner-loop iteration (before
+   further generation or mutation) and a second gate immediately before the
+   approval append — both return the recoverable candidate-pending/open
+   outcome — plus a runner-level gate in `src/revise-command.ts` between a
+   persisted approval and the repair: a cancelled session reports that the
+   launch was NOT started and the approved state stays recoverable via
+   `/flow revise`.
+3. P1 — the candidate was approved blind: the decide dialog named only the
+   round and actions, so the plan and its keep/change/remove guidance were
+   never shown (§12 leaves that check to the human at the approval dialog).
+   Fix: the decide dialog message now embeds the candidate's PRD and tasks
+   bodies read fresh from the sidecar (capped at 4,000 characters each with
+   the sidecar path named for the full text); Pi's select renders the
+   message, so the content is actually visible.
+4. P2 — the §14 abandonment disclosure rode in select option descriptions,
+   which `PiHumanInput` never passes to Pi (labels only) — honest in fakes,
+   invisible live. Fix: every abandon choice in the session core (resume
+   dialog, budget-exhausted, invalid-output retry, candidate decision,
+   unverifiable-candidate salvage) now asks a modal confirm whose message
+   and detail carry the per-status disclosure — both reach Pi positionally;
+   a declined or dismissed confirm is never an abandonment.
+5. P2 — informational `human.notify` calls inside the session core could
+   throw on a stale ctx and abort the session before the planner (the
+   existing UI-throw test covered `deps.notify`, not this path). Fix: the
+   core wraps its human with `withBestEffortNotify` at entry — the same
+   pattern `runFeatureWorkflow` applies (feature.ts) — so notifications are
+   best-effort while select/input/confirm/editor errors stay control flow.
+
+Test hardening in the same round: the command suite's `waitFor` waits for
+the successor to SETTLE (outcome or workflow.failed — a failed successor
+surfaces immediately instead of burning the timeout) with a 15s deadline,
+addressing the reviewer's flaky process-timeout rerun. Reviewer-repro note:
+their copy run from /private/tmp resolves the fixtures' `PROFILES_DIR`
+outside the repository, so the successor in THEIR copy fails with
+`workflow.failed` and pre-hardening `waitFor(outcome)` timed out — the same
+run-outside-the-repo artifact recorded since the T6 rounds, not a product
+defect; all four REPRO tests pass against the fixed source (from the repo
+and from their copy). Observed after the fixes: 673/673 tests
+(`tests/revise.test.ts` 131, `tests/revise-command.test.ts` 21),
+`npm run typecheck`, `npm run smoke:pi` (scripted loopback, head
+unchanged), `git diff --check`. T8 remains awaiting review.
+
+Review fixes (2026-11-18, second review round — three findings closed, T8
+still awaiting review; the reviewer's three ROUND2 reproductions run green
+against the fixed source):
+
+1. P1 — a `/flow stop` landing during the launcher's own dialogs (the §10
+   launch confirmation) still let the successor start: the runner's
+   cancellation gate ran before the repair, and the launch adapter built a
+   FRESH successor controller the session signal never reached. Fix, two
+   parts: the successor controller is CHAINED to the session's abort signal
+   until the handoff (the adapter arms a once-listener when a session run is
+   involved; after the slot swap the successor's own controller governs and
+   the session signal never aborts), and `launchSuccessorRun` gains a final
+   cancellation gate immediately before `markHandedOff` — a stop that
+   arrived while the §10 dialog was open throws before the handoff, so the
+   repair releases its lock, zero developer calls run, the approval and the
+   pointer stay on disk with the successor seeded but never started
+   (pointer-plus-incomplete, recoverable via `/flow revise`), and the
+   settlement reports the cancellation as a warning, not a failure.
+2. P1 — the A → B → A correction sequence lost the last edit: the edit
+   event's content-derived eventId excludes timestamps, so re-editing A at
+   the same round reconciled as a retry of the FIRST A-edit and
+   `appendCritical` idempotently skipped it — the log stayed at rejected(B)
+   while the planner ran with A. Fix: the persisted edit names the
+   SUPERSEDED correction (sha prefix) in its reason, making each edit
+   instance a distinct logical event; an identical re-entry with nothing
+   superseded is skipped as a no-op (the correction is unchanged), so true
+   retry idempotence is preserved where it means something.
+3. P2 — the resumed session routed no planner skills: only the fresh-open
+   entry passed the persisted stack to `startSession`. Fix: the resume
+   routing derives the stack from the same eligibility read and passes it,
+   so skill routing no longer depends on which entry state reached the
+   session (legacy logs without a stack still degrade to no skills via the
+   existing profile-exists guard).
+
+Regressions: three command tests (stop-during-launch-confirmation with zero
+developer calls and a recoverable pointer-plus-incomplete state; the A →
+B → A sequence asserting three distinct eventIds and lifecycle correction
+A; resume-entry skill routing) and one core test (the A → B → A event
+sequence against `appendCritical`'s reconciliation). Observed: 677/677
+tests (`tests/revise.test.ts` 132, `tests/revise-command.test.ts` 24),
+`npm run typecheck`, `npm run smoke:pi` (scripted loopback, head
+unchanged), `git diff --check`. The reviewer's non-REPRO dispatch failure
+in their /private/tmp copy is the recorded run-outside-the-repo path
+artifact. T8 remains awaiting review.
+
+Review fixes (2026-11-18, third review round — two findings and one
+standards issue closed, T8 still awaiting review; both ROUND3 reproductions
+run green against the fixed source):
+
+1. P1 — the A → B → A → B transition still lost the last edit: the
+   superseded-sha reason distinguishes A→B from B→A but not the SECOND
+   occurrence of the same transition, whose event re-derived the identical
+   eventId and reconciled away (lifecycle at A, planner running B). Fix:
+   the persisted edit now carries an occurrence index — counted from the
+   persisted rejected events of the active revision — alongside the
+   superseded sha, so every edit instance is distinct while a TRUE retry
+   re-derives the same index from unchanged history and stays an idempotent
+   no-op. Four regressions assert the A → B → A → B sequence end to end
+   (four distinct eventIds, lifecycle correction B, planner prompt B).
+2. P2 — a failed diff read at the approval-time §10 check was swallowed
+   into `undefined` and SKIPPED the change check even with
+   `partialPatchSha` recorded, letting approval and pointer persist against
+   an unreadable tree. Fix: legacy ABSENCE (no recorded sha) still skips
+   the check, but a FAILED READ with evidence on record refuses the
+   approval fail-closed (the §10/§13 unreadable rule) — the candidate stays
+   pending, the read error is reported, and nothing is approved or launched.
+   Regressions at both levels (core with an approval-time-only failing git;
+   command end to end asserting zero approvals and a recoverable state).
+3. Standards — the two test additions from the previous round had bypassed
+   the final `tsc --noEmit` (TS2339 on `.correction` without narrowing the
+   lifecycle union); both accesses now narrow explicitly, and typecheck is
+   part of the recorded evidence again.
+
+Observed after the round: 681/681 tests (`tests/revise.test.ts` 134,
+`tests/revise-command.test.ts` 26), `npm run typecheck`,
+`npm run smoke:pi` (scripted loopback, head unchanged), `git diff --check`.
+The reviewer's non-REPRO dispatch failure in their /private/tmp copy stays
+the recorded run-outside-the-repo path artifact. T8 remains awaiting
+review.
+
+Review fixes (2026-11-18, fourth review round — one P2 standards finding
+closed, T8 still awaiting review; the ROUND4 reproduction runs green
+against the fixed source): a failure in the session SETUP after the slot
+activation could strand the session — the dependency wiring (profile
+resolution: a profile that exists but `@include`s a missing one throws past
+the top-level existsSync guard) was evaluated OUTSIDE the try/catch that
+protected `createAgents()`, so the detached promise rejected unhandled, the
+slot stayed revision/running and blocked every later start. Fix: one guard
+now covers ALL post-activation effects — runtime construction, dependency
+wiring, the session core and its settlement; any failure frees the slot
+(only while the SESSION still owns it: the handoff marks the slot
+reassigned via the adapter's detached-launch hook, so a successor's slot is
+never cleared by a late failure) and reports best-effort; the detached
+promise settles instead of rejecting. Regression: the reviewer's scenario
+(fixture profile including a missing one) asserting a fulfilled detached
+promise, the cleared slot, the reported failure and no new log events.
+Observed: 682/682 tests (`tests/revise.test.ts` 134,
+`tests/revise-command.test.ts` 27), `npm run typecheck`, `npm run
+smoke:pi` (scripted loopback, head unchanged), `git diff --check`. T8
+remains awaiting review.
 
 ## T9 — Acceptance-scenario end-to-end coverage
 

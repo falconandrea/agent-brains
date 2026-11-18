@@ -3,10 +3,108 @@
 **Last Updated:** 2026-11-17
 **Current Phase:** Global workflow validation complete; M4 rollout and
 existing technical follow-ups remain open. Post-stop plan revision:
-T1–T6 implemented and reviewed (T6 final review approved 2026-11-15);
-T7 implemented and final review approved 2026-11-17; T8–T11 remain.
-**Active Task:** T7 final review approved (2026-11-17); next is T8
-(command, revision dialogs and extension/session wiring). Two reproduced
+T1–T7 implemented and reviewed (T7 final review approved 2026-11-17);
+T8 delivered 2026-11-17, awaiting review; T9–T11 remain.
+**Active Task:** T8 implemented (2026-11-17, awaiting review): the
+`/flow revise` command, resume-revision dialogs and the detached revision
+session runner. Delivery: the Pi-free orchestration lives in the new
+`src/revise-command.ts` (`runFlowRevise`) — the §6 ordered refusal stage
+(active run running AND cancelling → persisted log → lifecycle routing →
+eligibility), routing open/candidate-pending to the detached session in
+resume mode, approved-pending-launch AND launched-with-incomplete-launch to
+the same `repairRevisionLaunch`, launched-with-`phase.started` to the
+successor pointer refusal; the shared `already_decided` heal moved to
+`resume.ts` (`healAlreadyDecided`) and backs both `/flow resume` and the
+revise command (heal first, then re-evaluate the healed status from the
+log). `runRevisionSessionCore` gains `mode: "resume"`: the §6 T11 dialog
+(continue with optional edited correction, explicit abandon with the
+per-status §14 disclosure, approve/reject through the decide dialog for a
+pending candidate; dismissal/stop never abandon), the recorded revision
+number/correction/`partialPatchSha` reused from the persisted events
+(the §10 approval check compares against the RECORDED sha — the resume
+tests caught the undefined-sha false-flag as a real defect, now fixed with
+the absent-evidence rule), budget recounted from events, §13 revalidation
+at entry. The detached runner occupies the active slot with
+`workflow: "revision"` (status/stop answer during the planner), wires
+`/flow stop` to the session signal, wraps notifications in `safeUi`, never
+appends execution-terminal events to P, and after a persisted approval runs
+`repairRevisionLaunch` directly (no ordinary abandonment, §14) — its
+settlement never releases the successor's lock nor clears the successor's
+slot. The handoff wires the REAL `launchSuccessorRun` through an adapter
+with `SuccessorLaunchDeps.run` (the extension's slot object driven by
+`launchRun`; foreign run id refuses before `markHandedOff`) and swaps the
+slot at the detached launch. The extension dispatches `revise` before the
+no-active guard, prints usage without an id, and completes `/flow` with
+run-id argument completions.
+First review round (2026-11-18): five findings reproduced and closed —
+(1) P1 the resume-time edited correction now persists BEFORE generation as
+a correction-replacement `revision.candidate.rejected` at the
+budget-permitted round, so a reopened approval binds the correction that
+drove the plan (the edit is not offered at an exhausted budget);
+(2) P1 cancellation gates at every planner-loop iteration and immediately
+before the approval append, plus a runner-level gate between a persisted
+approval and the repair — a stop during the candidate decision leaves the
+candidate pending with no approval and no launch;
+(3) P1 the decide dialog now embeds the candidate's PRD/tasks bodies
+(capped, sidecar paths named) so the plan and its keep/change/remove
+guidance are actually visible before approval;
+(4) P2 every abandon choice asks a modal confirm carrying the §14
+disclosure in message/detail (select descriptions never reach Pi's UI);
+a declined/dismissed confirm is never an abandonment;
+(5) P2 the session core wraps its human with `withBestEffortNotify` at
+entry (the `runFeatureWorkflow` pattern) so a stale-ctx notify throw cannot
+abort the session before the planner. The reviewer's four REPRO tests pass
+against the fixed source; their copy's non-REPRO failures were the
+run-outside-the-repo artifact (PROFILES_DIR resolving outside the repo —
+recorded since the T6 rounds), now surfaced fast by a hardened `waitFor`
+(settled = outcome OR workflow.failed, 15s).
+Second review round (2026-11-18): three findings reproduced and closed —
+(1) P1 a `/flow stop` during the launcher's §10 launch dialog no longer
+starts the successor: the successor controller is chained to the session's
+abort until the handoff, and `launchSuccessorRun` gates on cancellation
+immediately before `markHandedOff` — zero developer calls, approval and
+pointer persisted, successor seeded but never started, recoverable;
+(2) P1 the A → B → A correction sequence keeps the last edit authoritative:
+each persisted edit names its superseded correction in the reason, making
+the event instance distinct under timestamp-free eventIds (identical
+re-entry stays a true idempotent no-op);
+(3) P2 the resumed session routes the persisted stack's planner skills like
+the fresh-open entry. Their three ROUND2 REPRO tests pass against the
+fixed source.
+Third review round (2026-11-18): two findings and one standards issue
+closed — (1) P1 the A → B → A → B transition keeps the last edit
+authoritative: each persisted edit now carries an occurrence index counted
+from the persisted rejected events of the active revision (plus the
+superseded sha), so every instance is distinct while a true retry
+re-derives the same index and stays an idempotent no-op; (2) P2 a failed
+diff read at the approval-time §10 check refuses the approval fail-closed
+instead of being swallowed into a skipped check — legacy ABSENCE still
+skips, a FAILED READ with evidence on record never approves; (3) standards
+— two test additions had bypassed the final typecheck (TS2339); both
+accesses now narrow the lifecycle union explicitly. Their two ROUND3 REPRO
+tests pass against the fixed source.
+Fourth review round (2026-11-18): one P2 standards finding closed — a
+setup failure after the slot activation (profile resolution throwing past
+the existsSync guard) rejected the detached promise unhandled and stranded
+the revision/running slot; one post-activation guard now covers runtime,
+wiring, session core and settlement, frees the slot only while the session
+still owns it (the handoff marks reassignment, never touching a successor
+slot), reports best-effort, and settles the detached promise. Their ROUND4
+REPRO passes against the fixed source. Observed after the fixes:
+682/682 tests (`tests/revise.test.ts` 134, `tests/revise-command.test.ts`
+27), `npm run typecheck`, `npm run smoke:pi` (scripted loopback, head
+unchanged), `git diff --check`. Limits: fixture/scripted only — no
+real-provider revision session or successor run, no consumer-repo run; the
+Pi dispatch is covered structurally plus by the injected orchestration, not
+a live TUI session; progress rendering of the session stays deferred
+(spec §18 assumption 2). T8 is NOT approved yet; the full AC-1…AC-13
+matrix stays T9, T10 log-pointer rendering/README documentation and T11
+evidence closure remain. The [T8-only developer prompt](../../docs/plans/post-stop-plan-revision-t8-prompt.md)
+drove the delivery; a fresh orchestrator review of the three fix rounds is
+the next step.
+T7 remains approved and committed as `94cc164` (its recorded 635/635
+results are historical evidence, not a fresh run for this handoff).
+Two reproduced
 P1s are closed; both independent reviewer reproductions pass with zero
 developer calls. Local commit authorized by the user; no push authorized.
 T7 delivery: successor construction, real
@@ -342,11 +440,11 @@ read-only inspection at `468f014`, no suite or live workflow rerun):
   The initial documentation-only checks covered local link targets and
   `git diff --check`; later runtime verification is recorded in the Active Task.
 - [x] Continue the existing
-  [revision tasks](../features/post-stop-plan-revision/tasks.md#t7--successor-construction-launch-and-replay-changes):
-  T7 delivered 2026-11-17, two review rounds' fixes applied the same day
-  (635/635 tests, typecheck, smoke:pi, diff check;
-  see the Active Task). Final orchestrator review approved T7; next is T8–T9;
-  retain T10 documentation/rendering and T11 evidence closure. T9 is
+  [revision tasks](../features/post-stop-plan-revision/tasks.md#t8--extension-command-flow-revise-and-revision-session-runner):
+  T7 delivered and approved 2026-11-17 (commit `94cc164`); T8 delivered
+  2026-11-17 and awaits review (664/664 tests, typecheck, smoke:pi,
+  diff check; see the Active Task). Retain T9 acceptance coverage, T10
+  documentation/rendering and T11 evidence closure. T9 is
   fake-driven end-to-end coverage, not a live-provider acceptance run.
 - [ ] Once launch and command wiring exist, record a bounded live
   stop → revise → approve → successor execution → resume observation,
@@ -381,6 +479,9 @@ read-only inspection at `468f014`, no suite or live workflow rerun):
 
 ## Retained decisions and deferred work
 
+- oxlint-anti-slop ideas retained: preserve type information, explicit validation
+  boundaries and actionable deterministic diagnostics. No adoption or new
+  workstream; revisit against an observed need. [Takeaways and limits](../../docs/research/oxlint-anti-slop-takeaways.md).
 - Kostysh methodology assessed: no adoption or new workstream. Revisit test
   scheduling only after observed redundant verification cost; retain existing
   plan-revision priority. [Assessment and conditions](../../docs/research/kostysh-methodology-assessment.md).

@@ -29,12 +29,13 @@ import { PiHumanInput } from "../src/pi/human-input.ts";
 import { blocksFeatureStart, requestFlowStop, type FlowRunStatus } from "../src/pi/flow-stop.ts";
 import { PiAgentRunner } from "../src/pi/pi-agent-runner.ts";
 import { runFeatureWorkflow } from "../src/workflows/feature.ts";
-import { replayRunLog, validateResumePreconditions, hasPatchChanged, askResumeWithChangedDiff, type Refusal } from "../src/workflows/resume.ts";
+import { replayRunLog, validateResumePreconditions, hasPatchChanged, askResumeWithChangedDiff, healAlreadyDecided, type Refusal } from "../src/workflows/resume.ts";
 import { resumeRevisionRefusal } from "../src/workflows/revise.ts";
-import { usageFromEvents, copyUsageTotals } from "../src/usage.ts";
+import { usageFromEvents } from "../src/usage.ts";
 import type { WorkflowEvent } from "../src/ports.ts";
 import { RunLog, readRunLog, listRunIds } from "../src/run-log.ts";
 import { fmtTokens, fmtCost, fmtDuration, launchRun, renderUsage, startRun, agentStatus } from "../src/run-launcher.ts";
+import { runFlowRevise } from "../src/revise-command.ts";
 
 const PACKAGE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PROFILES_DIR = join(PACKAGE_ROOT, "profiles");
@@ -193,15 +194,35 @@ export default function piBrain(pi: ExtensionAPI): void {
 
   // -- /flow -----------------------------------------------------------------
   pi.registerCommand("flow", {
-    description: "pi-brain run status: status | log | stop",
-    getArgumentCompletions: () => {
-      return [
+    description: "pi-brain run status: status | log | stop | revise",
+    getArgumentCompletions: (prefix: string) => {
+      // Subcommand completion (also completes the bare `/flow ` argument).
+      const subcommands = [
         { value: "status", label: "status", description: "current phase and run id" },
         { value: "log", label: "log", description: "event trace for this run (persisted)" },
         { value: "log-all", label: "log-all", description: "all persisted runs in this repo" },
         { value: "stop", label: "stop", description: "cancel the active run" },
         { value: "resume", label: "resume", description: "resume an interrupted /feature run" },
+        { value: "revise", label: "revise", description: "revise an interrupted/stopped run's approved plan" },
       ];
+      // After `revise `, complete the argument with persisted run ids
+      // (newest first). The completed value replaces the whole argument text
+      // (Pi's completion contract), so items carry the `revise <id>` form.
+      const reviseArg = /^revise\s+(\S*)$/.exec(prefix);
+      if (reviseArg) {
+        try {
+          return listRunIds(repoRootOf(process.cwd()))
+            .slice(0, 10)
+            .map((id) => ({
+              value: `revise ${id}`,
+              label: id,
+              description: "persisted run in this repo",
+            }));
+        } catch {
+          return subcommands; // completions are best-effort UI sugar
+        }
+      }
+      return subcommands;
     },
     handler: async (args: string, ctx: ExtensionCommandContext) => {
       const trimmed = args.trim();
@@ -215,6 +236,51 @@ export default function piBrain(pi: ExtensionAPI): void {
           return;
         }
         await handleResume(runId, ctx, pi, () => active);
+        return;
+      }
+
+      // Handle revise separately too — it dispatches without an active run
+      // (spec.md §6): the ordering, routing, detached session runner and the
+      // successor handoff live in the Pi-free src/revise-command.ts, so the
+      // command behavior is exercised by tests with injected fakes.
+      if (subcommand === "revise") {
+        const runId = rest[0];
+        if (!runId) {
+          ctx.ui.notify("Usage: /flow revise <runId>", "warning");
+          return;
+        }
+        const cwd = repoRootOf(ctx.cwd);
+        const { config, warnings } = loadConfig(cwd);
+        for (const warning of warnings) ctx.ui.notify(`pi-brain config: ${warning}`, "warning");
+        const human = new PiHumanInput(() => ctx, "live");
+        await runFlowRevise({
+          cwd,
+          runId,
+          active: active ? { workflow: active.workflow, status: active.status } : null,
+          setActive: (next) => {
+            active = next;
+          },
+          notify: (message, level) => ctx.ui.notify(message, level),
+          human,
+          createAgents: () =>
+            PiAgentRunner.create({
+              cwd,
+              askUser: (q) => new PiHumanInput(() => ctx, "live").askFromChild(q),
+              // U8 (F6): best-effort per-agent-event status, same guard as /feature.
+              onEvent: agentStatus((text) => new PiHumanInput(() => ctx, "live").status(text)),
+            }),
+          makeAbort: () => new AbortController(),
+          config,
+          profilesDir: PROFILES_DIR,
+          availableSkills: availableSkills(),
+          verifier: new ShellVerifyRunner(cwd, { timeoutMs: config.verifyTimeoutMs }),
+          git: new RealGitService(),
+          history: (event) => pi.appendEntry("pi-brain.event", event),
+          setStatus: (text) => human.status(text),
+          bell: () => {
+            if (config.notifications.bell) process.stdout.write("\x07"); // terminal bell
+          },
+        });
         return;
       }
 
@@ -337,35 +403,11 @@ export default function piBrain(pi: ExtensionAPI): void {
       if (replay.refusal.type === "already_decided") {
         // The last review already decided the run; only the outcome events
         // were lost to the crash. Heal the audit trail deterministically —
-        // no agent runs, nothing to resume.
-        const status = replay.refusal.status;
-        const heal = RunLog.open(cwd, runId);
-        const review = replay.refusal.review;
-        heal.append({
-          type: "workflow.outcome",
-          runId,
-          status,
-          reason: "outcome reconstructed from the last review verdict after a crash",
-          ...(review !== undefined
-            ? {
-                summary: review.summary,
-                review: {
-                  verdict: review.verdict,
-                  summary: review.summary,
-                  issues: review.issues,
-                },
-              }
-            : {}),
-          ...(replay.refusal.files !== undefined ? { files: replay.refusal.files } : {}),
-          // S2: replayed totals pass through uncoerced (defensive copies, so
-          // the heal event never aliases the replay state).
-          usage: Object.fromEntries(
-            Object.entries(replay.refusal.usage).map(([role, usage]) => [role, copyUsageTotals(usage)]),
-          ),
-        });
-        heal.append({ type: "workflow.completed", runId, status });
+        // no agent runs, nothing to resume. The same shared heal backs
+        // /flow revise (spec.md §5 heal-first row).
+        healAlreadyDecided(cwd, runId, replay.refusal);
         ctx.ui.notify(
-          `pi-brain: ${runId} had already been ${status === "completed" ? "approved" : "escalated to a human"} before the interruption — outcome recorded, nothing to resume.`,
+          `pi-brain: ${runId} had already been ${replay.refusal.status === "completed" ? "approved" : "escalated to a human"} before the interruption — outcome recorded, nothing to resume.`,
           "info",
         );
         return;

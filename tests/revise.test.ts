@@ -36,6 +36,8 @@ import {
   verifySuccessorSeed,
   type RepairLaunchDeps,
   type RepairLaunchOutcome,
+  type RevisionApprovedEvent,
+  type RevisionCandidateRejectedEvent,
   type RevisionSessionDeps,
   type SuccessorLaunchContext,
   type SuccessorLaunchDeps,
@@ -49,6 +51,7 @@ import { acquireRunLock } from "../src/run-lock.ts";
 import { DEFAULT_CONFIG } from "../src/config.ts";
 import { digestScripts, type VerifyFreeze } from "../src/verify.ts";
 import type {
+  ConfirmQuestion,
   GitBaseline,
   GitService,
   HumanInput,
@@ -187,10 +190,17 @@ class FakeGit implements GitService {
 class ScriptedHuman implements HumanInput {
   inputs: string[] = [];
   selects: string[] = [];
-  readonly selectQuestions: Array<{ message: string; options: Array<{ value: string }> }> = [];
+  /** Scripted confirm answers; absent entries default to true (existing flows). */
+  confirms: Array<boolean | "dismiss"> = [];
+  readonly selectQuestions: Array<{ message: string; options: Array<{ value: string; description?: string }> }> = [];
+  readonly confirmQuestions: Array<{ message: string; detail?: string }> = [];
   readonly notices: string[] = [];
-  async confirm(): Promise<boolean> {
-    return true;
+  async confirm(q: ConfirmQuestion): Promise<boolean> {
+    this.confirmQuestions.push(q);
+    const value = this.confirms.shift();
+    if (value === undefined) return true;
+    if (value === "dismiss") return false; // PiHumanInput surfaces dismissal as falsy
+    return value;
   }
   async select(q: SelectQuestion): Promise<string> {
     this.selectQuestions.push(q);
@@ -252,6 +262,7 @@ const sessionDeps = (
   human: HumanInput,
   git: GitService,
   events?: RunLog,
+  mode?: "open" | "resume",
 ): RevisionSessionDeps => ({
   cwd: root,
   runId,
@@ -259,6 +270,7 @@ const sessionDeps = (
   human,
   git,
   events: events ?? RunLog.open(root, runId),
+  ...(mode !== undefined ? { mode } : {}),
 });
 
 // ---------------------------------------------------------------------------
@@ -3465,5 +3477,475 @@ test("T7 launch: the launcher refuses a log that is not a complete seeded succes
     () => launchSuccessorRun(deps, { successorRunId: successorId, resumedPhase: "develop" }, context),
     /complete seeded workflow.started/,
   );
+  rmSync(root, { recursive: true, force: true });
+});
+
+// ---------------------------------------------------------------------------
+// T8 — the resume-revision session mode (§6 T11): continue/edit/abandon over
+// persisted open/candidate-pending state, never a second revision.started.
+// ---------------------------------------------------------------------------
+
+/** A predecessor with revision 1 open (revision.started persisted, no candidate). */
+function openRevisionChain(
+  root: string,
+  runId: string,
+  opts: { interrupted?: boolean; correction?: string; partialPatchSha?: string } = {},
+): void {
+  writePredecessorLog(
+    root,
+    runId,
+    predecessorEvents(root, runId, opts.interrupted ? { interrupted: true } : { status: "cancelled" }),
+  );
+  const correction = opts.correction ?? "make auth optional";
+  appendRevisionEvent(
+    root,
+    runId,
+    withEventId({
+      type: "revision.started" as const,
+      runId,
+      revision: 1,
+      correction,
+      correctionSha: sha(correction),
+      baseContract: BASE_CONTRACT,
+      ...(opts.partialPatchSha !== undefined ? { partialPatchSha: opts.partialPatchSha } : {}),
+      at: "2026-01-01T00:00:00.000Z",
+    }),
+  );
+}
+
+const approvedEventOf = (root: string, runId: string): RevisionApprovedEvent | undefined =>
+  readRunLog(root, runId).find(
+    (event): event is RevisionApprovedEvent => event.type === "revision.approved",
+  );
+
+test("session resume: an open revision continues with the recorded correction — never a second revision.started", async () => {
+  const root = fixture();
+  const runId = "run-resume-open";
+  openRevisionChain(root, runId);
+  const human = new ScriptedHuman();
+  human.selects = ["continue", "approve"]; // resume dialog → decide
+  human.inputs = [""]; // keep the recorded correction (empty edit)
+  const planner = new ScriptedPlanner({ text: VALID_PLAN_A });
+
+  const outcome = await runRevisionSessionCore(sessionDeps(root, runId, planner, human, new FakeGit(), undefined, "resume"));
+  assert.equal(outcome.kind, "approved");
+  assert.deepEqual(
+    revisionTypes(root, runId),
+    ["revision.started", "revision.candidate", "revision.approved"],
+    "the persisted revision.started is reused, never appended twice",
+  );
+  assert.equal(approvedEventOf(root, runId)?.correction, "make auth optional", "the recorded correction is bound");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("session resume: a pending candidate surfaces for decision without a new planner call", async () => {
+  const root = fixture();
+  const runId = "run-resume-pending";
+  openRevisionChain(root, runId);
+  appendRevisionEvent(root, runId, t6RevisionCandidate(runId));
+  mkdirSync(revisionSidecarDir(root, runId), { recursive: true });
+  writeFileSync(join(revisionSidecarDir(root, runId), "candidate-prd.md"), CANDIDATE_PRD, "utf8");
+  writeFileSync(join(revisionSidecarDir(root, runId), "candidate-tasks.md"), CANDIDATE_TASKS, "utf8");
+  const human = new ScriptedHuman();
+  human.selects = ["continue", "approve"];
+  const planner = new ScriptedPlanner({ text: VALID_PLAN_A });
+
+  const outcome = await runRevisionSessionCore(sessionDeps(root, runId, planner, human, new FakeGit(), undefined, "resume"));
+  assert.equal(outcome.kind, "approved");
+  assert.equal(planner.calls.length, 0, "no planner call: the pending candidate went straight to the decision");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("session resume: reject-with-notes replaces the correction and the next candidate is round 2", async () => {
+  const root = fixture();
+  const runId = "run-resume-reject";
+  openRevisionChain(root, runId);
+  appendRevisionEvent(root, runId, t6RevisionCandidate(runId));
+  mkdirSync(revisionSidecarDir(root, runId), { recursive: true });
+  writeFileSync(join(revisionSidecarDir(root, runId), "candidate-prd.md"), CANDIDATE_PRD, "utf8");
+  writeFileSync(join(revisionSidecarDir(root, runId), "candidate-tasks.md"), CANDIDATE_TASKS, "utf8");
+  const human = new ScriptedHuman();
+  human.selects = ["continue", "reject", "approve"];
+  human.inputs = ["new notes"];
+  const planner = new ScriptedPlanner({ text: VALID_PLAN_B });
+
+  const outcome = await runRevisionSessionCore(sessionDeps(root, runId, planner, human, new FakeGit(), undefined, "resume"));
+  assert.equal(outcome.kind, "approved");
+  assert.match(planner.calls[0]!.prompt, /new notes/, "the replacement notes drive the planner");
+  assert.equal(approvedEventOf(root, runId)?.round, 2, "the user rejection consumed round 1; the next candidate is round 2");
+  assert.equal(approvedEventOf(root, runId)?.correction, "new notes", "the approval binds the replacement notes");
+  assert.deepEqual(
+    revisionTypes(root, runId),
+    ["revision.started", "revision.candidate", "revision.candidate.rejected", "revision.candidate", "revision.approved"],
+  );
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("session resume: an edited correction replaces the recorded one and the approval binds the edit", async () => {
+  const root = fixture();
+  const runId = "run-resume-edit";
+  openRevisionChain(root, runId, { correction: "original correction" });
+  const human = new ScriptedHuman();
+  human.selects = ["continue", "approve"];
+  human.inputs = ["edited correction"];
+  const planner = new ScriptedPlanner({ text: VALID_PLAN_A });
+
+  const outcome = await runRevisionSessionCore(sessionDeps(root, runId, planner, human, new FakeGit(), undefined, "resume"));
+  assert.equal(outcome.kind, "approved");
+  assert.match(planner.calls[0]!.prompt, /edited correction/, "the planner applies the edited correction");
+  assert.equal(approvedEventOf(root, runId)?.correction, "edited correction");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("session resume: abandoning a CANCELLED predecessor discloses that resume stays terminal — and it does", async () => {
+  const root = fixture();
+  const runId = "run-resume-abandon-t";
+  openRevisionChain(root, runId);
+  const human = new ScriptedHuman();
+  human.selects = ["abandon"];
+  const planner = new ScriptedPlanner({ text: VALID_PLAN_A });
+
+  const outcome = await runRevisionSessionCore(sessionDeps(root, runId, planner, human, new FakeGit(), undefined, "resume"));
+  assert.equal(outcome.kind, "abandoned");
+  // §14: the disclosure must REACH the user before the irreversible choice —
+  // Pi's select renders labels only, so the dialog confirm carries it in its
+  // visible message and detail.
+  const confirmDialog = human.confirmQuestions[0];
+  assert.match(confirmDialog?.message ?? "", /Abandon revision 1 of run-resume-abandon-t/);
+  assert.match(confirmDialog?.detail ?? "", /stays terminal/, "the dialog states THIS predecessor's §14 truth");
+  const events = readRunLog(root, runId);
+  assert.ok(events.some((event) => event.type === "revision.abandoned"));
+  assert.ok(!existsSync(revisionSidecarDir(root, runId)), "the sidecar is removed");
+  const refusal = resumeRevisionRefusal(events, root);
+  assert.equal(refusal, undefined, "the lifecycle block is lifted");
+  const replay = replayRunLog(events);
+  assert.ok(!replay.ok && replay.refusal.type === "terminal_outcome", "the cancelled run still refuses resume, exactly as before");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("session resume: abandoning an INTERRUPTED predecessor discloses ordinary resumability — and resume works again", async () => {
+  const root = fixture();
+  const runId = "run-resume-abandon-i";
+  openRevisionChain(root, runId, { interrupted: true });
+  const human = new ScriptedHuman();
+  human.selects = ["abandon"];
+
+  const outcome = await runRevisionSessionCore(sessionDeps(root, runId, new ScriptedPlanner({ text: VALID_PLAN_A }), human, new FakeGit(), undefined, "resume"));
+  assert.equal(outcome.kind, "abandoned");
+  assert.match(human.confirmQuestions[0]?.detail ?? "", /ordinarily resumable/, "interrupted/failed restores the old contract");
+  const replay = replayRunLog(readRunLog(root, runId));
+  assert.ok(replay.ok, "the interrupted run is ordinarily resumable again under the old contract");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("session resume: a declined or dismissed abandon confirm is never an abandonment", async () => {
+  const root = fixture();
+  const runId = "run-resume-confirm-no";
+  openRevisionChain(root, runId);
+  const human = new ScriptedHuman();
+  human.selects = ["abandon"];
+  human.confirms = [false];
+
+  const declined = await runRevisionSessionCore(sessionDeps(root, runId, new ScriptedPlanner({ text: VALID_PLAN_A }), human, new FakeGit(), undefined, "resume"));
+  assert.equal(declined.kind, "open", "a declined confirm keeps the revision open");
+  assert.deepEqual(revisionTypes(root, runId), ["revision.started"], "no abandoned event without the explicit confirm");
+
+  const human2 = new ScriptedHuman();
+  human2.selects = ["abandon"];
+  human2.confirms = ["dismiss"];
+  const dismissed = await runRevisionSessionCore(sessionDeps(root, runId, new ScriptedPlanner({ text: VALID_PLAN_A }), human2, new FakeGit(), undefined, "resume"));
+  assert.equal(dismissed.kind, "open", "a dismissed confirm keeps the revision open");
+  assert.deepEqual(revisionTypes(root, runId), ["revision.started"]);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("session resume: dismissing the dialog preserves the revision (never implicit abandonment)", async () => {
+  const root = fixture();
+  const runId = "run-resume-dismiss";
+  openRevisionChain(root, runId);
+  const human = new ScriptedHuman();
+  human.selects = ["dismiss"];
+
+  const outcome = await runRevisionSessionCore(sessionDeps(root, runId, new ScriptedPlanner({ text: VALID_PLAN_A }), human, new FakeGit(), undefined, "resume"));
+  assert.equal(outcome.kind, "open");
+  assert.deepEqual(revisionTypes(root, runId), ["revision.started"], "no abandonment, no planner call");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("session resume: dismissing with a pending candidate keeps the candidate pending", async () => {
+  const root = fixture();
+  const runId = "run-resume-dismiss-p";
+  openRevisionChain(root, runId);
+  appendRevisionEvent(root, runId, t6RevisionCandidate(runId));
+  const human = new ScriptedHuman();
+  human.selects = ["dismiss"];
+
+  const outcome = await runRevisionSessionCore(sessionDeps(root, runId, new ScriptedPlanner({ text: VALID_PLAN_A }), human, new FakeGit(), undefined, "resume"));
+  assert.equal(outcome.kind, "candidate-pending");
+  if (outcome.kind === "candidate-pending") assert.equal(outcome.round, 1);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("session resume: the approval-time change check compares against the RECORDED open sha, not the fresh capture", async () => {
+  const root = fixture();
+  const runId = "run-resume-sha";
+  const patchAtOpen = "diff --git a/src/a.ts\n@@ -1 +1 @@\n+at open";
+  openRevisionChain(root, runId, { partialPatchSha: sha(patchAtOpen) });
+  const git = new FakeGit();
+  git.patches = ["diff --git a/src/a.ts\n@@ -1 +1 @@\n+changed since open"];
+  const human = new ScriptedHuman();
+  human.selects = ["continue", "approve", "approve"]; // decide → §10 changed → approve anyway
+  human.inputs = [""]; // keep the recorded correction
+  const planner = new ScriptedPlanner({ text: VALID_PLAN_A });
+
+  const outcome = await runRevisionSessionCore(sessionDeps(root, runId, planner, human, git, undefined, "resume"));
+  assert.equal(outcome.kind, "approved");
+  const changedDialog = human.selectQuestions.find((q) => q.message.includes("The partial work changed since the revision opened"));
+  assert.ok(changedDialog, "the recorded sha drove the §10 check (the fresh patch differs from it)");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("session resume: a repository state changed since the run refuses at entry (§13)", async () => {
+  const root = fixture();
+  const runId = "run-resume-digest";
+  writePredecessorLog(root, runId, predecessorEvents(root, runId, { status: "cancelled", repoStateDigest: "d1" }));
+  appendRevisionEvent(root, runId, t6RevisionStarted(runId));
+  const git = new FakeGit();
+  git.digest = "d2";
+  const human = new ScriptedHuman();
+  human.selects = ["continue"];
+
+  const outcome = await runRevisionSessionCore(sessionDeps(root, runId, new ScriptedPlanner({ text: VALID_PLAN_A }), human, git, undefined, "resume"));
+  assert.equal(outcome.kind, "refused");
+  if (outcome.kind === "refused") assert.match(outcome.reason, /repository state changed/);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("session resume: at the budget limit no new planner round is offered", async () => {
+  const root = fixture();
+  const runId = "run-resume-budget";
+  openRevisionChain(root, runId);
+  const fx = revisionEventFixtures(runId);
+  appendRevisionEvent(root, runId, fx.candidate(1));
+  appendRevisionEvent(root, runId, fx.rejected(1, 1, "notes one"));
+  appendRevisionEvent(root, runId, fx.candidate(2));
+  appendRevisionEvent(root, runId, fx.rejected(2, 1, "round two notes")); // rejected the round-2 candidate → open
+  const human = new ScriptedHuman();
+  human.selects = ["continue", "leave"];
+  human.inputs = [""]; // keep the recorded correction
+  const planner = new ScriptedPlanner({ text: VALID_PLAN_A });
+
+  const outcome = await runRevisionSessionCore(sessionDeps(root, runId, planner, human, new FakeGit(), undefined, "resume"));
+  assert.equal(outcome.kind, "open");
+  assert.equal(planner.calls.length, 0, "no planner round beyond the budget");
+  const budgetDialog = human.selectQuestions.find((q) => q.message.includes("budget is exhausted"));
+  assert.ok(budgetDialog, "the budget-exhausted dialog is shown instead of a planner round");
+  assert.ok(
+    human.notices.some((n) => n.includes("round budget is exhausted") && n.includes("recorded correction stays")),
+    "at the exhausted budget the correction edit is not offered (it could never drive a candidate)",
+  );
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("session resume: default mode still refuses an existing lifecycle (no second concurrent revision)", async () => {
+  const root = fixture();
+  const runId = "run-resume-default";
+  openRevisionChain(root, runId);
+  const human = new ScriptedHuman();
+
+  const outcome = await runRevisionSessionCore(sessionDeps(root, runId, new ScriptedPlanner({ text: VALID_PLAN_A }), human, new FakeGit()));
+  assert.equal(outcome.kind, "refused");
+  if (outcome.kind === "refused") assert.match(outcome.reason, /already open/);
+  assert.equal(human.selectQuestions.length, 0, "no dialog is offered on the refusing path");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("session resume: an edited correction is persisted before generation and binds the eventual approval", async () => {
+  const root = fixture();
+  const runId = "run-resume-edit-persist";
+  openRevisionChain(root, runId);
+  const edited = "require explicit invitation tokens";
+  // Session 1: continue → edit → planner → candidate → dismiss the decision.
+  const human1 = new ScriptedHuman();
+  human1.selects = ["continue", "dismiss"];
+  human1.inputs = [edited];
+  const planner1 = new ScriptedPlanner({ text: VALID_PLAN_A });
+
+  const first = await runRevisionSessionCore(sessionDeps(root, runId, planner1, human1, new FakeGit(), undefined, "resume"));
+  assert.equal(first.kind, "candidate-pending");
+  assert.match(planner1.calls[0]!.prompt, new RegExp(edited), "the planner applied the edited correction");
+  // The edit is AUTHORITATIVE before generation: a persisted correction-
+  // replacement event, recountable from the log — never memory/cache only.
+  assert.deepEqual(
+    revisionTypes(root, runId),
+    ["revision.started", "revision.candidate.rejected", "revision.candidate"],
+  );
+  const replacement = readRunLog(root, runId).find(
+    (event): event is RevisionCandidateRejectedEvent => event.type === "revision.candidate.rejected",
+  );
+  assert.equal(replacement?.notes, edited);
+  assert.match(replacement?.reason ?? "", /correction edited at resume/);
+
+  // Session 2: the reopened candidate decision approves the correction that
+  // actually drove the plan — not the stale recorded one.
+  const human2 = new ScriptedHuman();
+  human2.selects = ["continue", "approve"];
+  const planner2 = new ScriptedPlanner({ text: VALID_PLAN_A });
+  const second = await runRevisionSessionCore(sessionDeps(root, runId, planner2, human2, new FakeGit(), undefined, "resume"));
+  assert.equal(second.kind, "approved");
+  assert.equal(planner2.calls.length, 0, "the pending candidate goes straight to the decision");
+  assert.equal(approvedEventOf(root, runId)?.correction, edited, "the approval binds the edited correction");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("session resume: a stop arriving during the candidate decision prevents the approval", async () => {
+  const root = fixture();
+  const runId = "run-resume-stop-approve";
+  openRevisionChain(root, runId);
+  const abort = new AbortController();
+  const human = new ScriptedHuman();
+  human.selects = ["continue", "approve"];
+  human.inputs = [""]; // keep the recorded correction
+  const origSelect = human.select.bind(human);
+  human.select = async (q) => {
+    const answer = await origSelect(q);
+    // /flow stop lands while the candidate decision dialog is open.
+    if (q.message.includes("candidate ready")) abort.abort();
+    return answer;
+  };
+  const planner = new ScriptedPlanner({ text: VALID_PLAN_A });
+  const deps = sessionDeps(root, runId, planner, human, new FakeGit(), undefined, "resume");
+  deps.signal = abort.signal;
+
+  const outcome = await runRevisionSessionCore(deps);
+  assert.equal(outcome.kind, "candidate-pending", "the candidate stays pending — the stop is respected");
+  assert.equal(
+    countType(readRunLog(root, runId), "revision.approved"),
+    0,
+    "no approval is persisted during cancellation, so no launch can follow",
+  );
+  assert.deepEqual(revisionTypes(root, runId), ["revision.started", "revision.candidate"]);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("session resume: a throwing human.notify never aborts the session (best-effort informational UI)", async () => {
+  const root = fixture();
+  const runId = "run-resume-notify-throw";
+  openRevisionChain(root, runId);
+  const human = new ScriptedHuman();
+  human.selects = ["continue", "dismiss"];
+  human.inputs = [""]; // keep the recorded correction
+  human.notify = () => {
+    throw new Error("stale ctx notify");
+  };
+  const planner = new ScriptedPlanner({ text: VALID_PLAN_A });
+
+  const outcome = await runRevisionSessionCore(sessionDeps(root, runId, planner, human, new FakeGit(), undefined, "resume"));
+  assert.equal(outcome.kind, "candidate-pending", "the session survived the throwing notify");
+  assert.equal(planner.calls.length, 1, "the planner ran");
+  assert.deepEqual(revisionTypes(root, runId), ["revision.started", "revision.candidate"]);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("session decide: the candidate dialog presents the PRD and tasks content before approval", async () => {
+  const root = fixture();
+  const runId = "run-decide-content";
+  writePredecessorLog(root, runId, predecessorEvents(root, runId, { status: "cancelled" }));
+  const human = new ScriptedHuman();
+  human.selects = ["dismiss"]; // decide dismissed — the content was already shown
+  human.inputs = ["make auth optional"];
+  const planner = new ScriptedPlanner({ text: VALID_PLAN_A });
+
+  const outcome = await runRevisionSessionCore(sessionDeps(root, runId, planner, human, new FakeGit()));
+  assert.equal(outcome.kind, "candidate-pending");
+  const decide = human.selectQuestions.find((q) => q.message.includes("candidate ready"));
+  assert.ok(decide, "the candidate decision dialog opened");
+  assert.ok(decide.message.includes("Revised body one."), "the PRD body is presented in the dialog message");
+  assert.ok(decide.message.includes("T1 — do it"), "the tasks body is presented in the dialog message");
+  assert.ok(decide.message.includes("candidate-prd.md") && decide.message.includes("candidate-tasks.md"), "the sidecar paths are named");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("session resume: re-editing a superseded correction appends a NEW event, never a reconciled retry", async () => {
+  const root = fixture();
+  const runId = "run-resume-aba";
+  openRevisionChain(root, runId);
+  const A = "require invitation tokens";
+  const B = "require mandatory SSO";
+  // A → B → A: each edit ends its session with an aborted planner, so the
+  // lifecycle keeps reconstructing the correction from the events alone.
+  for (const edit of [A, B, A]) {
+    const human = new ScriptedHuman();
+    human.selects = ["continue"];
+    human.inputs = [edit];
+    const planner = new ScriptedPlanner({ text: VALID_PLAN_A, aborted: true });
+    const outcome = await runRevisionSessionCore(sessionDeps(root, runId, planner, human, new FakeGit(), undefined, "resume"));
+    assert.equal(outcome.kind, "open");
+  }
+  const rejected = readRunLog(root, runId).filter(
+    (event): event is RevisionCandidateRejectedEvent => event.type === "revision.candidate.rejected",
+  );
+  assert.equal(rejected.length, 3, "the third A is a NEW logical edit — appendCritical never reconciles it away");
+  assert.equal(new Set(rejected.map((event) => event.eventId)).size, 3, "distinct eventIds per edit instance");
+  assert.deepEqual(rejected.map((event) => event.notes), [A, B, A]);
+  const lifecycle = revisionLifecycle(readRunLog(root, runId));
+  assert.ok(lifecycle.state === "open" || lifecycle.state === "candidate-pending", "the revision is still active");
+  assert.equal(lifecycle.correction, A, "the lifecycle reconstructs the LAST edit");
+});
+
+test("session resume: the A → B → A → B transition appends four distinct events", async () => {
+  const root = fixture();
+  const runId = "run-resume-abab";
+  openRevisionChain(root, runId);
+  const A = "require invitation tokens";
+  const B = "require mandatory SSO";
+  for (const edit of [A, B, A]) {
+    const human = new ScriptedHuman();
+    human.selects = ["continue"];
+    human.inputs = [edit];
+    const planner = new ScriptedPlanner({ text: VALID_PLAN_A, aborted: true });
+    const outcome = await runRevisionSessionCore(sessionDeps(root, runId, planner, human, new FakeGit(), undefined, "resume"));
+    assert.equal(outcome.kind, "open");
+  }
+  const human = new ScriptedHuman();
+  human.selects = ["continue", "dismiss"];
+  human.inputs = [B];
+  const planner = new ScriptedPlanner({ text: VALID_PLAN_A });
+  const outcome = await runRevisionSessionCore(sessionDeps(root, runId, planner, human, new FakeGit(), undefined, "resume"));
+  assert.equal(outcome.kind, "candidate-pending");
+  const rejected = readRunLog(root, runId).filter(
+    (event): event is RevisionCandidateRejectedEvent => event.type === "revision.candidate.rejected",
+  );
+  assert.equal(rejected.length, 4, "the repeated A → B transition is never reconciled away");
+  assert.equal(new Set(rejected.map((event) => event.eventId)).size, 4, "distinct eventIds");
+  assert.deepEqual(rejected.map((event) => event.notes), [A, B, A, B]);
+  const lifecycle = revisionLifecycle(readRunLog(root, runId));
+  assert.ok(lifecycle.state === "open" || lifecycle.state === "candidate-pending", "the revision is still active");
+  assert.equal(lifecycle.correction, B, "the lifecycle reconstructs the LAST edit");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("session decide: a failed diff read with recorded evidence refuses the approval, absent evidence still skips", async () => {
+  const root = fixture();
+  const runId = "run-decide-diff-error";
+  const patchAtOpen = "diff --git a/src/a.ts\n@@ -1 +1 @@\n+at open";
+  openRevisionChain(root, runId, { partialPatchSha: sha(patchAtOpen) });
+  // The entry capture succeeds; only the APPROVAL-time read fails.
+  class FailAtApprovalGit extends FakeGit {
+    calls = 0;
+    override async diffSince(): Promise<{ patch: string; files: string[]; dirtySubmodules: string[] }> {
+      this.calls += 1;
+      if (this.calls >= 2) throw new Error("unresolvable baseline");
+      return { patch: patchAtOpen, files: ["src/a.ts"], dirtySubmodules: [] };
+    }
+  }
+  const human = new ScriptedHuman();
+  human.selects = ["continue", "approve"];
+  human.inputs = [""]; // keep the recorded correction
+  const planner = new ScriptedPlanner({ text: VALID_PLAN_A });
+  const outcome = await runRevisionSessionCore(sessionDeps(root, runId, planner, human, new FailAtApprovalGit(), undefined, "resume"));
+  assert.equal(outcome.kind, "candidate-pending", "the approval is refused, the candidate stays pending");
+  assert.equal(countType(readRunLog(root, runId), "revision.approved"), 0);
+  assert.match(human.notices.at(-1) ?? "", /could not be read to verify the approval/);
   rmSync(root, { recursive: true, force: true });
 });

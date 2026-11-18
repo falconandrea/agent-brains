@@ -12,6 +12,7 @@ import { join } from "node:path";
 
 import { DEFAULT_MAX_REVIEW_ROUNDS } from "../config.ts";
 import type { WorkflowEvent, GitBaseline, GitService, HumanInput } from "../ports.ts";
+import { RunLog } from "../run-log.ts";
 import { digestScripts, isPlainRecord, type VerifyFreeze } from "../verify.ts";
 import { copyUsageTotals, foldCallUsage, hasUsageData } from "../usage.ts";
 import type { ResumeState, UsageByRole } from "./feature.ts";
@@ -552,6 +553,51 @@ export function hasPatchChanged(currentPatch: string, interruptedPatchSha: strin
   if (!interruptedPatchSha) return false;
   const currentSha = createHash("sha256").update(currentPatch).digest("hex");
   return currentSha !== interruptedPatchSha;
+}
+
+/**
+ * The deterministic `already_decided` heal (§5): the last completed review
+ * already decided the run, but the crash ate the outcome events. Append the
+ * reconstructed outcome + completed marker — no agent runs, nothing to
+ * resume. One definition shared by /flow resume and /flow revise (T8), so
+ * both commands heal the audit trail identically before re-evaluating the
+ * actual healed status from the persisted log.
+ */
+export function healAlreadyDecided(
+  cwd: string,
+  runId: string,
+  decided: {
+    status: "completed" | "needs_human";
+    review?: ReviewResult;
+    files?: string[];
+    usage: UsageByRole;
+  },
+): void {
+  const heal = RunLog.open(cwd, runId);
+  const review = decided.review;
+  heal.append({
+    type: "workflow.outcome",
+    runId,
+    status: decided.status,
+    reason: "outcome reconstructed from the last review verdict after a crash",
+    ...(review !== undefined
+      ? {
+          summary: review.summary,
+          review: {
+            verdict: review.verdict,
+            summary: review.summary,
+            issues: review.issues,
+          },
+        }
+      : {}),
+    ...(decided.files !== undefined ? { files: decided.files } : {}),
+    // S2: replayed totals pass through uncoerced (defensive copies, so the
+    // heal event never aliases the replay state).
+    usage: Object.fromEntries(
+      Object.entries(decided.usage).map(([role, usage]) => [role, copyUsageTotals(usage)]),
+    ),
+  });
+  heal.append({ type: "workflow.completed", runId, status: decided.status });
 }
 
 /**
