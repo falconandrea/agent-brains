@@ -1,7 +1,8 @@
 # Tasks — post-stop plan revision (`/flow revise`)
 
 Status: T1–T7 implemented and reviewed (T7 final review approved
-2026-11-17); T8 delivered 2026-11-17, awaiting review. T9–T11 remain. The user authorized the first
+2026-11-17); T8 approved 2026-11-18 (commit `8da6e87`). T9 is implemented
+and approved. T10–T11 remain. The user authorized the first
 tranche and its local commit. Each task has one concrete deliverable, its
 dependencies, and its verification; tasks are ordered so every step leaves
 the tree green (`npm test`, `npm run typecheck`) and ordinary resume
@@ -659,6 +660,11 @@ Observed: 682/682 tests (`tests/revise.test.ts` 134,
 `tests/revise-command.test.ts` 27), `npm run typecheck`, `npm run
 smoke:pi` (scripted loopback, head unchanged), `git diff --check`. T8
 remains awaiting review.
+
+Final review (2026-11-18): T8 approved after four fix rounds. The final
+handoff reports 682/682 tests, 9/9 reviewer reproductions, typecheck,
+scripted Pi smoke, and `git diff --check` passing. Live Pi TUI and
+real-provider completion remain unvalidated.
 
 ## T9 — Acceptance-scenario end-to-end coverage
 

@@ -1,12 +1,9 @@
 # Post-stop plan revision (`/flow revise`)
 
-Status: design reviewed; T1–T6 implemented and reviewed (T6 final review
-approved 2026-11-15). T7 (real successor launch integration and replay
-changes) delivered 2026-11-17; two review rounds produced two reproduced
-P1s (missing §13 preflight before developer execution; preflight not
-repeated after the §10 confirmation), both fixed and regression-covered
-the same day; final orchestrator review approved T7 on 2026-11-17. T8–T11 remain
-unimplemented: command/dialog wiring is T8.
+Status: T1–T8 implemented and approved. T7 is recorded in commit
+`94cc164`. T8 received final approval on 2026-11-18 after four review fix
+rounds and is recorded in commit `8da6e87`. T9 is implemented and approved.
+T10–T11 remain open.
 See the [task record](tasks.md) for evidence and implementation limits.
 The [design brief](../../../docs/plans/post-stop-plan-revision-brief.md)
 records the original staged handoff; this document specifies the full target.
