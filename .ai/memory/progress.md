@@ -3,60 +3,32 @@
 **Last Updated:** 2026-11-20
 **Current Phase:** Global workflow validation complete; M4 rollout and
 existing technical follow-ups remain open. Post-stop plan revision:
-T1–T8 implemented, approved and committed (`94cc164`, `8da6e87`).
-T9 implemented and approved in final orchestrator review. T10 is next.
-**Active Task:** T9 delivered: the fake-driven end-to-end acceptance
-suite `tests/revise-acceptance.test.ts` (22 tests) maps every §17
-scenario row to observable outcomes against AC-1…AC-13 — the full
-stop→revise→approve→continue journey through `runFlowRevise`, the
-revision session, `repairRevisionLaunch`, `launchSuccessorRun` and
-`runFeatureWorkflow`, and the real ordinary-resume pipeline
-(`replayRunLog` → `validateResumePreconditions` → `launchRun`) for
-post-abandon resumability (all four predecessor statuses) and the double
-successor resume. A second orchestrator round closed three end-to-end
-coverage gaps: the row-1 entry now starts from a REAL fresh run stopped
-during develop via `requestFlowStop` (the reviewer receives the previous
-work's diff in its prompt; `git.baseline` ran exactly once — the
-predecessor's own snapshot); B7a (pointer, absent successor log) and B7b
-(pointer, seeded stub without the resumed marker) complete directly
-through `/flow revise` beside the B7c re-entry test; and the B2b
-landed-but-unverified case runs end-to-end (the approval write lands,
-the injected post-append fault fails the strict verification, the real
-re-read reconciliation inside `appendCritical` settles ONE copy, the
-regenerated-timestamp retry reconciles to the SAME copy, the repair
-promotes and launches on it, the successor completing the run).
-Observed: 704/704 tests (682 pre-existing + 22 new), `npm run
-typecheck`, `git diff --check`; the acceptance file green across three
-consecutive runs. One independent review round closed: three P2
-assertion tightenings (the B8 and changed-candidate refusals now pinned
-to their exact reasons instead of matching generic settlement text; the
-B5a divergent/spec-first reasons and the B8 report pinned to the literal
-source strings) and four P3 hardening items (stale passing verification
-exercised and isolated from the successor's own; the header AC map
-referencing the lock/cancelling refusals, the §13 launch preflights and
-the B3/B5/B6 in-journey coverage; the ordinaryResume comment naming the
-deliberately omitted §10 changed-diff ask; real partial work asserted
-byte-identical through the happy path) — reviewer verdict APPROVED, no
-remaining findings. A follow-up round closed the last two findings
-(2026-11-18): the B2b landed-but-unverified test now provokes the REAL
-condition — `LandedApprovalLog` forwards `injectFaultAfterAppend` so a
-foreign line follows the landed approval write and the strict
-post-append verification genuinely fails, exercising `appendCritical`'s
-own reconciliation (the session settles `approved`; the former
-`LandedApprovalLog` threw only after `super.appendCritical` returned,
-when verification had already succeeded), with an explicit assertion
-that the fault fired between write and verification; and the §17
-stop-during-develop entry keeps the `launchRun` promise and awaits it
-after releasing the developer instead of a fixed 50 ms pause. Observed
-after both fixes: 704/704 tests, `npm run typecheck`, `git diff
---check`, the untracked acceptance file whitespace-clean (0 trailing
-spaces, no tabs, no CR), the acceptance file green across three
-consecutive runs. Limits: fixture/fake scope only (the §17 boundary)
-— no live TUI, no real providers; the canonical T9 record in
-[tasks.md](../features/post-stop-plan-revision/tasks.md#t9--acceptance-scenario-end-to-end-coverage)
-is left for the orchestrator handoff (T11 owns evidence closure). Live
-Pi TUI and real-provider completion remain unvalidated. T10 rendering
-and command documentation and T11 evidence closure remain open.
+T1–T10 implemented and approved — T7 committed (`94cc164`), T8
+(`8da6e87`), T9 (`4e9a60c`; 22 fake-driven acceptance tests), T10
+(`56b00e5`; 711/711 tests, typecheck); T11 evidence closure approved
+on 2026-11-20. Live Pi TUI and real-provider
+completion remain to be validated.
+**Active Task:** T11 evidence records and handoff approved on 2026-11-20 — the T1–T10 implementation tranche is complete. Verified evidence:
+T9's fake-driven end-to-end acceptance suite
+`tests/revise-acceptance.test.ts` (22 tests) maps every §17 scenario row
+to AC-1…AC-13 through `runFlowRevise`, the revision session,
+`repairRevisionLaunch`, `launchSuccessorRun` and `runFeatureWorkflow`
+plus the real ordinary-resume pipeline — reviewer verdict APPROVED,
+704/704 tests at its closure; the canonical T9 record now lives in
+[tasks.md](../features/post-stop-plan-revision/tasks.md#t9--acceptance-scenario-end-to-end-coverage).
+T10 (`56b00e5`) renders `revised-by`/`revises` pointers in
+`describe`/`log-all` and documents `/flow revise` in the
+[Pi README](../../docs/pi-brain/README.md), approved with 711/711 tests
+and typecheck — re-run in this handoff (711/711, typecheck, `git diff
+--check` all pass). T11 wrote the canonical T9/T10 delivery records into
+tasks.md, updated the
+[roadmap revision-gap section](../../docs/plans/pi-plugin-adoption-roadmap.md#mid-development-plan-revision-gap-2026-11-13)
+to the implemented, verified state, and closed the handoff; `npm run
+smoke:pi` was not run (documentation-only change, no workflow/SDK
+integration change). Reported separately from the fixture coverage: live
+Pi TUI rendering/dispatch and real-provider completion
+(planner/developer/reviewer against real models) remain unvalidated —
+the open action below owns the bounded live observation.
 
 T7 remains approved and committed as `94cc164` (its recorded 635/635
 results are historical evidence, not a fresh run for this handoff).
@@ -278,9 +250,12 @@ observation remains queued.
 
 ## Next actions
 
-- Implement the post-stop plan revision path (design context: the user-run
-  Carefinder pilot exposed that ordinary resume does not ingest requirement
-  corrections).
+- [x] Implement the post-stop plan revision path (design context: the
+  user-run Carefinder pilot exposed that ordinary resume does not ingest
+  requirement corrections). Complete (2026-11-20): T1–T10 implemented and
+  approved (T9: 22 fake-driven acceptance tests; T10: 711/711 tests
+  and typecheck) and T11's evidence closure is approved; live Pi TUI and real-provider completion remain to be
+  validated (open action below).
   [Observation, attribution and proposed direction](../../docs/plans/pi-plugin-adoption-roadmap.md#mid-development-plan-revision-gap-2026-11-13).
   A [design brief and agent prompts](../../docs/plans/post-stop-plan-revision-brief.md)
   are prepared (2026-11-14); the design is produced in
@@ -396,14 +371,18 @@ read-only inspection at `468f014`, no suite or live workflow rerun):
   The initial documentation-only checks covered local link targets and
   `git diff --check`; later runtime verification is recorded in the Active Task.
 - [x] Continue the existing
-  [revision tasks](../features/post-stop-plan-revision/tasks.md#t9--acceptance-scenario-end-to-end-coverage):
-  T7 and T8 are approved and committed; T9's acceptance suite is
-  delivered and approved (see the Active Task). T10 documentation/rendering
-  and T11 evidence closure
-  remain.
-- [ ] Once launch and command wiring exist, record a bounded live
-  stop → revise → approve → successor execution → resume observation,
-  with actual outcome and limits separate from fixture results. Use a
+  [revision tasks](../features/post-stop-plan-revision/tasks.md#t11--evidence-records-and-handoff):
+  T7 and T8 are approved and committed; T9's acceptance suite (22
+  fake-driven acceptance tests) is delivered and approved; T10 rendering
+  and command documentation is approved and committed (`56b00e5`, 711/711
+  tests and typecheck); T11 evidence closure was approved on 2026-11-20. The T1–T10 implementation tranche is
+  complete.
+- [ ] Record a bounded live stop → revise → approve → successor execution
+  → resume observation — the command and launch wiring now exist and are
+  approved (T8 `8da6e87`, T10 `56b00e5`) — with actual outcome and limits
+  separate from fixture results; this observation is also the pending
+  live validation of Pi TUI rendering/dispatch and real-provider revision
+  completion. Use a
   suitable run to observe the already-pending RV2 reviewer behavior and
   current planner/reviewer model settings; do not infer improved quality
   or lower cost without measurements.

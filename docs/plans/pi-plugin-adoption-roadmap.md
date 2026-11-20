@@ -1135,8 +1135,15 @@ this trial.
 
 ## Mid-development plan revision gap (2026-11-13)
 
-**Status:** design reviewed; T1–T5 implemented and reviewed (2026-11-15).
-Promotion, successor execution and command integration remain T6–T11.
+**Status:** T1–T10 implemented and approved (2026-11-20): T7/T8
+delivered and committed (`94cc164`, `8da6e87`); T9 approved — 22
+fake-driven acceptance tests cover the §17 scenario matrix against
+AC-1…AC-13; T10 approved and committed (`56b00e5`) with 711/711 tests
+and typecheck. T11 evidence closure was approved separately on the same
+day. Fixture coverage is complete. Live Pi TUI and real-provider
+completion remain to be validated. Evidence:
+[spec](../../.ai/features/post-stop-plan-revision/spec.md) and
+[task records](../../.ai/features/post-stop-plan-revision/tasks.md).
 
 During the user-run `manual-brevo-campaigns` feature in
 `~/dev/careguru/carefinder-backend`, the user stopped development after
@@ -1167,12 +1174,20 @@ approved plan, user correction and partial-work evidence; present the revised
 plan for approval; then pass explicit keep/change/remove instructions to the
 developer. Verification and reviewer must use the newly approved contract while
 retaining the original baseline and revision history. Ordinary resume remains
-for interruptions without requirement changes. Command syntax, allowed phases,
-state transitions and frozen-input handling still need design; no new command
-exists yet.
+for interruptions without requirement changes. At the time of this note,
+command syntax, allowed phases, state transitions and frozen-input handling
+still needed design and no command existed yet; that design and the full
+implementation have since been delivered as `/flow revise <runId>` (see
+Status above and the
+[spec](../../.ai/features/post-stop-plan-revision/spec.md)).
 
-**Next step:** implement T6 approval binding, promotion and repair, then review
-before successor execution. Preserve the consumer checkout; no consumer edits or cleanup
+**Next step:** the implementation tranche is complete and verified
+(T1–T10 approved; T11 evidence closure approved; see the
+[task records](../../.ai/features/post-stop-plan-revision/tasks.md)).
+Remaining validation: a bounded live stop → revise → approve → successor
+execution → resume observation against real providers and the live Pi
+TUI, recorded separately from the fixture coverage. Preserve the consumer
+checkout; no consumer edits or cleanup
 are authorized by this note.
 The [design brief and staged agent prompts](post-stop-plan-revision-brief.md)
 define the required decisions and acceptance scenarios (2026-11-14).

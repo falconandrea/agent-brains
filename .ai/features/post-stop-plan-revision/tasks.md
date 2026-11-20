@@ -1,8 +1,12 @@
 # Tasks — post-stop plan revision (`/flow revise`)
 
-Status: T1–T7 implemented and reviewed (T7 final review approved
-2026-11-17); T8 approved 2026-11-18 (commit `8da6e87`). T9 is implemented
-and approved. T10–T11 remain. The user authorized the first
+Status: T1–T10 implemented and approved (T7 final review approved
+2026-11-17, commit `94cc164`; T8 approved 2026-11-18, commit `8da6e87`;
+T9 approved — 22 fake-driven acceptance tests cover the §17 scenario
+matrix; T10 approved 2026-11-20, commit `56b00e5`, 711/711 tests and
+typecheck). T11 evidence closure was delivered and approved on 2026-11-20.
+Live Pi TUI and real-provider completion remain to be validated (T11
+limits). The user authorized the first
 tranche and its local commit. Each task has one concrete deliverable, its
 dependencies, and its verification; tasks are ordered so every step leaves
 the tree green (`npm test`, `npm run typecheck`) and ordinary resume
@@ -687,6 +691,35 @@ work, changed frozen inputs); legacy-log regression pass.
 Verification: `npm test` (full suite green, including the existing resume,
 workflow, launcher, run-start, run-lock, run-log suites).
 
+Delivered and approved (canonical record added by the T11 evidence
+closure, 2026-11-20): the fake-driven end-to-end acceptance suite
+`tests/revise-acceptance.test.ts` (22 tests) maps every §17 scenario row
+to observable outcomes against AC-1…AC-13 — the full
+stop→revise→approve→continue journey through `runFlowRevise`, the
+revision session, `repairRevisionLaunch`, `launchSuccessorRun` and
+`runFeatureWorkflow`, and the real ordinary-resume pipeline
+(`replayRunLog` → `validateResumePreconditions` → `launchRun`) for
+post-abandon resumability (all four predecessor statuses) and the double
+successor resume. A second orchestrator round closed three end-to-end
+coverage gaps: the row-1 entry starts from a REAL fresh run stopped
+during develop via `requestFlowStop` (the reviewer receives the previous
+work's diff; `git.baseline` runs exactly once — the predecessor's own
+snapshot); B7a (pointer, absent successor log) and B7b (pointer, seeded
+stub without the resumed marker) complete directly through `/flow revise`
+beside the B7c re-entry test; and the B2b landed-but-unverified case runs
+end-to-end through `appendCritical`'s own reconciliation (ONE copy of the
+approval, the regenerated-timestamp retry reconciling to the SAME copy,
+the repair promoting and launching on it). One independent review round
+closed three P2 assertion tightenings (exact refusal reasons pinned) and
+four P3 hardening items; a follow-up round (2026-11-18) closed the last
+two findings (the B2b test provokes the REAL condition via
+`injectFaultAfterAppend`; the stop-during-develop entry awaits the real
+`launchRun` promise). Observed: 704/704 tests, `npm run typecheck`,
+`git diff --check`; the acceptance file green across three consecutive
+runs. Reviewer verdict APPROVED, no remaining findings. Limits:
+fixture/fake scope only (the §17 boundary) — no live TUI, no real
+providers; live Pi TUI and real-provider completion remain unvalidated.
+
 ## T10 — `/flow log-all` pointer rendering and command documentation
 
 Depends on: T8.
@@ -699,6 +732,24 @@ description.
 
 Verification: `npm test -- tests/unit.test.ts` (rendering cases); manual
 link check of the README additions; `npm run typecheck`.
+
+Delivered and approved (2026-11-20, commit `56b00e5`): new Pi-free module
+`src/revision-render.ts` (`revisionPointersOf`, `describeRevisionPointer`,
+`formatRevisionPointers`); `describe`/`log-all` in `extensions/pi-brain.ts`
+render `revised-by=<successorRunId>` and `revises=<predecessorRunId>` —
+rendering only (§16 rule 6), derived tolerantly from the persisted events
+so an unexpected log shape degrades the line instead of failing, ordinary
+logs keep today's output verbatim, and the successor reference renders
+from `revision.launched` alone (visible while the launch is still
+incomplete, §9 B7a). `docs/pi-brain/README.md` documents `/flow revise`
+(command list entry; eligible states, evidence capture, approval binding,
+per-status abandonment behavior, post-promotion policy, repair re-entry,
+the B8 reporting exception, and the pointer rendering) beside the existing
+`/flow resume` description. Tests: 7 rendering cases in
+`tests/unit.test.ts`. Observed: 711/711 tests (704 pre-existing + 7 new),
+`npm run typecheck`, `git diff --check`. Limits: rendering verified
+structurally and by unit fixtures; live TUI rendering and real-provider
+runs remain unvalidated.
 
 ## T11 — Evidence records and handoff
 
@@ -715,3 +766,40 @@ Verification: `npm test`, `npm run typecheck`, `npm run smoke:pi` (only if
 workflow/SDK integration changed), `git diff --check`; link verification
 across the touched documents; `git status` reviewed for unintended files.
 No commit, no push — the user reviews first.
+
+Delivered and approved on 2026-11-20: `.ai/memory/progress.md`
+current state, active task and next actions updated in place with the
+implementation status and verified evidence links — T9 covered by 22
+fake-driven acceptance tests (`tests/revise-acceptance.test.ts`,
+reviewer APPROVED), T10 approved with 711/711 tests and typecheck
+(commit `56b00e5`, re-run in this handoff) — and the canonical T9/T10
+delivery records above were written into this file as part of the
+closure. The roadmap
+[mid-development plan revision gap](../../../docs/plans/pi-plugin-adoption-roadmap.md#mid-development-plan-revision-gap-2026-11-13)
+section's status and next step now point at the implemented, verified
+state, and its proposed-direction paragraph reads as historical context
+instead of claiming the command is missing. Live provider completion
+(planner/developer/reviewer against real
+models) and live Pi TUI rendering/dispatch are reported SEPARATELY from
+the fixture coverage in both documents: they remain unvalidated, owned by
+the pending bounded live observation. Observed: 711/711 tests,
+`npm run typecheck`, `git diff --check`; link verification across the
+touched documents (targets and anchors resolve); `git status` reviewed —
+only the four documentation files changed (this file, `spec.md`,
+`progress.md` and the roadmap), no unexpected files.
+`npm run smoke:pi` not run: documentation-only change, no workflow/SDK
+integration change.
+
+Review fixes (2026-11-20, first review round — five findings closed): the roadmap's proposed-direction sentence
+now reads as historical context with a pointer to the delivered state;
+T11 is registered as delivered-awaiting-approval while T1–T10 stay
+approved (spec status, progress Current Phase/next actions, this file's
+status header); the closure record's file count says FOUR documents
+(spec, tasks, progress, roadmap); the T9 counts read "22 fake-driven
+acceptance tests" wherever they said "22 scenarios" (spec status, this
+file's header and T11 record, progress Current Phase and next actions,
+roadmap status); and the roadmap status header attributes "implemented
+and approved" to T1–T10 explicitly, with T11's review tracked
+separately. Re-verified after the fixes: 711/711 tests,
+typecheck, `git diff --check`, link check across the touched documents,
+`git status` clean of unexpected files.

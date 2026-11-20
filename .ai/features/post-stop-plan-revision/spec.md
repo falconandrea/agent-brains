@@ -1,9 +1,13 @@
 # Post-stop plan revision (`/flow revise`)
 
-Status: T1–T8 implemented and approved. T7 is recorded in commit
-`94cc164`. T8 received final approval on 2026-11-18 after four review fix
-rounds and is recorded in commit `8da6e87`. T9 is implemented and approved.
-T10–T11 remain open.
+Status: T1–T10 implemented and approved; T11 evidence closure was
+delivered and approved on 2026-11-20. T7 is recorded
+in commit `94cc164`. T8 received final approval on 2026-11-18 after four
+review fix rounds and is recorded in commit `8da6e87`. T9 is approved —
+22 fake-driven acceptance tests map the §17 scenario matrix against
+AC-1…AC-13. T10 was approved on 2026-11-20 (commit `56b00e5`; 711/711
+tests, typecheck).
+Live Pi TUI and real-provider completion remain unvalidated.
 See the [task record](tasks.md) for evidence and implementation limits.
 The [design brief](../../../docs/plans/post-stop-plan-revision-brief.md)
 records the original staged handoff; this document specifies the full target.
