@@ -36,6 +36,7 @@ import type { WorkflowEvent } from "../src/ports.ts";
 import { RunLog, readRunLog, listRunIds } from "../src/run-log.ts";
 import { fmtTokens, fmtCost, fmtDuration, launchRun, renderUsage, startRun, agentStatus } from "../src/run-launcher.ts";
 import { runFlowRevise } from "../src/revise-command.ts";
+import { describeRevisionPointer, formatRevisionPointers, revisionPointersOf } from "../src/revision-render.ts";
 
 const PACKAGE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PROFILES_DIR = join(PACKAGE_ROOT, "profiles");
@@ -336,6 +337,10 @@ export default function piBrain(pi: ExtensionAPI): void {
             const lastReview = [...events]
               .reverse()
               .find((e): e is Extract<WorkflowEvent, { type: "review.completed" }> => e.type === "review.completed");
+            // Revision pointers (spec.md §16 rule 6): rendering only. A middle
+            // run of a chain shows both; the successor reference can appear
+            // while its launch is still incomplete (§9 B7a).
+            const pointers = formatRevisionPointers(revisionPointersOf(events));
             lines.push(
               [
                 id,
@@ -344,7 +349,10 @@ export default function piBrain(pi: ExtensionAPI): void {
                   : lastReview
                     ? `last=${lastReview.verdict}`
                     : "in-progress-or-interrupted",
-              ].join("  "),
+                pointers,
+              ]
+                .filter(Boolean)
+                .join("  "),
             );
           }
           ctx.ui.notify(lines.join("\n"));
@@ -679,6 +687,11 @@ function usageSummary(usage: { input?: number; output?: number; cacheRead?: numb
 }
 
 function describe(event: WorkflowEvent): string {
+  // Revision pointers first (spec.md §16 rule 6): a successor's started event
+  // and a predecessor's launched event gain the revises=/revised-by= suffix;
+  // every other event keeps the rendering below, unchanged.
+  const revisionPointer = describeRevisionPointer(event);
+  if (revisionPointer !== undefined) return revisionPointer;
   switch (event.type) {
     case "phase.started":
       return `● ${event.phase}`;

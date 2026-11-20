@@ -4,7 +4,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync, readdirSync, existsSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync, readdirSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dirname } from "node:path";
@@ -24,6 +24,8 @@ import { selectSkills, categoryOf } from "../src/skill-router.ts";
 import { decideNextRound, validateReviewResult, type ReviewResult } from "../src/review.ts";
 import { normalizeConfig, DEFAULT_CONFIG, type PiBrainConfig } from "../src/config.ts";
 import { slugify, splitPlannerOutput } from "../src/workflows/feature.ts";
+import { describeRevisionPointer, formatRevisionPointers, revisionPointersOf } from "../src/revision-render.ts";
+import type { WorkflowEvent } from "../src/ports.ts";
 
 const PROFILES_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "profiles");
 const fixture = (): string => mkdtempSync(join(tmpdir(), "pi-brain-"));
@@ -989,4 +991,93 @@ test("a review that says approved while listing blocking issues is not approved"
   };
   const decision = decideNextRound(inconsistent, 1, 2, new Set(), true);
   assert.equal(decision.action, "fix");
+});
+
+// --- revision pointer rendering (T10, spec.md §16 rule 6) --------------------
+
+type StartedRevision = Extract<WorkflowEvent, { type: "workflow.started" }>["revision"];
+
+const startedOf = (runId: string, revision?: StartedRevision): Extract<WorkflowEvent, { type: "workflow.started" }> => ({
+  type: "workflow.started",
+  runId,
+  workflow: "feature",
+  description: "Add organization invitations",
+  ...(revision ? { revision } : {}),
+});
+
+const launchedOf = (runId: string, successorRunId: string): Extract<WorkflowEvent, { type: "revision.launched" }> => ({
+  type: "revision.launched",
+  eventId: "a".repeat(64),
+  runId,
+  revision: 1,
+  successorRunId,
+  at: "2026-11-20T00:00:00.000Z",
+});
+
+test("describe shows revised-by=<successorRunId> for the predecessor's revision.launched", () => {
+  assert.equal(describeRevisionPointer(launchedOf("run-1", "run-1-r1")), "  revision.launched — revised-by=run-1-r1");
+});
+
+test("describe shows revises=<predecessorRunId> for a workflow.started with revision metadata", () => {
+  assert.equal(
+    describeRevisionPointer(startedOf("run-1-r1", { predecessorRunId: "run-1", revision: 1, correction: "use org invitations" })),
+    "  workflow.started — revises=run-1",
+  );
+});
+
+test("describe keeps the generic line for events without revision references", () => {
+  assert.equal(describeRevisionPointer(startedOf("run-9")), undefined, "ordinary started keeps its generic line");
+  assert.equal(
+    describeRevisionPointer({ type: "workflow.outcome", runId: "run-9", status: "completed" }),
+    undefined,
+    "non-pointer events stay with the existing describe cases",
+  );
+});
+
+test("log-all pointers: predecessor, successor, and a middle run showing both", () => {
+  const predecessor = revisionPointersOf([startedOf("run-1"), launchedOf("run-1", "run-1-r1")]);
+  assert.deepEqual(predecessor, { revisedBy: "run-1-r1" });
+  assert.equal(formatRevisionPointers(predecessor), "revised-by=run-1-r1");
+
+  const successor = revisionPointersOf([
+    startedOf("run-1-r1", { predecessorRunId: "run-1", revision: 1, correction: "use org invitations" }),
+  ]);
+  assert.deepEqual(successor, { revises: "run-1" });
+  assert.equal(formatRevisionPointers(successor), "revises=run-1");
+
+  // A middle run of a chain revises its predecessor and is superseded by its
+  // own successor — both references come from its OWN persisted events.
+  const middle = revisionPointersOf([
+    startedOf("run-1-r1", { predecessorRunId: "run-1", revision: 1, correction: "use org invitations" }),
+    launchedOf("run-1-r1", "run-1-r2"),
+  ]);
+  assert.deepEqual(middle, { revises: "run-1", revisedBy: "run-1-r2" });
+  assert.equal(formatRevisionPointers(middle), "revised-by=run-1-r2 revises=run-1");
+});
+
+test("log-all keeps the current line for logs without revision metadata", () => {
+  const plain: WorkflowEvent[] = [startedOf("run-9"), { type: "phase.started", runId: "run-9", phase: "develop" }];
+  assert.deepEqual(revisionPointersOf(plain), {});
+  assert.equal(formatRevisionPointers(revisionPointersOf(plain)), "", "no pointers — the run line stays as it is today");
+});
+
+test("the successor reference renders from the pointer event alone (§9 B7a)", () => {
+  // The reference is informative before the successor's launch completes: the
+  // input is the predecessor's own events only, no successor log is consulted.
+  assert.deepEqual(revisionPointersOf([launchedOf("run-1", "run-1-r1")]), { revisedBy: "run-1-r1" });
+});
+
+test("the extension's describe and log-all render through the Pi-free formatters", () => {
+  const source = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), "..", "extensions", "pi-brain.ts"),
+    "utf8",
+  );
+  assert.ok(source.includes('from "../src/revision-render.ts"'), "the extension imports the pointer formatters");
+  const describeFn = source.indexOf("function describe(event: WorkflowEvent)");
+  const describeCall = source.indexOf("describeRevisionPointer(event)", describeFn);
+  assert.ok(describeCall > describeFn, "describe delegates pointer events to the formatter before its switch");
+  const logAll = source.indexOf('case "log-all"');
+  assert.ok(logAll > 0, "the log-all case exists");
+  assert.ok(source.indexOf("revisionPointersOf(events)", logAll) > logAll, "log-all derives pointers from the persisted events");
+  assert.ok(source.indexOf("formatRevisionPointers(", logAll) > logAll, "log-all renders the pointers onto the run line");
 });

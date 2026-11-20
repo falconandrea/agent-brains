@@ -83,6 +83,7 @@ pi
 > /flow stop                # cancel
 > /flow log-all             # persisted runs in this repo
 > /flow resume <runId>      # continue an interrupted run from its log
+> /flow revise <runId>      # correct the approved plan of a stopped run
 ```
 
 The plan gate offers **Approve and implement**, **Revise with notes**, and
@@ -97,6 +98,45 @@ original git baseline restored. Runs that ended before the spec gate, runs
 already completed, and pre-resume logs without a persisted baseline are refused
 with a reason. If the working diff changed since an interrupted review, it asks
 restart-vs-resume first.
+
+`/flow revise <runId>` corrects the approved plan of a stopped run. It is
+eligible for runs stopped after the spec gate — a `cancelled` or `needs_human`
+outcome, or an interrupted or provider-failed log that still replays — and
+refuses completed runs, runs stopped before the gate, and logs missing the
+minimum evidence. The command captures the partial work as evidence, takes
+your correction notes, and produces a candidate revised plan with the planner.
+Until you explicitly approve a candidate in the review dialog, the approved
+artifacts stay untouched: the session writes revision audit events to the run
+log and its proposal state (candidate files, session cache, rejected planner
+output) under `.pi/pi-brain/` — never the approved plan or the partial work.
+The persisted approval binds the candidate's exact contents by hash; the
+promotion that follows it replaces the approved PRD/tasks and launches a
+linked successor run at the develop phase on the original baseline.
+
+Abandoning before an approval restores the pre-revision behavior. An
+interrupted or failed run becomes ordinarily resumable again under the old
+plan. A `cancelled` or `needs_human` run stays terminal — `/flow resume` keeps
+refusing it — and you can start a new `/flow revise` (the same eligibility
+checks apply).
+
+After an approval is persisted there is no abandonment. Promotion replaces the
+approved artifacts as the direct effect of your approval — immediately, or
+through the deterministic repair if anything interrupted it before it
+finished — so the only paths from that point are the launch repair and the
+fail-closed exit. When the launch is incomplete — the approval is waiting to
+start the successor, or the successor is already referenced but has not
+recorded its first phase yet — rerun `/flow revise <predecessorRunId>` to
+repair it. Once the successor has actually started, revise its run id instead:
+an approved-but-unwanted change is undone by a second explicit revision, never
+by a silent rollback. The one exception: when neither the candidate nor the
+promoted artifacts match the persisted approval anymore, revise offers an
+explicit abandon that reports the actual on-disk state instead of promising a
+restore.
+
+`/flow log` and `/flow log-all` show the resulting links —
+`revised-by=<successorRunId>` and `revises=<predecessorRunId>`. The references
+are informational only: a predecessor can list a successor whose launch is
+still being repaired.
 
 ### Inconsistent review verdicts
 
