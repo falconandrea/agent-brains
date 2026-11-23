@@ -1140,8 +1140,8 @@ delivered and committed (`94cc164`, `8da6e87`); T9 approved — 22
 fake-driven acceptance tests cover the §17 scenario matrix against
 AC-1…AC-13; T10 approved and committed (`56b00e5`) with 711/711 tests
 and typecheck. T11 evidence closure was approved separately on the same
-day. Fixture coverage is complete. Live Pi TUI and real-provider
-completion remain to be validated. Evidence:
+day. Fixture coverage is complete. Live fullscreen Pi validation and real-provider completion closed on
+2026-11-23. Evidence:
 [spec](../../.ai/features/post-stop-plan-revision/spec.md) and
 [task records](../../.ai/features/post-stop-plan-revision/tasks.md).
 
@@ -1184,11 +1184,10 @@ Status above and the
 **Next step:** the implementation tranche is complete and verified
 (T1–T10 approved; T11 evidence closure approved; see the
 [task records](../../.ai/features/post-stop-plan-revision/tasks.md)).
-Remaining validation: a bounded live stop → revise → approve → successor
-execution → resume observation against real providers and the live Pi
-TUI, recorded separately from the fixture coverage. Preserve the consumer
-checkout; no consumer edits or cleanup
-are authorized by this note.
+Live validation closed on 2026-11-23 with a disposable fixture. The
+successor resumed on the same ID and completed with real providers. See
+the [live validation record](../../.ai/features/post-stop-plan-revision/tasks.md#live-validation-2026-11-22-to-2026-11-23)
+for evidence and UI observations.
 The [design brief and staged agent prompts](post-stop-plan-revision-brief.md)
 define the required decisions and acceptance scenarios (2026-11-14).
 The design has been produced (2026-11-14) in

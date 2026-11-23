@@ -1,13 +1,12 @@
 # Progress
 
-**Last Updated:** 2026-11-20
+**Last Updated:** 2026-11-23
 **Current Phase:** Global workflow validation complete; M4 rollout and
 existing technical follow-ups remain open. Post-stop plan revision:
 T1–T10 implemented and approved — T7 committed (`94cc164`), T8
 (`8da6e87`), T9 (`4e9a60c`; 22 fake-driven acceptance tests), T10
 (`56b00e5`; 711/711 tests, typecheck); T11 evidence closure approved
-on 2026-11-20. Live Pi TUI and real-provider
-completion remain to be validated.
+on 2026-11-20. Live Pi TUI and real-provider validation closed on 2026-11-23.
 **Active Task:** T11 evidence records and handoff approved on 2026-11-20 — the T1–T10 implementation tranche is complete. Verified evidence:
 T9's fake-driven end-to-end acceptance suite
 `tests/revise-acceptance.test.ts` (22 tests) maps every §17 scenario row
@@ -25,10 +24,8 @@ tasks.md, updated the
 [roadmap revision-gap section](../../docs/plans/pi-plugin-adoption-roadmap.md#mid-development-plan-revision-gap-2026-11-13)
 to the implemented, verified state, and closed the handoff; `npm run
 smoke:pi` was not run (documentation-only change, no workflow/SDK
-integration change). Reported separately from the fixture coverage: live
-Pi TUI rendering/dispatch and real-provider completion
-(planner/developer/reviewer against real models) remain unvalidated —
-the open action below owns the bounded live observation.
+integration change). The [live validation record](../features/post-stop-plan-revision/tasks.md#live-validation-2026-11-22-to-2026-11-23)
+records the fullscreen Pi trials and their limits separately from fixture coverage.
 
 T7 remains approved and committed as `94cc164` (its recorded 635/635
 results are historical evidence, not a fresh run for this handoff).
@@ -377,15 +374,10 @@ read-only inspection at `468f014`, no suite or live workflow rerun):
   and command documentation is approved and committed (`56b00e5`, 711/711
   tests and typecheck); T11 evidence closure was approved on 2026-11-20. The T1–T10 implementation tranche is
   complete.
-- [ ] Record a bounded live stop → revise → approve → successor execution
-  → resume observation — the command and launch wiring now exist and are
-  approved (T8 `8da6e87`, T10 `56b00e5`) — with actual outcome and limits
-  separate from fixture results; this observation is also the pending
-  live validation of Pi TUI rendering/dispatch and real-provider revision
-  completion. Use a
-  suitable run to observe the already-pending RV2 reviewer behavior and
-  current planner/reviewer model settings; do not infer improved quality
-  or lower cost without measurements.
+- [x] Validate post-stop plan revision in fullscreen Pi with real providers.
+  The successor resumed on the same ID and completed on 2026-11-23.
+  See the [live validation record](../features/post-stop-plan-revision/tasks.md#live-validation-2026-11-22-to-2026-11-23)
+  for observed behavior, evidence limits and UI findings.
 - Treat `revise.ts` size as a maintenance signal, not an automatic refactoring
   task. Revisit decomposition only against concrete coupling, duplication or
   change difficulty; no additional recovery framework or workstream selected.

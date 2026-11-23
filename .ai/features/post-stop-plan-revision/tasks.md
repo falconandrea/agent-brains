@@ -5,8 +5,8 @@ Status: T1–T10 implemented and approved (T7 final review approved
 T9 approved — 22 fake-driven acceptance tests cover the §17 scenario
 matrix; T10 approved 2026-11-20, commit `56b00e5`, 711/711 tests and
 typecheck). T11 evidence closure was delivered and approved on 2026-11-20.
-Live Pi TUI and real-provider completion remain to be validated (T11
-limits). The user authorized the first
+Live fullscreen Pi validation and real-provider completion closed on
+2026-11-23 (see the live validation record below). The user authorized the first
 tranche and its local commit. Each task has one concrete deliverable, its
 dependencies, and its verification; tasks are ordered so every step leaves
 the tree green (`npm test`, `npm run typecheck`) and ordinary resume
@@ -803,3 +803,22 @@ and approved" to T1–T10 explicitly, with T11's review tracked
 separately. Re-verified after the fixes: 711/711 tests,
 typecheck, `git diff --check`, link check across the touched documents,
 `git status` clean of unexpected files.
+
+## Live validation (2026-11-22 to 2026-11-23)
+
+Three fullscreen Pi trials at `4701a78` used disposable Git fixtures and
+real providers. The first observed feature completion and the completed-run
+revision refusal. The second observed cancellation during develop, candidate
+approval and promotion, both lineage pointers, and successor completion.
+The third interrupted the successor during develop and resumed it on the
+same ID in a fresh Pi process. The pre-resume log was an exact prefix of the
+final log, with separate launch and ordinary-resume markers. Verification
+passed, review approved, and the corrected requirement and retained work
+were verified independently.
+
+Raw PTY captures and JSONL evidence are archived locally outside this
+repository. Provider prompt payloads were unavailable. Persisted usage
+excludes revision-session planner usage and the interrupted developer call.
+UI observations include clipped approval options at smaller terminal
+dimensions, slash completion replacing the resume argument, and the
+post-promotion changed-diff confirmation.

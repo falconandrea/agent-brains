@@ -7,7 +7,8 @@ review fix rounds and is recorded in commit `8da6e87`. T9 is approved —
 22 fake-driven acceptance tests map the §17 scenario matrix against
 AC-1…AC-13. T10 was approved on 2026-11-20 (commit `56b00e5`; 711/711
 tests, typecheck).
-Live Pi TUI and real-provider completion remain unvalidated.
+Live fullscreen Pi validation, including ordinary resume of a revised
+successor and real-provider completion, closed on 2026-11-23.
 See the [task record](tasks.md) for evidence and implementation limits.
 The [design brief](../../../docs/plans/post-stop-plan-revision-brief.md)
 records the original staged handoff; this document specifies the full target.
